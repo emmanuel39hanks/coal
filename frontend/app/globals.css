@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  /* MetaMask-inspired Palette */
+  --color-brand-orange: #FF5C16;
+  --color-brand-navy: #180D43;
+  --color-brand-blue: #4362D1;
+  --color-brand-lavender: #D075FF;
+  --color-bg-base: #F5F2ED;
+  /* Warm off-white */
+  --color-text-primary: #180D43;
+  /* Deep navy for text */
+  --color-text-secondary: #5C5C5C;
+
+  --background: var(--color-bg-base);
+  --foreground: var(--color-text-primary);
+}
+
+@theme inline {
+  --color-brand-orange: var(--color-brand-orange);
+  --color-brand-navy: var(--color-brand-navy);
+  --color-brand-blue: var(--color-brand-blue);
+  --color-brand-lavender: var(--color-brand-lavender);
+  --color-bg-base: var(--color-bg-base);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 100px;
+  /* Offset for the floating navbar */
+}
+
+/* Custom Utilities for "Massive" Typography */
+.text-massive {
+  font-size: clamp(3rem, 10vw, 6rem);
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.text-booking {
+  letter-spacing: -0.02em;
+}
+
+/* Pill Button Base Styles */
+.btn-pill {
+  border-radius: 9999px;
+  padding-left: 2rem;
+  padding-right: 2rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  font-weight: 600;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.btn-pill:hover {
+  transform: scale(1.05);
+}
+
+.card-rounded {
+  border-radius: 48px;
+}
