@@ -250,4 +250,4 @@ Coal was built for the [MNEE Hackathon](https://mnee-hackathon.devpost.com/) to 
 
 ---
 
-**Made with ⚡ by the Coal Team**
+**Made with ⚡**
