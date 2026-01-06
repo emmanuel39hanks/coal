@@ -10,6 +10,46 @@ export default function TransactionsPage() {
 
     const transactions = data?.transactions || [];
 
+    // Export transactions as CSV
+    const handleExportCSV = () => {
+        if (transactions.length === 0) return;
+
+        const headers = ['TX Hash', 'Type', 'Description', 'Amount', 'Currency', 'Date', 'Status'];
+        const rows = transactions.map((tx: any) => [
+            tx.txHash || tx.id,
+            tx.type,
+            tx.description || '',
+            parseFloat(tx.amount),
+            'MNEE',
+            new Date(tx.date).toISOString(),
+            tx.status
+        ]);
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map((cell: any) => `"${cell}"`).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `coal-transactions-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // Format TX hash for display (show first 6 and last 4 chars)
+    const formatTxHash = (hash: string) => {
+        if (!hash || hash.length < 12) return hash?.substring(0, 8) + '...';
+        return `${hash.substring(0, 6)}...${hash.substring(hash.length - 4)}`;
+    };
+
+    // Etherscan URL (mainnet)
+    const getEtherscanUrl = (txHash: string) => {
+        return `https://etherscan.io/tx/${txHash}`;
+    };
+
     return (
         <div className="space-y-8">
             <motion.div
@@ -22,7 +62,11 @@ export default function TransactionsPage() {
                     <p className="text-[var(--color-text-secondary)] font-medium">Manage and export your payments.</p>
                 </div>
                 <div className="flex gap-3">
-                    <button className="bg-white text-[var(--color-brand-navy)] px-5 py-2.5 rounded-full flex items-center gap-2 text-sm font-bold border-2 border-black/5 hover:bg-gray-50 transition-colors">
+                    <button
+                        onClick={handleExportCSV}
+                        disabled={transactions.length === 0}
+                        className="bg-white text-[var(--color-brand-navy)] px-5 py-2.5 rounded-full flex items-center gap-2 text-sm font-bold border-2 border-black/5 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                         <ExportSquare size={18} variant="Bold" />
                         Export CSV
                     </button>
@@ -35,7 +79,7 @@ export default function TransactionsPage() {
                     <SearchNormal size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]" />
                     <input
                         type="text"
-                        placeholder="Search by ID, product, or customer..."
+                        placeholder="Search by TX hash, product, or customer..."
                         className="w-full h-12 pl-12 pr-4 rounded-full bg-white border-2 border-black/5 focus:border-[var(--color-brand-orange)] transition-colors outline-none font-medium text-[var(--color-brand-navy)] placeholder:text-gray-400"
                     />
                 </div>
@@ -56,7 +100,7 @@ export default function TransactionsPage() {
                     <table className="w-full">
                         <thead>
                             <tr className="text-left border-b border-black/5">
-                                <th className="pb-4 text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider pl-4">ID</th>
+                                <th className="pb-4 text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider pl-4">TX Hash</th>
                                 <th className="pb-4 text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Type</th>
                                 <th className="pb-4 text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Description</th>
                                 <th className="pb-4 text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Amount</th>
@@ -72,8 +116,25 @@ export default function TransactionsPage() {
                             ) : (
                                 transactions.map((tx: any) => (
                                     <tr key={tx.id} className="group hover:bg-[var(--color-bg-base)] transition-colors">
-                                        <td className="py-4 pl-4 rounded-l-xl font-mono text-xs text-gray-500">
-                                            {tx.id.substring(0, 8)}...
+                                        <td className="py-4 pl-4 rounded-l-xl">
+                                            {tx.txHash ? (
+                                                <a
+                                                    href={getEtherscanUrl(tx.txHash)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1.5"
+                                                    title={`View on Etherscan: ${tx.txHash}`}
+                                                >
+                                                    {formatTxHash(tx.txHash)}
+                                                    <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                    </svg>
+                                                </a>
+                                            ) : (
+                                                <span className="font-mono text-xs text-gray-400">
+                                                    {tx.id.substring(0, 8)}...
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="py-4">
                                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 text-xs font-bold border border-green-100">
