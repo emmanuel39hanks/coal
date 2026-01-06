@@ -2,10 +2,30 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
 
+// Determine cookie domain for cross-subdomain sharing
+const isProduction = process.env.NODE_ENV === 'production';
+const cookieDomain = isProduction ? '.usecoal.xyz' : undefined; // .domain shares across all subdomains
+
 export const auth = betterAuth({
     database: prismaAdapter(prisma, {
         provider: "postgresql",
     }),
+
+    // Cookie configuration for cross-subdomain auth
+    advanced: {
+        cookies: {
+            sessionToken: {
+                name: 'coal_session',
+                options: {
+                    httpOnly: true,
+                    sameSite: 'lax',
+                    secure: isProduction,
+                    domain: cookieDomain,
+                    path: '/',
+                }
+            }
+        }
+    },
 
     // Providers
     emailAndPassword: {
@@ -32,6 +52,7 @@ export const auth = betterAuth({
         process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001",
         "https://appleid.apple.com",
         "https://usecoal.xyz",
+        "https://www.usecoal.xyz",
         "https://api.usecoal.xyz",
         "coal://",
         "exp://"
