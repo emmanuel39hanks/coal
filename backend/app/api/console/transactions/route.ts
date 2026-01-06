@@ -31,7 +31,8 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             transactions: transactions.map(tx => ({
-                id: tx.txHash || tx.id, // Use hash if valid, else ID
+                id: tx.id,
+                txHash: tx.txHash, // Keep txHash separate for Etherscan linking
                 type: 'Payment', // Future: Payout
                 amount: tx.amount.toString(),
                 status: tx.status === 'confirmed' ? 'Confirmed' : 'Failed',
