@@ -6,8 +6,7 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { useState } from 'react';
 import Modal from '@/components/Modal';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { fetcher } from '@/lib/api';
 
 export default function ConsoleOverview() {
     const { data: stats, error, isLoading } = useSWR('/api/console/stats', fetcher);

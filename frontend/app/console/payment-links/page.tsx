@@ -7,8 +7,7 @@ import useSWR, { mutate } from 'swr';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { useSearchParams } from 'next/navigation';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { fetcher, API_URL } from '@/lib/api';
 
 export default function PaymentLinksPage() {
     const { data, error, isLoading } = useSWR('/api/console/links', fetcher);
