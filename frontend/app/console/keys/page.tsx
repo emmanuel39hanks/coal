@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Add, Key, Copy, CloseCircle, ShieldTick, TickCircle } from 'iconsax-reactjs';
+import { Add, Key, Copy, CloseCircle, ShieldTick, TickCircle, Trash } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
 import { fetcher, API_URL } from '@/lib/api';
 
@@ -14,13 +14,15 @@ export default function KeysPage() {
     const [createdKey, setCreatedKey] = useState<{ name: string, secret: string } | null>(null);
     const [loading, setLoading] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [revokingId, setRevokingId] = useState<string | null>(null);
 
     const handleCreate = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/console/keys', {
+            const res = await fetch(`${API_URL}/api/console/keys`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ name: createName })
             });
 
@@ -34,6 +36,30 @@ export default function KeysPage() {
             console.error(e);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleRevoke = async (keyId: string) => {
+        if (!confirm('Are you sure you want to revoke this API key? This action cannot be undone.')) {
+            return;
+        }
+
+        setRevokingId(keyId);
+        try {
+            const res = await fetch(`${API_URL}/api/console/keys/${keyId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+
+            if (res.ok) {
+                mutate('/api/console/keys');
+            } else {
+                console.error('Failed to revoke key');
+            }
+        } catch (e) {
+            console.error('Error revoking key:', e);
+        } finally {
+            setRevokingId(null);
         }
     };
 
@@ -100,7 +126,20 @@ export default function KeysPage() {
                                             {key.lastUsed ? new Date(key.lastUsed).toLocaleDateString() : 'Never'}
                                         </td>
                                         <td className="py-4 pr-4 rounded-r-xl text-right">
-                                            <button className="text-red-500 font-bold text-xs hover:underline">Revoke</button>
+                                            <button
+                                                onClick={() => handleRevoke(key.id)}
+                                                disabled={revokingId === key.id}
+                                                className="inline-flex items-center gap-1.5 text-red-500 font-bold text-xs hover:text-red-700 hover:underline transition-colors disabled:opacity-50"
+                                            >
+                                                {revokingId === key.id ? (
+                                                    'Revoking...'
+                                                ) : (
+                                                    <>
+                                                        <Trash size={14} variant="Bold" />
+                                                        Revoke
+                                                    </>
+                                                )}
+                                            </button>
                                         </td>
                                     </tr>
                                 ))
