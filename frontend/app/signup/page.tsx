@@ -48,9 +48,11 @@ export default function SignupPage() {
     const handleGoogleSignIn = async () => {
         setLoading(true);
         setError(null);
+        // Use absolute URL so OAuth redirects to frontend, not backend
+        const frontendUrl = typeof window !== 'undefined' ? window.location.origin : '';
         await authClient.signIn.social({
             provider: "google",
-            callbackURL: "/console"
+            callbackURL: `${frontendUrl}/console`
         }, {
             onError: (ctx) => {
                 setLoading(false);
