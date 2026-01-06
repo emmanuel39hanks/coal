@@ -200,15 +200,15 @@ export default function TransactionsPage() {
                                                     href={getEtherscanUrl(tx.txHash)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="font-mono text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 px-2.5 py-1.5 rounded-lg transition-colors inline-flex items-center gap-2 border border-blue-200"
+                                                    className="font-mono text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] transition-colors inline-flex items-center gap-1.5 group/link cursor-pointer"
                                                 >
                                                     {formatTxHash(tx.txHash)}
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-3 h-3 opacity-0 group-hover/link:opacity-100 transition-opacity text-[var(--color-brand-orange)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                                     </svg>
                                                 </a>
                                             ) : (
-                                                <span className="font-mono text-xs text-gray-400 bg-gray-50 px-2.5 py-1.5 rounded-lg">
+                                                <span className="font-mono text-xs text-gray-400">
                                                     {tx.id.substring(0, 8)}...
                                                 </span>
                                             )}
