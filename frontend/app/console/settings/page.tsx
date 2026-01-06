@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Wallet, TickCircle, EmptyWallet } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { fetcher, API_URL } from '@/lib/api';
 
 export default function SettingsPage() {
     const { data: user, error, isLoading } = useSWR('/api/console/settings', fetcher);

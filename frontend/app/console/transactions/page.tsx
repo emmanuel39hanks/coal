@@ -3,8 +3,7 @@
 import { motion } from 'framer-motion';
 import { ExportSquare, FilterSearch, SearchNormal } from 'iconsax-reactjs';
 import useSWR from 'swr';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { fetcher } from '@/lib/api';
 
 export default function TransactionsPage() {
     const { data, error, isLoading } = useSWR('/api/console/transactions', fetcher);

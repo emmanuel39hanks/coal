@@ -4,8 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Add, Key, Copy, CloseCircle, ShieldTick, TickCircle } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { fetcher, API_URL } from '@/lib/api';
 
 export default function KeysPage() {
     const { data, error, isLoading } = useSWR('/api/console/keys', fetcher);

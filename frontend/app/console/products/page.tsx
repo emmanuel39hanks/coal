@@ -6,8 +6,7 @@ import { Add, SearchNormal1, Box, Trash, Edit2 } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
 import { UploadButton } from '@/utils/uploadthing';
 import Modal from '@/components/Modal';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { fetcher, API_URL } from '@/lib/api';
 
 import { useSearchParams } from 'next/navigation';
 

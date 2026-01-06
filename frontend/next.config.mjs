@@ -4,14 +4,8 @@ import createMDX from '@next/mdx';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   pageExtensions: ['js', 'jsx', 'md', 'mdx', 'ts', 'tsx'],
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/:path*`,
-      },
-    ]
-  },
+  // Note: We removed rewrites and now call the API directly with credentials
+  // This is necessary for cross-subdomain cookie handling
   images: {
     remotePatterns: [
       {
