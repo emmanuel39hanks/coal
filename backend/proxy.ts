@@ -6,15 +6,16 @@ export function proxy(request: NextRequest) {
     // CORS logic
     const origin = request.headers.get('origin') ?? ''
 
-    // Allow localhost:3000 and usecoal.xyz
+    // Allow all usecoal.xyz subdomains and localhost for development
     const allowedOrigins = [
-        process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
         'http://localhost:3000',
+        'http://localhost:3001',
         'https://usecoal.xyz',
+        'https://www.usecoal.xyz',
         'https://api.usecoal.xyz'
     ];
 
-    const isAllowedOrigin = allowedOrigins.includes(origin) || !origin // Allow no-origin (server-to-server) in some cases, or be strict. For now allow explicit matches.
+    const isAllowedOrigin = allowedOrigins.includes(origin) || !origin
 
     // Handle preflighted requests
     const isPreflight = request.method === 'OPTIONS'
@@ -22,9 +23,10 @@ export function proxy(request: NextRequest) {
     if (isPreflight) {
         const preflightHeaders = {
             ...(isAllowedOrigin && { 'Access-Control-Allow-Origin': origin }),
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie, X-API-Key, X-CSRF-Token, X-Requested-With',
             'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Max-Age': '86400',
         }
         return NextResponse.json({}, { headers: preflightHeaders })
     }
@@ -37,8 +39,8 @@ export function proxy(request: NextRequest) {
     }
 
     response.headers.set('Access-Control-Allow-Credentials', 'true')
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie, X-API-Key, X-CSRF-Token, X-Requested-With')
 
     return response
 }
