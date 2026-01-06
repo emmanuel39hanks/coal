@@ -1,8 +1,14 @@
+'use client';
+
+import { authClient } from '@/lib/auth-client';
 import Link from 'next/link';
 import { ArrowRight, Code } from 'iconsax-reactjs';
 import BlurReveal from './BlurReveal';
 
 export default function Hero() {
+    const session = authClient.useSession();
+    const user = session.data?.user;
+
     return (
         <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden">
             {/* Fun Animated Background */}
@@ -29,15 +35,26 @@ export default function Hero() {
 
                 <BlurReveal delay={0.5}>
                     <div className="flex flex-col md:flex-row items-center justify-center gap-4">
-                        <button className="group bg-black text-white btn-pill text-lg flex items-center gap-2 shadow-[6px_6px_0px_0px_#FF5C16] hover:shadow-[3px_3px_0px_0px_#FF5C16] hover:translate-x-[3px] hover:translate-y-[3px] transition-all active:translate-x-[6px] active:translate-y-[6px] active:shadow-none">
-                            Get API Key
-                            <ArrowRight size={20} variant="Linear" className="group-hover:translate-x-1 transition-transform" />
-                        </button>
+                        {user ? (
+                            <Link href="/console">
+                                <button className="group bg-black text-white btn-pill text-lg flex items-center gap-2 shadow-[6px_6px_0px_0px_#FF5C16] hover:shadow-[3px_3px_0px_0px_#FF5C16] hover:translate-x-[3px] hover:translate-y-[3px] transition-all active:translate-x-[6px] active:translate-y-[6px] active:shadow-none">
+                                    Go to Console
+                                    <ArrowRight size={20} variant="Linear" className="group-hover:translate-x-1 transition-transform" />
+                                </button>
+                            </Link>
+                        ) : (
+                            <button className="group bg-black text-white btn-pill text-lg flex items-center gap-2 shadow-[6px_6px_0px_0px_#FF5C16] hover:shadow-[3px_3px_0px_0px_#FF5C16] hover:translate-x-[3px] hover:translate-y-[3px] transition-all active:translate-x-[6px] active:translate-y-[6px] active:shadow-none">
+                                Get API Key
+                                <ArrowRight size={20} variant="Linear" className="group-hover:translate-x-1 transition-transform" />
+                            </button>
+                        )}
 
-                        <button className="group bg-white text-[var(--color-text-primary)] btn-pill text-lg flex items-center gap-2 shadow-[6px_6px_0px_0px_#180D43] hover:shadow-[3px_3px_0px_0px_#180D43] hover:translate-x-[3px] hover:translate-y-[3px] transition-all active:translate-x-[6px] active:translate-y-[6px] active:shadow-none border border-black/5">
-                            View Docs
-                            <Code size={20} variant="Linear" className="text-[var(--color-brand-orange)]" />
-                        </button>
+                        <Link href="/docs">
+                            <button className="group bg-white text-[var(--color-text-primary)] btn-pill text-lg flex items-center gap-2 shadow-[6px_6px_0px_0px_#180D43] hover:shadow-[3px_3px_0px_0px_#180D43] hover:translate-x-[3px] hover:translate-y-[3px] transition-all active:translate-x-[6px] active:translate-y-[6px] active:shadow-none border border-black/5">
+                                View Docs
+                                <Code size={20} variant="Linear" className="text-[var(--color-brand-orange)]" />
+                            </button>
+                        </Link>
                     </div>
                 </BlurReveal>
             </div>

@@ -1,25 +1,29 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { authClient } from '@/lib/auth-client';
 import {
     Home,
     Receipt1,
     Box,
     Key,
     Setting2,
-    LogoutCurve
+    LogoutCurve,
+    Moneys
 } from 'iconsax-reactjs';
 
 export default function ConsoleSidebar() {
     const pathname = usePathname();
+    const router = useRouter();
 
     const navItems = [
-        { name: 'Overview', href: '/console', icon: Home },
-        { name: 'Transactions', href: '/console/transactions', icon: Receipt1 },
-        { name: 'Products', href: '/console/products', icon: Box },
-        { name: 'API Keys', href: '/console/keys', icon: Key },
-        { name: 'Settings', href: '/console/settings', icon: Setting2 },
+        { name: 'Overview', href: '/console', icon: Home, activeColor: 'text-[var(--color-brand-orange)]' },
+        { name: 'Transactions', href: '/console/transactions', icon: Receipt1, activeColor: 'text-[var(--color-brand-blue)]' },
+        { name: 'Products', href: '/console/products', icon: Box, activeColor: 'text-[var(--color-brand-lavender)]' },
+        { name: 'Payment Links', href: '/console/payment-links', icon: Moneys, activeColor: 'text-green-500' },
+        { name: 'API Keys', href: '/console/keys', icon: Key, activeColor: 'text-[#00AECC]' }, // Darker Cyan for readability
+        { name: 'Settings', href: '/console/settings', icon: Setting2, activeColor: 'text-[var(--color-brand-navy)]' },
     ];
 
     return (
@@ -50,7 +54,13 @@ export default function ConsoleSidebar() {
             </nav>
 
             <div className="p-4 mt-auto">
-                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[var(--color-text-secondary)] hover:bg-red-50 hover:text-red-500 transition-all font-bold">
+                <button
+                    onClick={async () => {
+                        await authClient.signOut();
+                        router.replace('/');
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[var(--color-text-secondary)] hover:bg-red-50 hover:text-red-500 transition-all font-bold"
+                >
                     <LogoutCurve size={24} variant="Linear" />
                     Sign Out
                 </button>

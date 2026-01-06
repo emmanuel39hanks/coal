@@ -1,0 +1,28 @@
+
+# Authentication
+
+The Coal API uses API keys to authenticate requests. You can view and manage your API keys in the [Developer Console](/console/keys).
+
+Your API keys carry many privileges, so be sure to keep them secure! Do not share your secret API keys in publicly accessible areas such as GitHub, client-side code, and so forth.
+
+## Authentication Header
+
+Authentication to the API is performed via HTTP Basic Auth. Provide your API key as the basic auth username value. You do not need to provide a password.
+
+```bash
+Authorization: Basic <CREDENTIALS>
+```
+*Alternatively (and recommended)*, you can use the custom header `x-api-key`.
+
+```bash
+x-api-key: coal_live_123456789
+```
+
+## Request Example
+
+```bash
+curl https://api.usecoal.xyz/api/console/products
+   -H "x-api-key: coal_live_123..."
+```
+
+> **Note**: If you need to make calls from client-side code (e.g., React), use the Publishable Key (`pk_live_...`). Never use your Secret Key (`sk_live_...`) on the frontend.

@@ -2,7 +2,12 @@
 import Link from 'next/link';
 import { ArrowRight2 } from 'iconsax-reactjs';
 
+import { authClient } from '@/lib/auth-client';
+
 export default function Navbar() {
+  const session = authClient.useSession();
+  const user = session.data?.user;
+
   const handleScroll = (e: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => {
     e.preventDefault();
     const href = e.currentTarget.href;
@@ -25,16 +30,25 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-8 font-bold text-sm tracking-tight text-[var(--color-text-secondary)] h-full">
           <Link href="#how-it-works" onClick={handleScroll} className="hover:text-[var(--color-brand-orange)] hover:-translate-y-0.5 transition-all flex items-center h-full">How it works?</Link>
           <Link href="#features" onClick={handleScroll} className="hover:text-[var(--color-brand-orange)] hover:-translate-y-0.5 transition-all flex items-center h-full">Features</Link>
-          <Link href="#docs" onClick={handleScroll} className="hover:text-[var(--color-brand-orange)] hover:-translate-y-0.5 transition-all flex items-center h-full">Docs</Link>
+          <Link href="/docs" className="hover:text-[var(--color-brand-orange)] hover:-translate-y-0.5 transition-all flex items-center h-full">Docs</Link>
         </div>
 
         {/* CTA */}
-        <Link href="/login" className="flex items-center h-full">
-          <button className="bg-black text-white px-6 py-2.5 rounded-full flex items-center gap-2 text-sm font-bold shadow-[4px_4px_0px_0px_#FF5C16] hover:shadow-[2px_2px_0px_0px_#FF5C16] hover:translate-x-[2px] hover:translate-y-[2px] transition-all active:shadow-none active:translate-x-[4px] active:translate-y-[4px]">
-            Start Building
-            <ArrowRight2 size={16} variant="Linear" />
-          </button>
-        </Link>
+        {user ? (
+          <Link href="/console" className="flex items-center h-full">
+            <button className="bg-black text-white px-6 py-2.5 rounded-full flex items-center gap-2 text-sm font-bold shadow-[4px_4px_0px_0px_#FF5C16] hover:shadow-[2px_2px_0px_0px_#FF5C16] hover:translate-x-[2px] hover:translate-y-[2px] transition-all active:shadow-none active:translate-x-[4px] active:translate-y-[4px]">
+              Console
+              <ArrowRight2 size={16} variant="Linear" />
+            </button>
+          </Link>
+        ) : (
+          <Link href="/login" className="flex items-center h-full">
+            <button className="bg-black text-white px-6 py-2.5 rounded-full flex items-center gap-2 text-sm font-bold shadow-[4px_4px_0px_0px_#FF5C16] hover:shadow-[2px_2px_0px_0px_#FF5C16] hover:translate-x-[2px] hover:translate-y-[2px] transition-all active:shadow-none active:translate-x-[4px] active:translate-y-[4px]">
+              Start Building
+              <ArrowRight2 size={16} variant="Linear" />
+            </button>
+          </Link>
+        )}
       </nav>
     </div>
   );

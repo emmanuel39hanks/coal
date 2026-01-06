@@ -76,7 +76,19 @@ export default function Home() {
             </div>
             <div className="lg:w-1/2 w-full">
               <BlurReveal delay={0.2} xOffset={20}>
-                <CodeBlock />
+                <CodeBlock className="language-json">
+                  {`{
+  "id": "cs_test_a1b2c3d4",
+  "object": "checkout.session",
+  "amount": 5000,
+  "currency": "MNEE",
+  "status": "pending",
+  "customer_details": {
+    "email": "customer@example.com"
+  },
+  "payment_link": "https://usecoal.xyz/pl_123..."
+}`}
+                </CodeBlock>
               </BlurReveal>
             </div>
           </div>

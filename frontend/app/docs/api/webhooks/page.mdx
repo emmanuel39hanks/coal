@@ -1,0 +1,94 @@
+
+# Webhooks
+
+Webhooks allow your application to receive real-time notifications about events in your Coal account. Instead of polling our API, Coal pushes data to your server as soon as it happens.
+
+> [!IMPORTANT]
+> Webhooks are the most reliable way to handle post-payment logic, such as fulfilling orders or updating user balances.
+
+## The Webhook Event
+
+Coal currently supports the `checkout.session.completed` event, which is fired when a payment is successfully confirmed on the blockchain.
+
+### Payload Structure
+
+When an event occurs, Coal sends a `POST` request to your configured `callbackUrl`. The body of the request will contain the event object.
+
+```json
+{
+  "event": "checkout.session.completed",
+  "data": {
+    "id": "cs_cl9...",
+    "amount": "50.00",
+    "currency": "MNEE",
+    "status": "confirmed",
+    "customer_details": {
+      "email": "customer@example.com"
+    }
+  }
+}
+```
+
+## Security & Verification
+
+To ensure that webhook requests are genuinely from Coal and haven't been tampered with, every request includes a `Coal-Signature` header.
+
+The header format is:
+`t=TIMESTAMP,v1=SIGNATURE`
+
+### Verifying Signatures
+
+You should compute the HMAC-SHA256 of the payload and compare it to the signature provided in the header.
+
+1.  **Extract the timestamp and signature** from the header.
+2.  **Prepare the `signed_payload`** string: concatenate the timestamp, a period (`.`), and the raw JSON body.
+3.  **Compute the HMAC** using your API Secret Key.
+4.  **Compare** your computed signature with the one in the header.
+
+### Example Code (Next.js / Node.js)
+
+Here is a robust example of how to handle verify Coal webhooks in a Next.js App Router API route.
+
+```typescript
+// app/api/webhook/route.ts
+import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+
+export async function POST(request: Request) {
+    const rawBody = await request.text();
+    const signatureHeader = request.headers.get('Coal-Signature');
+
+    if (!signatureHeader) {
+        return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+    }
+
+    // 1. Extract pieces
+    const [t, v1] = signatureHeader.split(',').map(part => part.split('=')[1]);
+    
+    // 2. Prepare payload
+    const signedPayload = `${t}.${rawBody}`;
+
+    // 3. Compute HMAC
+    const hmac = crypto.createHmac('sha256', process.env.COAL_SECRET_KEY!);
+    const digest = hmac.update(signedPayload).digest('hex');
+
+    // 4. Compare (Timing Safe)
+    if (!crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(v1))) {
+         return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
+
+    // Process Event
+    const event = JSON.parse(rawBody);
+    
+    if (event.event === 'checkout.session.completed') {
+        const session = event.data;
+        console.log(`💰 Payment confirmed: ${session.amount} ${session.currency}`);
+        // TODO: Fulfill order
+    }
+
+    return NextResponse.json({ received: true });
+}
+```
+
+> [!TIP]
+> Always return a `200` OK response quickly to acknowledge receipt. If you have complex processing, consider using a background queue.
