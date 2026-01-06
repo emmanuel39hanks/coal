@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Add, Key, Copy, CloseCircle, ShieldTick, TickCircle, Trash } from 'iconsax-reactjs';
+import { Add, Key, Copy, CloseCircle, ShieldTick, TickCircle, Trash, Warning2 } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
 import { fetcher, API_URL } from '@/lib/api';
 
@@ -14,7 +14,14 @@ export default function KeysPage() {
     const [createdKey, setCreatedKey] = useState<{ name: string, secret: string } | null>(null);
     const [loading, setLoading] = useState(false);
     const [copied, setCopied] = useState(false);
-    const [revokingId, setRevokingId] = useState<string | null>(null);
+
+    // Revoke modal state
+    const [revokeModal, setRevokeModal] = useState<{ isOpen: boolean; keyId: string | null; keyName: string }>({
+        isOpen: false,
+        keyId: null,
+        keyName: ''
+    });
+    const [revoking, setRevoking] = useState(false);
 
     const handleCreate = async () => {
         setLoading(true);
@@ -39,27 +46,26 @@ export default function KeysPage() {
         }
     };
 
-    const handleRevoke = async (keyId: string) => {
-        if (!confirm('Are you sure you want to revoke this API key? This action cannot be undone.')) {
-            return;
-        }
+    const handleRevoke = async () => {
+        if (!revokeModal.keyId) return;
 
-        setRevokingId(keyId);
+        setRevoking(true);
         try {
-            const res = await fetch(`${API_URL}/api/console/keys/${keyId}`, {
+            const res = await fetch(`${API_URL}/api/console/keys/${revokeModal.keyId}`, {
                 method: 'DELETE',
                 credentials: 'include',
             });
 
             if (res.ok) {
                 mutate('/api/console/keys');
+                setRevokeModal({ isOpen: false, keyId: null, keyName: '' });
             } else {
                 console.error('Failed to revoke key');
             }
         } catch (e) {
             console.error('Error revoking key:', e);
         } finally {
-            setRevokingId(null);
+            setRevoking(false);
         }
     };
 
@@ -127,18 +133,11 @@ export default function KeysPage() {
                                         </td>
                                         <td className="py-4 pr-4 rounded-r-xl text-right">
                                             <button
-                                                onClick={() => handleRevoke(key.id)}
-                                                disabled={revokingId === key.id}
-                                                className="inline-flex items-center gap-1.5 text-red-500 font-bold text-xs hover:text-red-700 hover:underline transition-colors disabled:opacity-50"
+                                                onClick={() => setRevokeModal({ isOpen: true, keyId: key.id, keyName: key.name })}
+                                                className="inline-flex items-center gap-1.5 text-red-500 font-bold text-xs hover:text-red-700 hover:underline transition-colors"
                                             >
-                                                {revokingId === key.id ? (
-                                                    'Revoking...'
-                                                ) : (
-                                                    <>
-                                                        <Trash size={14} variant="Bold" />
-                                                        Revoke
-                                                    </>
-                                                )}
+                                                <Trash size={14} variant="Bold" />
+                                                Revoke
                                             </button>
                                         </td>
                                     </tr>
@@ -229,6 +228,49 @@ export default function KeysPage() {
                                     </div>
                                 </>
                             )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Revoke Confirmation Modal */}
+            <AnimatePresence>
+                {revokeModal.isOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/20 backdrop-blur-sm"
+                            onClick={() => setRevokeModal({ isOpen: false, keyId: null, keyName: '' })}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white w-full max-w-md rounded-[40px] p-8 relative z-10 shadow-2xl"
+                        >
+                            <div className="flex flex-col items-center text-center">
+                                <div className="w-20 h-20 bg-red-50 border-2 border-red-200 rounded-full flex items-center justify-center mb-6 text-red-500">
+                                    <Warning2 size={40} variant="Bold" />
+                                </div>
+                                <h2 className="text-2xl font-black text-[var(--color-brand-navy)]">Revoke API Key?</h2>
+                                <p className="text-sm text-[var(--color-text-secondary)] mt-2 mb-6">
+                                    Are you sure you want to revoke <strong>"{revokeModal.keyName}"</strong>?
+                                    This action cannot be undone and any applications using this key will stop working.
+                                </p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setRevokeModal({ isOpen: false, keyId: null, keyName: '' })}
+                                    className="flex-1 h-12 bg-gray-100 text-[var(--color-brand-navy)] rounded-full font-bold hover:bg-gray-200 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleRevoke}
+                                    disabled={revoking}
+                                    className="flex-1 h-12 bg-red-500 text-white rounded-full font-bold hover:bg-red-600 transition-colors disabled:opacity-50"
+                                >
+                                    {revoking ? 'Revoking...' : 'Yes, Revoke'}
+                                </button>
+                            </div>
                         </motion.div>
                     </div>
                 )}
