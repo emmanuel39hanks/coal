@@ -1,0 +1,21 @@
+
+# MNEE Protocol
+
+MNEE is a 1:1 USD-backed stablecoin regulated in Antigua.
+
+## Key Features
+
+*   **BSV-20 / 1Sat**: Operates on the Bitcoin SV network via the 1Sat Ordinals protocol.
+*   **Fully Collateralized**: Backed by US Treasury bills and cash.
+*   **Regulatory Compliance**: Full AML/KYC compliance.
+
+## How it works
+
+Unlike account-based stablecoins (like ERC-20), MNEE uses a **UTXO** model. Tokens are "satoshis" with special inscriptions.
+
+When you send MNEE:
+1.  **Inputs**: You select UTXOs containing MNEE.
+2.  **Outputs**: You create new UTXOs for the recipient and change.
+3.  **Validation**: Indexers verify the provenance of the tokens.
+
+Coal handles this complexity for you, so you can just think in "Amounts" and "Recipients".

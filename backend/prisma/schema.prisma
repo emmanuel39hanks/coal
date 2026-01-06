@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Better Auth Models ---
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified Boolean?
+  image         String?
+  payoutAddress String? // Wallet address for MNEE payouts
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  sessions      Session[]
+  accounts      Account[]
+  
+  // Coal Platform Relations
+  products      Product[]
+  apiKeys       ApiKey[]
+  paymentLinks  PaymentLink[]
+  checkouts     CheckoutSession[]
+  
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+// --- Coal Platform Models ---
+
+model Product {
+  id          String   @id @default(cuid())
+  merchantId  String
+  
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(18, 6) // MNEE Amount
+  image       String?
+  sku         String?
+  
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  merchant    User     @relation(fields: [merchantId], references: [id])
+  
+  checkoutSessions CheckoutSession[]
+  paymentLinks     PaymentLink[]
+  
+  @@map("product")
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  merchantId  String
+  
+  keyPrefix   String   // e.g. "pk_live_..." (first few chars)
+  secretHash  String   // Hashed secret
+  name        String?  // e.g. "Production"
+  
+  lastUsed    DateTime?
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+  
+  merchant    User     @relation(fields: [merchantId], references: [id])
+  
+  @@map("api_key")
+}
+
+model PaymentLink {
+  id          String   @id @default(cuid())
+  merchantId  String
+  
+  productId   String?
+  slug        String   @unique // usecoal.xyz/pay/slug
+  title       String?  // Custom title for flexible links
+  description String?  // Custom description for flexible links
+  active      Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  merchant    User     @relation(fields: [merchantId], references: [id])
+  product     Product? @relation(fields: [productId], references: [id])
+  
+  @@map("payment_link")
+}
+
+model CheckoutSession {
+  id          String   @id @default(cuid())
+  merchantId  String
+  
+  productId   String?
+  
+  amount      Decimal  @db.Decimal(18, 6)
+  currency    String   @default("MNEE")
+  description String?
+  
+  // Split logic (stored as JSON)
+  // [{wallet: "0x...", percent: 90}, ...]
+  splits      Json?    
+  
+  status      String   @default("pending") // pending, confirmed, failed
+  
+  txHash      String?
+  
+  redirectUrl String?
+  callbackUrl String?
+  
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  
+  merchant    User     @relation(fields: [merchantId], references: [id])
+  product     Product? @relation(fields: [productId], references: [id])
+  
+  transactions Transaction[]
+  
+  @@map("checkout_session")
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  
+  checkoutId  String?
+  
+  txHash      String   @unique
+  from        String
+  to          String // Smart contract or recipient
+  amount      Decimal @db.Decimal(18, 6)
+  token       String  @default("MNEE")
+  
+  status      String  // confirmed, failed
+  
+  blockNumber Int?
+  
+  createdAt   DateTime @default(now())
+  
+  checkout    CheckoutSession? @relation(fields: [checkoutId], references: [id])
+  
+  @@map("transaction")
+}

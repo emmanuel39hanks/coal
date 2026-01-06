@@ -1,0 +1,39 @@
+
+# Products API
+
+Manage your product catalog programmatically.
+
+## Object Structure
+
+```json
+{
+  "id": "prod_123",
+  "name": "Super Coffee",
+  "price": "5.00",
+  "currency": "MNEE",
+  "image": "https://...",
+  "active": true
+}
+```
+
+## List Products
+
+`GET /api/console/products`
+
+Returns a list of all active products.
+
+## Create Product
+
+`POST /api/console/products`
+
+| Param | Type | Description |
+| :--- | :--- | :--- |
+| `name` | string | Product name |
+| `price` | number | Price in MNEE |
+| `image` | string | URL of product image |
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/products \
+  -H "x-api-key: ..." \
+  -d '{"name": "Coffee", "price": 5}'
+```

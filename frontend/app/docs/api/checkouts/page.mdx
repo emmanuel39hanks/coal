@@ -1,0 +1,119 @@
+
+# Create a Checkout Session
+
+Create a new checkout session for a one-time payment. This is the core of the Coal payment flow.
+
+**POST** `/api/checkouts`
+
+## Headers
+
+| Name        | Type     | Required | Description                                      |
+|:------------|:---------|:---------|:-------------------------------------------------|
+| `x-api-key` | `string` | **Yes**  | Your Coal API key (starts with `coal_live_...`)  |
+
+## Body Parameters
+
+| Name          | Type     | Required | Description                                      |
+|:--------------|:---------|:---------|:-------------------------------------------------|
+| `amount`      | `number` | **Yes**  | The amount to charge in MNEE.                    |
+| `productName` | `string` | No       | Display name for the product.                    |
+| `description` | `string` | No       | A description of the purchase.                   |
+| `currency`    | `string` | No       | Currency code (default: `MNEE`).                 |
+| `redirectUrl` | `string` | No       | Where to redirect the user after success.        |
+| `callbackUrl` | `string` | No       | Webhook URL for server-to-server notifications.  |
+| `productId`   | `string` | No       | The ID of the product being purchased.           |
+
+## Example Request
+
+```bash
+curl -X POST http://localhost:3001/api/checkouts \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: coal_live_12345..." \
+  -d '{
+    "amount": 25.00,
+    "productName": "Limited Edition Hoodie",
+    "redirectUrl": "https://yoursite.com/success",
+    "callbackUrl": "https://yoursite.com/api/webhook"
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "id": "clv9abc123...",
+  "url": "http://localhost:3000/pay/clv9abc123...",
+  "status": "pending",
+  "amount": 25.00,
+  "currency": "MNEE",
+  "expiresAt": "2026-01-07T01:30:00.000Z"
+}
+```
+
+## Node.js / Next.js Example
+
+```typescript
+// app/actions.ts
+'use server';
+import { redirect } from 'next/navigation';
+
+export async function createCheckout(formData: FormData) {
+    const COAL_API_URL = process.env.COAL_API_URL || 'http://localhost:3001/api/checkouts';
+    const API_KEY = process.env.COAL_API_KEY;
+
+    if (!API_KEY) {
+        throw new Error("Missing COAL_API_KEY");
+    }
+
+    const response = await fetch(COAL_API_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY,
+        },
+        body: JSON.stringify({
+            amount: parseFloat(formData.get('amount') as string),
+            productName: formData.get('productName') as string,
+            currency: 'MNEE',
+            redirectUrl: 'https://yoursite.com/success',
+            callbackUrl: 'https://yoursite.com/api/webhook'
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error("Failed to create checkout");
+    }
+
+    const data = await response.json();
+    
+    // Redirect user to Coal payment page
+    redirect(data.url);
+}
+```
+
+## Handling the Redirect
+
+Once you receive the `url`, redirect your user to that page. Coal will:
+
+1. Display a branded payment form
+2. Connect the user's wallet (MetaMask, WalletConnect, etc.)
+3. Process the MNEE transfer
+4. Verify the transaction on-chain
+5. Redirect to your `redirectUrl` with `?session_id=clv9abc123...`
+
+## Webhook Notifications
+
+If you provide a `callbackUrl`, Coal will POST a webhook notification when the payment is confirmed:
+
+```json
+{
+  "event": "checkout.session.completed",
+  "data": {
+    "id": "clv9abc123...",
+    "amount": 25.00,
+    "currency": "MNEE",
+    "status": "confirmed",
+    "txHash": "0xabc123..."
+  }
+}
+```
