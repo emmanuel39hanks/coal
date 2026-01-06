@@ -32,24 +32,28 @@ Coal provides:
                         └─────────────────┘
 ```
 
+**Note:** Backend and Frontend are deployed as **separate** Next.js applications:
+- **Backend** - API-only Next.js app with Prisma (no UI)
+- **Frontend** - UI app that calls backend APIs
+
 ## 📁 Project Structure
 
 ```
 coal/
-├── backend/          # Next.js API server (port 3001)
-├── frontend/         # Next.js frontend + docs (port 3000)
+├── backend/          # Next.js API server (Vercel Project 1)
+├── frontend/         # Next.js frontend + docs (Vercel Project 2)
 ├── examples/
-│   └── demo-store/   # Example merchant store (port 3002)
+│   └── demo-store/   # Example merchant store
 └── docs/             # MNEE documentation
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Local Development)
 
 ### Prerequisites
 
 - Node.js 18+
 - npm or yarn
-- PostgreSQL (or use Supabase)
+- PostgreSQL (or use Supabase/Neon)
 - Alchemy API key (free tier works)
 
 ### 1. Clone the Repository
@@ -125,32 +129,70 @@ Start the frontend:
 npm run dev
 ```
 
-### 4. Demo Store Setup (Optional)
+---
 
-```bash
-cd examples/demo-store
-npm install
-```
+## ☁️ Vercel Deployment
 
-Create `.env`:
+Since backend and frontend are in the same repository, you need to create **two separate Vercel projects** pointing to the same repo but with different root directories.
 
-```env
-COAL_API_URL=http://localhost:3001/api/checkouts
-COAL_API_KEY=coal_live_your_api_key_here
-```
+### Deploy Backend
 
-Start the demo store:
+1. **Create new Vercel project** → Import your repository
+2. **Configure project:**
+   - **Root Directory:** `backend`
+   - **Framework Preset:** Next.js
+   - **Build Command:** `npm run build` (includes `prisma generate`)
+   - **Output Directory:** Leave default
 
-```bash
-npm run dev
-```
+3. **Add Environment Variables:**
+
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | `postgresql://...` |
+| `BETTER_AUTH_SECRET` | `your-secret` |
+| `BETTER_AUTH_URL` | `https://your-backend.vercel.app` |
+| `GOOGLE_CLIENT_ID` | `your-google-id` |
+| `GOOGLE_CLIENT_SECRET` | `your-google-secret` |
+| `ALCHEMY_API_KEY` | `your-alchemy-key` |
+| `NEXT_PUBLIC_CHAIN_ID` | `1` |
+| `NEXT_PUBLIC_FRONTEND_URL` | `https://your-frontend.vercel.app` |
+| `NEXT_PUBLIC_APP_URL` | `https://your-backend.vercel.app` |
+
+4. **Deploy!**
+
+### Deploy Frontend
+
+1. **Create another Vercel project** → Import the **same** repository
+2. **Configure project:**
+   - **Root Directory:** `frontend`
+   - **Framework Preset:** Next.js
+   - **Build Command:** Leave default
+   - **Output Directory:** Leave default
+
+3. **Add Environment Variables:**
+
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://your-backend.vercel.app` |
+| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | `your-walletconnect-id` |
+| `AUTH_SECRET` | `your-auth-secret` |
+
+4. **Deploy!**
+
+### Important Notes
+
+- **Prisma Generation:** Backend's `postinstall` script automatically runs `prisma generate`
+- **CORS:** Backend is configured to allow requests from `NEXT_PUBLIC_FRONTEND_URL`
+- **Frontend doesn't need Prisma** - it only calls backend APIs
+
+---
 
 ## 🔌 API Usage
 
 ### Create a Checkout Session
 
 ```bash
-curl -X POST http://localhost:3001/api/checkouts \
+curl -X POST https://your-backend.vercel.app/api/checkouts \
   -H "Content-Type: application/json" \
   -H "x-api-key: coal_live_12345..." \
   -d '{
@@ -165,7 +207,7 @@ curl -X POST http://localhost:3001/api/checkouts \
 ```json
 {
   "id": "clv9abc123...",
-  "url": "http://localhost:3000/pay/clv9abc123...",
+  "url": "https://your-frontend.vercel.app/pay/clv9abc123...",
   "status": "pending",
   "amount": 25.00,
   "currency": "MNEE"
@@ -196,49 +238,34 @@ Redirect your customer to the `url` returned. Coal handles:
 | Wallet | ConnectKit, Wagmi, Viem |
 | RPC | Alchemy |
 | Token | MNEE (ERC-20) |
+| Deployment | Vercel |
 
 ## 📖 Documentation
 
-Visit `http://localhost:3000/docs` for full API documentation including:
-- Authentication
-- Checkout Sessions
-- Payment Links
-- Webhooks
-- Products API
-
-## 🧪 Testing Payments
-
-1. Get MNEE tokens from the [MNEE Swap](https://swap-user.mnee.net)
-2. Connect MetaMask to Ethereum Mainnet
-3. Create a checkout via API or demo store
-4. Complete payment with MNEE
+Visit `https://your-frontend.vercel.app/docs` for full API documentation.
 
 ## 📝 Environment Variables Summary
 
-### Backend (.env)
+### Backend
 
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `DATABASE_URL` | PostgreSQL connection string | ✅ |
 | `BETTER_AUTH_SECRET` | Auth encryption key | ✅ |
+| `BETTER_AUTH_URL` | Backend URL | ✅ |
 | `ALCHEMY_API_KEY` | Alchemy RPC key | ✅ |
 | `GOOGLE_CLIENT_ID` | Google OAuth ID | ✅ |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth secret | ✅ |
+| `NEXT_PUBLIC_FRONTEND_URL` | Frontend URL | ✅ |
+| `NEXT_PUBLIC_APP_URL` | Backend URL (self) | ✅ |
 
-### Frontend (.env)
+### Frontend
 
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `NEXT_PUBLIC_API_URL` | Backend URL | ✅ |
 | `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | WalletConnect ID | ✅ |
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing`)
-5. Open a Pull Request
+| `AUTH_SECRET` | Auth secret | ✅ |
 
 ## 📄 License
 
