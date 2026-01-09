@@ -44,7 +44,7 @@ html {
 
 /* Custom Utilities for "Massive" Typography */
 .text-massive {
-  font-size: clamp(3rem, 10vw, 6rem);
+  font-size: clamp(2.5rem, 11vw, 6.5rem);
   line-height: 0.9;
   letter-spacing: -0.04em;
   font-weight: 800;
