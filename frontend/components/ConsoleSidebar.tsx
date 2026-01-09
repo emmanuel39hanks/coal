@@ -9,8 +9,8 @@ import {
     Box,
     Key,
     Setting2,
-    LogoutCurve,
-    Moneys
+    Moneys,
+    User
 } from 'iconsax-reactjs';
 
 export default function ConsoleSidebar() {
@@ -59,9 +59,11 @@ export default function ConsoleSidebar() {
                         await authClient.signOut();
                         router.replace('/');
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[var(--color-text-secondary)] hover:bg-red-50 hover:text-red-500 transition-all font-bold"
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-base)] hover:text-[var(--color-brand-navy)] transition-all font-bold"
                 >
-                    <LogoutCurve size={24} variant="Linear" />
+                    <div className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center">
+                        <User size={20} variant="Linear" className="text-[var(--color-brand-navy)]" />
+                    </div>
                     Sign Out
                 </button>
             </div>
