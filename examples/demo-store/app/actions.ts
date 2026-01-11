@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 export async function createCheckout(formData: FormData) {
     const COAL_API_URL = process.env.COAL_API_URL || 'http://localhost:3001/api/checkouts';
     const API_KEY = process.env.COAL_API_KEY;
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3002';
 
     if (!API_KEY) {
         throw new Error("Missing COAL_API_KEY");
@@ -32,9 +33,9 @@ export async function createCheckout(formData: FormData) {
             productName,
             productDescription,
             productImage,
-            // Redirect URLs
-            redirectUrl: 'http://localhost:3002/success',
-            callbackUrl: 'http://localhost:3002/api/webhook'
+            // Redirect URLs - use APP_URL for production
+            redirectUrl: `${APP_URL}/success`,
+            callbackUrl: `${APP_URL}/api/webhook`
         }),
     });
 

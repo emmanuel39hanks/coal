@@ -3,7 +3,6 @@ import { UploadThingError } from "uploadthing/server";
 
 const f = createUploadthing();
 
-// Mock auth function (Replace with Better Auth session check later)
 const auth = (req: Request) => ({ id: "user1" });
 
 export const ourFileRouter = {
