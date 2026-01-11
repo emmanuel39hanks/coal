@@ -7,7 +7,7 @@ import useSWR, { mutate } from 'swr';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { useSearchParams } from 'next/navigation';
-import { fetcher, API_URL } from '@/lib/api';
+import { fetcher, apiRequest } from '@/lib/api';
 
 export default function PaymentLinksPage() {
     const { data, error, isLoading } = useSWR('/api/console/links', fetcher);
@@ -43,25 +43,21 @@ export default function PaymentLinksPage() {
                 body.description = customDesc;
             }
 
-            const res = await fetch('/api/console/links', {
+            await apiRequest('/api/console/links', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
 
-            if (res.ok) {
-                mutate('/api/console/links');
-                setIsCreateOpen(false);
-                setSelectedProduct('');
-                setCustomSlug('');
-                setCustomTitle('');
-                setCustomDesc('');
-                setLinkType('product');
-            } else {
-                alert('Failed to create link (Slug might be taken)');
-            }
-        } catch (e) {
+            mutate('/api/console/links');
+            setIsCreateOpen(false);
+            setSelectedProduct('');
+            setCustomSlug('');
+            setCustomTitle('');
+            setCustomDesc('');
+            setLinkType('product');
+        } catch (e: any) {
             console.error(e);
+            alert('Failed to create link. ' + (e.message || 'Slug might be taken.'));
         } finally {
             setCreateLoading(false);
         }
@@ -70,14 +66,13 @@ export default function PaymentLinksPage() {
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to delete this link?')) return;
         try {
-            const res = await fetch(`/api/console/links/${id}`, {
+            await apiRequest(`/api/console/links/${id}`, {
                 method: 'DELETE'
             });
-            if (res.ok) {
-                mutate('/api/console/links');
-            }
+            mutate('/api/console/links');
         } catch (e) {
             console.error(e);
+            alert('Failed to delete link.');
         }
     };
 
