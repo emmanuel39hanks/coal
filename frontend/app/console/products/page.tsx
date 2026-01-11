@@ -6,7 +6,7 @@ import { Add, SearchNormal1, Box, Trash, Edit2 } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
 import { UploadButton } from '@/utils/uploadthing';
 import Modal from '@/components/Modal';
-import { fetcher, API_URL } from '@/lib/api';
+import { fetcher, apiRequest } from '@/lib/api';
 
 import { useSearchParams } from 'next/navigation';
 
@@ -47,19 +47,16 @@ export default function ProductsPage() {
 
             const method = editingProduct ? 'PUT' : 'POST';
 
-            const res = await fetch(url, {
+            await apiRequest(url, {
                 method,
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, description, price, image })
             });
 
-            if (res.ok) {
-                mutate('/api/console/products'); // Refresh
-                setIsCreateOpen(false);
-                setEditingProduct(null);
-                // Reset
-                setName(''); setDescription(''); setPrice(''); setImage('');
-            }
+            mutate('/api/console/products'); // Refresh
+            setIsCreateOpen(false);
+            setEditingProduct(null);
+            // Reset
+            setName(''); setDescription(''); setPrice(''); setImage('');
         } catch (e) {
             console.error(e);
         } finally {
@@ -70,12 +67,10 @@ export default function ProductsPage() {
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to delete this product?')) return;
         try {
-            const res = await fetch(`/api/console/products/${id}`, {
+            await apiRequest(`/api/console/products/${id}`, {
                 method: 'DELETE'
             });
-            if (res.ok) {
-                mutate('/api/console/products');
-            }
+            mutate('/api/console/products');
         } catch (e) {
             console.error(e);
         }
