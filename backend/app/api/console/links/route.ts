@@ -58,16 +58,29 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { productId, slug, title, description } = body;
 
-        // Generate slug if not provided
-        const finalSlug = slug || crypto.randomBytes(4).toString('hex');
+        // Generate or validate slug
+        let finalSlug = slug;
 
-        // Check if slug exists
-        const existing = await prisma.paymentLink.findUnique({
-            where: { slug: finalSlug }
-        });
-
-        if (existing) {
-            return NextResponse.json({ error: 'Slug already taken' }, { status: 400 });
+        if (finalSlug) {
+            // Check provided slug
+            const existing = await prisma.paymentLink.findUnique({
+                where: { slug: finalSlug }
+            });
+            if (existing) {
+                return NextResponse.json({ error: 'Slug already taken' }, { status: 400 });
+            }
+        } else {
+            // Generate unique slug
+            let unique = false;
+            while (!unique) {
+                finalSlug = crypto.randomBytes(4).toString('hex');
+                const existing = await prisma.paymentLink.findUnique({
+                    where: { slug: finalSlug }
+                });
+                if (!existing) {
+                    unique = true;
+                }
+            }
         }
 
         const link = await prisma.paymentLink.create({
