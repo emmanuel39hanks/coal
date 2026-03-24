@@ -35,6 +35,7 @@ attestation_report.json
 broker_attestation_report.json
 llm_attestation_report.json
 .vercel/
+/backend/generated/
 
 # Debug
 npm-debug.log*

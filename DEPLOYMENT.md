@@ -12,8 +12,8 @@ Coal uses two auth surfaces:
 
 | Requirement | Version / Notes |
 |---|---|
-| Node.js | 20+ |
-| npm | Bundled with Node 20 |
+| Node.js | 24+ |
+| npm | Bundled with Node 24 |
 | Neon account | [neon.tech](https://neon.tech) — serverless Postgres |
 | Vercel account | [vercel.com](https://vercel.com) — hosts both apps |
 | Alchemy account | [alchemy.com](https://alchemy.com) — Base RPC provider |
@@ -26,6 +26,15 @@ Coal uses two auth surfaces:
 ---
 
 ## Environment Variables
+
+### Branch / environment split
+
+| Branch | Vercel target | Base chain | 0G chain |
+|---|---|---|---|
+| `main` | Production | Base mainnet | 0G mainnet |
+| `dev` | Preview | Base Sepolia (`CHAIN_ENV=testnet`) | 0G mainnet |
+
+Preview deployments should never silently point at the same production database schema. Use a dedicated preview database or a dedicated preview schema such as `?schema=dev`.
 
 ### Backend (`/backend`)
 
@@ -145,6 +154,11 @@ The frontend expects the backend at `NEXT_PUBLIC_API_URL=http://localhost:3001`.
 
 Coal deploys as **two separate Vercel projects** — one for the backend, one for the frontend.
 
+Current project mapping:
+
+- `coal` → root directory `frontend`
+- `coal-backend` → root directory `backend`
+
 ### Step 1: Deploy the backend
 
 1. Go to [vercel.com/new](https://vercel.com/new) and import your repository.
@@ -172,14 +186,28 @@ After both deployments are live, go back to the **backend** Vercel project setti
 
 Redeploy the backend after updating these values.
 
-### Setting up Vercel Cron (verify-payments)
+### Production vs preview envs
 
-The `verify-payments` cron job polls pending payments and confirms on-chain transactions.
+- Production (`main`) should use:
+  - backend [backend/.env.production.example](/Users/emmanuel/Documents/schemalabs/coal/backend/.env.production.example)
+  - frontend [frontend/.env.production.example](/Users/emmanuel/Documents/schemalabs/coal/frontend/.env.production.example)
+- Preview for `dev` should use:
+  - backend [backend/.env.preview.example](/Users/emmanuel/Documents/schemalabs/coal/backend/.env.preview.example)
+  - frontend [frontend/.env.preview.example](/Users/emmanuel/Documents/schemalabs/coal/frontend/.env.preview.example)
 
-1. In the Vercel backend project — **Settings** — **Cron Jobs**, verify the cron is listed.
-2. The cron calls `GET /api/cron/verify-payments` with `Authorization: Bearer <CRON_SECRET>`.
-3. Set `CRON_SECRET` to a strong random string in the backend environment variables.
-4. Vercel will call the cron automatically on the configured schedule (default: every minute).
+Use [scripts/sync-vercel-dev-env.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/sync-vercel-dev-env.sh) to push the `dev` branch preview envs into both Vercel projects.
+
+### Scheduled jobs
+
+Production background jobs are no longer configured with Vercel Cron because the Hobby plan does not support the minute-level schedule Coal needs.
+
+Instead, GitHub Actions calls the production cron endpoints from [backend-cron.yml](/Users/emmanuel/Documents/schemalabs/coal/.github/workflows/backend-cron.yml):
+
+- `/api/cron/verify-payments`
+- `/api/cron/retry-webhooks`
+- `/api/cron/process-subscriptions`
+
+This workflow uses the repository secret `COAL_CRON_SECRET`, which must match the backend production `CRON_SECRET`.
 
 ---
 
@@ -253,3 +281,10 @@ New deployments should prefer `SETTLEMENT_TOKEN_*` and `NEXT_PUBLIC_SETTLEMENT_T
 - [ ] Set `SETTLEMENT_TOKEN_ADDRESS` / `NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS` if you want a custom settlement asset instead of the USDC fallback
 - [ ] Set `CHAIN_ENV` to empty string (or remove it) to switch to Base Mainnet for production
 - [ ] Set `NEXT_PUBLIC_MOONPAY_ENV=production` for the live on-ramp
+
+## Git workflow
+
+- Do day-to-day work on `dev`
+- Push `dev` with [scripts/push-dev.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/push-dev.sh)
+- Promote to `main` with [scripts/promote-dev-to-main.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/promote-dev-to-main.sh)
+- CI runs on both `dev` and `main` via [ci.yml](/Users/emmanuel/Documents/schemalabs/coal/.github/workflows/ci.yml)
