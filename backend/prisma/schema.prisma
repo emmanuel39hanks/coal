@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
 }
 
@@ -7,43 +7,52 @@ datasource db {
   provider = "postgresql"
 }
 
-// --- Better Auth Models ---
-
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified Boolean?
-  image         String?
-  payoutAddress String? // Wallet address for MNEE payouts
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  sessions      Session[]
-  accounts      Account[]
-  
-  // Coal Platform Relations
-  products      Product[]
-  apiKeys       ApiKey[]
-  paymentLinks  PaymentLink[]
-  checkouts     CheckoutSession[]
-  
+  id                   String                @id @default(cuid())
+  name                 String?
+  email                String                @unique
+  emailVerified        Boolean?
+  image                String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  payoutAddress        String?
+  webhookSecret        String?
+  webhookUrl           String?
+  privyDid             String?               @unique
+  onboardingComplete   Boolean               @default(false)
+  onboardingStep       Int                   @default(0)
+  accounts             Account[]
+  apiKeys              ApiKey[]
+  billingMandates      BillingMandate[]
+  chainAnchors         ChainAnchor[]
+  checkouts            CheckoutSession[]
+  computeJobs          ComputeJob[]
+  paymentLinks         PaymentLink[]
+  paywalls             Paywall[]
+  products             Product[]
+  sessions             Session[]
+  splitConfigs         SplitConfig[]
+  storedArtifacts      StoredArtifact[]
+  subscriptions        Subscription[]
+  subscriptionInvoices SubscriptionInvoice[]
+  ownedTeam            TeamMember[]          @relation("team_merchant")
+  teamMemberships      TeamMember[]          @relation("team_member")
+  webhookEvents        WebhookEvent[]
+
   @@map("user")
 }
 
 model Session {
   id        String   @id @default(cuid())
   userId    String
-  token     String
+  token     String   @unique
   expiresAt DateTime
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([token])
   @@map("session")
 }
 
@@ -61,7 +70,6 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
-  
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("account")
@@ -78,116 +86,349 @@ model Verification {
   @@map("verification")
 }
 
-// --- Coal Platform Models ---
-
 model Product {
-  id          String   @id @default(cuid())
-  merchantId  String
-  
-  name        String
-  description String?
-  price       Decimal  @db.Decimal(18, 6) // MNEE Amount
-  image       String?
-  sku         String?
-  
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  merchant    User     @relation(fields: [merchantId], references: [id])
-  
-  checkoutSessions CheckoutSession[]
-  paymentLinks     PaymentLink[]
-  
+  id                   String            @id @default(cuid())
+  merchantId           String
+  name                 String
+  description          String?
+  price                Decimal           @db.Decimal(18, 6)
+  image                String?
+  sku                  String?
+  active               Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  billingInterval      String?
+  billingIntervalCount Int               @default(1)
+  billingType          String            @default("one_time")
+  billingMandates      BillingMandate[]
+  checkoutSessions     CheckoutSession[]
+  paymentLinks         PaymentLink[]
+  merchant             User              @relation(fields: [merchantId], references: [id])
+  subscriptions        Subscription[]
+
   @@map("product")
 }
 
 model ApiKey {
-  id          String   @id @default(cuid())
-  merchantId  String
-  
-  keyPrefix   String   // e.g. "pk_live_..." (first few chars)
-  secretHash  String   // Hashed secret
-  name        String?  // e.g. "Production"
-  
-  lastUsed    DateTime?
-  createdAt   DateTime @default(now())
-  revokedAt   DateTime?
-  
-  merchant    User     @relation(fields: [merchantId], references: [id])
-  
+  id         String    @id @default(cuid())
+  merchantId String
+  keyPrefix  String
+  secretHash String
+  name       String?
+  lastUsed   DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  merchant   User      @relation(fields: [merchantId], references: [id])
+
   @@map("api_key")
 }
 
 model PaymentLink {
-  id          String   @id @default(cuid())
-  merchantId  String
-  
-  productId   String?
-  slug        String   @unique // usecoal.xyz/pay/slug
-  title       String?  // Custom title for flexible links
-  description String?  // Custom description for flexible links
-  active      Boolean  @default(true)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  merchant    User     @relation(fields: [merchantId], references: [id])
-  product     Product? @relation(fields: [productId], references: [id])
-  
+  id              String   @id @default(cuid())
+  merchantId      String
+  productId       String?
+  slug            String   @unique
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  description     String?
+  title           String?
+  payerInfoConfig Json?
+  merchant        User     @relation(fields: [merchantId], references: [id])
+  product         Product? @relation(fields: [productId], references: [id])
+
   @@map("payment_link")
 }
 
 model CheckoutSession {
-  id          String   @id @default(cuid())
-  merchantId  String
-  
-  productId   String?
-  
-  amount      Decimal  @db.Decimal(18, 6)
-  currency    String   @default("MNEE")
-  description String?
-  
-  // Split logic (stored as JSON)
-  // [{wallet: "0x...", percent: 90}, ...]
-  splits      Json?    
-  
-  status      String   @default("pending") // pending, confirmed, failed
-  
-  txHash      String?
-  
-  redirectUrl String?
-  callbackUrl String?
-  
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
-  
-  merchant    User     @relation(fields: [merchantId], references: [id])
-  product     Product? @relation(fields: [productId], references: [id])
-  
-  transactions Transaction[]
-  
+  id                  String               @id @default(cuid())
+  merchantId          String
+  productId           String?
+  amount              Decimal              @db.Decimal(18, 6)
+  currency            String               @default("MNEE")
+  description         String?
+  splits              Json?
+  status              String               @default("pending")
+  txHash              String?
+  redirectUrl         String?
+  callbackUrl         String?
+  expiresAt           DateTime
+  createdAt           DateTime             @default(now())
+  pendingTxHash       String?
+  metadata            Json?
+  authExpiresAt       DateTime?
+  authId              String?
+  capturedAt          DateTime?
+  paymentMode         String               @default("direct")
+  refundedAt          DateTime?
+  voidedAt            DateTime?
+  billingReason       String               @default("one_time")
+  customerAddress     String?
+  customerEmail       String?
+  subscriptionId      String?
+  payerInfo           Json?
+  payerInfoConfig     Json?
+  merchant            User                 @relation(fields: [merchantId], references: [id])
+  product             Product?             @relation(fields: [productId], references: [id])
+  subscription        Subscription?        @relation(fields: [subscriptionId], references: [id])
+  subscriptionInvoice SubscriptionInvoice? @relation("invoice_session")
+  transactions        Transaction[]
+
   @@map("checkout_session")
 }
 
 model Transaction {
-  id          String   @id @default(cuid())
-  
+  id          String           @id @default(cuid())
   checkoutId  String?
-  
-  txHash      String   @unique
+  txHash      String           @unique
   from        String
-  to          String // Smart contract or recipient
-  amount      Decimal @db.Decimal(18, 6)
-  token       String  @default("MNEE")
-  
-  status      String  // confirmed, failed
-  
+  to          String
+  amount      Decimal          @db.Decimal(18, 6)
+  token       String           @default("MNEE")
+  status      String
   blockNumber Int?
-  
-  createdAt   DateTime @default(now())
-  
+  createdAt   DateTime         @default(now())
   checkout    CheckoutSession? @relation(fields: [checkoutId], references: [id])
-  
+
   @@map("transaction")
+}
+
+model TeamMember {
+  id         String   @id @default(cuid())
+  merchantId String
+  userId     String
+  role       String   @default("member")
+  invitedBy  String?
+  createdAt  DateTime @default(now())
+  merchant   User     @relation("team_merchant", fields: [merchantId], references: [id])
+  user       User     @relation("team_member", fields: [userId], references: [id])
+
+  @@unique([merchantId, userId])
+  @@map("team_member")
+}
+
+model Paywall {
+  id           String          @id @default(cuid())
+  merchantId   String
+  name         String
+  description  String?
+  price        Decimal         @db.Decimal(18, 6)
+  currency     String          @default("USDC")
+  contentType  String          @default("api")
+  contentUrl   String?
+  contentData  Json?
+  pricingModel String          @default("one_time")
+  active       Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  merchant     User            @relation(fields: [merchantId], references: [id])
+  accesses     PaywallAccess[]
+
+  @@map("paywall")
+}
+
+model PaywallAccess {
+  id          String    @id @default(cuid())
+  paywallId   String
+  address     String
+  txHash      String
+  accessCount Int       @default(1)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  paywall     Paywall   @relation(fields: [paywallId], references: [id])
+
+  @@unique([paywallId, address])
+  @@map("paywall_access")
+}
+
+model SplitConfig {
+  id         String   @id @default(cuid())
+  merchantId String
+  name       String
+  recipients Json
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  merchant   User     @relation(fields: [merchantId], references: [id])
+
+  @@map("split_config")
+}
+
+model BillingMandate {
+  id              String         @id @default(cuid())
+  merchantId      String
+  productId       String
+  customerAddress String
+  customerEmail   String?
+  status          String         @default("active")
+  acceptedAt      DateTime       @default(now())
+  revokedAt       DateTime?
+  metadata        Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  merchant        User           @relation(fields: [merchantId], references: [id])
+  product         Product        @relation(fields: [productId], references: [id])
+  subscriptions   Subscription[]
+
+  @@unique([merchantId, productId, customerAddress])
+  @@index([merchantId, status])
+  @@map("billing_mandate")
+}
+
+model Subscription {
+  id                 String                @id @default(cuid())
+  merchantId         String
+  productId          String
+  mandateId          String
+  latestInvoiceId    String?
+  customerAddress    String
+  customerEmail      String?
+  status             String                @default("active")
+  amount             Decimal               @db.Decimal(18, 6)
+  currency           String                @default("MNEE")
+  interval           String
+  intervalCount      Int                   @default(1)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  nextBillingAt      DateTime
+  renewalCount       Int                   @default(1)
+  lastPaidAt         DateTime?
+  pausedAt           DateTime?
+  canceledAt         DateTime?
+  metadata           Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  checkoutSessions   CheckoutSession[]
+  latestInvoice      SubscriptionInvoice?  @relation("latest_subscription_invoice", fields: [latestInvoiceId], references: [id])
+  mandate            BillingMandate        @relation(fields: [mandateId], references: [id])
+  merchant           User                  @relation(fields: [merchantId], references: [id])
+  product            Product               @relation(fields: [productId], references: [id])
+  invoices           SubscriptionInvoice[] @relation("subscription_invoices")
+
+  @@index([merchantId, status, nextBillingAt])
+  @@index([productId, customerAddress])
+  @@map("subscription")
+}
+
+model SubscriptionInvoice {
+  id                     String           @id @default(cuid())
+  subscriptionId         String
+  merchantId             String
+  sequenceNumber         Int
+  amount                 Decimal          @db.Decimal(18, 6)
+  currency               String           @default("MNEE")
+  status                 String           @default("scheduled")
+  billingReason          String           @default("renewal")
+  periodStart            DateTime
+  periodEnd              DateTime
+  dueAt                  DateTime
+  hostedUrl              String?
+  checkoutSessionId      String?          @unique
+  paidAt                 DateTime?
+  lastNotifiedAt         DateTime?
+  metadata               Json?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  latestForSubscriptions Subscription[]   @relation("latest_subscription_invoice")
+  checkoutSession        CheckoutSession? @relation("invoice_session", fields: [checkoutSessionId], references: [id])
+  merchant               User             @relation(fields: [merchantId], references: [id])
+  subscription           Subscription     @relation("subscription_invoices", fields: [subscriptionId], references: [id])
+
+  @@unique([subscriptionId, sequenceNumber])
+  @@index([merchantId, status, dueAt])
+  @@map("subscription_invoice")
+}
+
+model Nonce {
+  address   String   @id
+  nonce     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("nonce")
+}
+
+model WebhookEvent {
+  id             String    @id @default(cuid())
+  merchantId     String
+  eventType      String
+  payload        Json
+  url            String
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  lastAttemptAt  DateTime?
+  nextRetryAt    DateTime?
+  deliveredAt    DateTime?
+  responseStatus Int?
+  responseBody   String?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  merchant       User      @relation(fields: [merchantId], references: [id])
+
+  @@map("webhook_event")
+}
+
+model StoredArtifact {
+  id              String   @id @default(cuid())
+  merchantId      String?
+  kind            String
+  layer           String   @default("log")
+  localEntityType String
+  localEntityId   String
+  payloadHash     String
+  storageRoot     String?
+  storageTxHash   String?
+  storageUri      String?
+  streamId        String?
+  kvKey           String?
+  status          String   @default("published")
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  merchant        User?    @relation(fields: [merchantId], references: [id])
+
+  @@index([kind, localEntityType, localEntityId])
+  @@map("stored_artifact")
+}
+
+model ChainAnchor {
+  id              String   @id @default(cuid())
+  merchantId      String?
+  kind            String
+  localEntityType String
+  localEntityId   String
+  payloadHash     String
+  anchorContract  String
+  anchorTxHash    String
+  anchorChainId   Int
+  status          String   @default("confirmed")
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  merchant        User?    @relation(fields: [merchantId], references: [id])
+
+  @@index([kind, localEntityType, localEntityId])
+  @@map("chain_anchor")
+}
+
+model ComputeJob {
+  id                 String    @id @default(cuid())
+  merchantId         String?
+  kind               String
+  provider           String
+  model              String
+  inputArtifactId    String?
+  outputArtifactId   String?
+  status             String    @default("pending")
+  verificationStatus String?
+  errorMessage       String?
+  metadata           Json?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  merchant           User?     @relation(fields: [merchantId], references: [id])
+
+  @@index([kind, merchantId])
+  @@map("compute_job")
 }

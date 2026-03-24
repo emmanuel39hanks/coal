@@ -1,0 +1,10 @@
+{
+  "name": "@coal/react-legacy",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Legacy Coal React checkout component kept for compatibility",
+  "main": "index.tsx",
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}

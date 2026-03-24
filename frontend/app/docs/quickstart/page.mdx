@@ -1,33 +1,299 @@
 
-# Quickstart Guide
+# Quickstart
 
-This guide will get you up and running with Coal payments in minutes.
+Accept your first payment in under 5 minutes. This guide walks you through everything from account setup to receiving a real on-chain payment and integrating the API.
 
-## 1. Create an Account
+---
 
-Head over to the [Signup Page](/signup) and create your merchant account.
+## Testnet Setup
 
-## 2. Generate API Keys
+Before going live, you can develop and test against **Base Sepolia** — a free test network where no real funds are used.
 
-Navigate to the **Developers** section in your dashboard and generate a new API Key.
+**1. Get test funds**
 
-## 3. Create a Payment Link
+Use the [Base Sepolia faucet](https://www.coinbase.com/faucets/base-ethereum-goerli-faucet) to receive test ETH for gas fees on Base Sepolia.
 
-The easiest way to accept a payment is with a **Payment Link**.
+**2. Enable testnet mode**
 
-1.  Go to **Payment Links** in the console.
-2.  Click **Create Link**.
-3.  (Optional) Select a product.
-4.  Copy the generated URL (e.g., `usecoal.xyz/pay/my-first-sale`).
+In your `.env.local` file, set:
 
-## 4. Test the Flow
+```bash
+NEXT_PUBLIC_CHAIN_ENV=testnet
+```
 
-Open the link in a new incognito window. You'll see the Coal payment page.
-*   The user connects their wallet (e.g., MetaMask).
-*   They approve the MNEE transaction.
-*   Once confirmed, they are redirected to your success page.
+Restart your dev server after changing this value.
+
+**3. Embedded wallets on testnet**
+
+If you use Privy embedded wallets, they work automatically on testnet — no extra configuration needed. Privy creates wallets on both Base mainnet and Base Sepolia, and your app will route to the correct chain based on the `NEXT_PUBLIC_CHAIN_ENV` setting.
+
+> **Note:** Test payments made on Base Sepolia will never appear in your live dashboard. Switch `NEXT_PUBLIC_CHAIN_ENV` back to `mainnet` (or remove the variable) when you're ready for production.
+
+---
+
+## Step 1: Create Your Account
+
+Head to [usecoal.xyz/signup](/signup) and register a merchant account. You'll need an email address. After signing up, confirm your email and you'll land in the **Coal Console**.
+
+---
+
+## Step 2: Set Your Payout Address
+
+Before you can receive funds, you need to tell Coal where to send payouts.
+
+1. In the Console, go to **Settings → Payout Address**
+2. Paste your EVM wallet address (any wallet that supports ERC-20 tokens on Base)
+3. Click **Save**
+
+> **Important:** This is the address that will receive every payment. Coal is non-custodial — funds go directly to your wallet, not to Coal. Set this before creating any live payment links.
+
+---
+
+## Step 3: Create a Product
+
+Products let you define what you're selling — name, price, and optional image.
+
+1. Go to **Console → Products → New Product**
+2. Fill in:
+   - **Name** — e.g. `Premium Membership`
+   - **Price** — e.g. `25.00`
+   - **Description** (optional) — shown on the checkout page
+   - **Image** (optional) — uploaded via URL or file upload
+3. Click **Create Product**
+
+Your product is now available to attach to payment links.
+
+---
+
+## Step 4: Create a Payment Link
+
+Payment links are shareable URLs that open a hosted checkout page.
+
+1. Go to **Console → Payment Links → New**
+2. Choose a **Slug** — this becomes the URL path, e.g. `premium-membership`
+3. Link it to the product you just created
+4. Optionally set:
+   - **Redirect URL** — where to send the buyer after a successful payment
+   - **Callback URL** — your webhook endpoint for server-to-server notifications
+5. Click **Create**
+
+Your payment link is now live at `usecoal.xyz/pay/premium-membership`.
+
+---
+
+## Step 5: Test the Checkout
+
+Open `https://usecoal.xyz/pay/premium-membership` in your browser (or try it in an incognito window).
+
+You'll see the hosted checkout page showing your product name, price, and merchant info. The flow from the user's perspective:
+
+1. User visits the payment link
+2. They connect their wallet
+3. They approve the on-chain token transfer
+4. Coal submits the transaction hash for on-chain verification
+5. Once confirmed, the user is redirected to your `redirectUrl` with `?session_id=<id>` appended
+
+---
+
+## Step 6: Integrate via API
+
+For programmatic checkout creation — e.g. in your e-commerce backend — use the merchant API directly. These calls use `x-api-key`; the dashboard and `/api/console/*` routes use Privy Bearer tokens and are not the primary public merchant surface.
+
+### Get Your API Key
+
+Go to **Console → API Keys → Create New Key**. Copy the key immediately; it will not be shown again.
+
+API keys use the format `coal_live_` followed by a random secret. Pass them in the `x-api-key` header for merchant API requests:
+
+```
+x-api-key: coal_live_your_key_here
+```
+
+---
+
+### API Flow Overview
+
+```
+POST /api/checkouts
+  Headers: { "x-api-key": "coal_live_..." }
+  Body: { amount: 25, productName: "Premium Membership", redirectUrl: "https://yoursite.com/success" }
+  → Returns: id, url, status, amount, currency, expiresAt
+
+POST /api/pay/confirm
+  Body: { sessionId, txHash }
+  → Returns: { status: "verifying", sessionId }
+
+GET /api/pay/status/:sessionId
+  → Returns: { status, txHash, redirectUrl }
+```
+
+---
+
+### Initialize a Checkout Session
+
+**`POST https://api.usecoal.xyz/api/checkouts`**
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/checkouts \
+  -H "x-api-key: coal_live_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 25,
+    "productName": "Premium Membership",
+    "redirectUrl": "https://yoursite.com/success"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "id": "clv9abc123...",
+    "url": "https://usecoal.xyz/pay/checkout/clv9abc123...",
+    "status": "pending",
+    "amount": 25,
+    "currency": "USDC",
+    "expiresAt": "2026-03-23T14:00:00.000Z"
+  }
+}
+```
+
+For **flexible/donation links** (no fixed product), just send the `amount` you want to charge.
+
+---
+
+### Confirm Payment (Submit Transaction Hash)
+
+After your frontend sends the payment on-chain, submit the transaction hash to Coal for verification.
+
+**`POST https://api.usecoal.xyz/api/pay/confirm`**
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/pay/confirm \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "cm9x4k2j00003lb08n5qz7v1r",
+    "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "status": "verifying",
+    "sessionId": "cm9x4k2j00003lb08n5qz7v1r"
+  }
+}
+```
+
+The `verifying` status means Coal has accepted the hash and the background verification job will process it within the next minute.
+
+---
+
+### Poll Payment Status
+
+**`GET https://api.usecoal.xyz/api/pay/status/:sessionId`**
+
+```bash
+curl https://api.usecoal.xyz/api/pay/status/cm9x4k2j00003lb08n5qz7v1r
+```
+
+**Response (confirmed):**
+
+```json
+{
+  "status": "confirmed",
+  "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b",
+  "redirectUrl": "https://yoursite.com/success"
+}
+```
+
+**Possible status values:** `pending` | `verifying` | `confirmed` | `failed` | `expired`
+
+---
+
+### Node.js Integration Example
+
+Here is a complete example of initializing a checkout and polling for confirmation in a Node.js backend:
+
+```typescript
+const COAL_API = 'https://api.usecoal.xyz/api';
+
+// Step 1: Initialize a checkout session
+async function initCheckout(amount: number) {
+  const res = await fetch(`${COAL_API}/checkouts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.COAL_API_KEY!,
+    },
+    body: JSON.stringify({
+      amount,
+      productName: 'Premium Membership',
+      redirectUrl: 'https://yoursite.com/success',
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(`Checkout init failed: ${JSON.stringify(err)}`);
+  }
+
+  const { data } = await res.json();
+  return data; // { id, url, status, amount, currency, expiresAt }
+}
+
+// Step 2: Submit tx hash after on-chain transfer
+async function confirmPayment(sessionId: string, txHash: string) {
+  const res = await fetch(`${COAL_API}/pay/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, txHash }),
+  });
+
+  const { data } = await res.json();
+  return data; // { status: "verifying", sessionId }
+}
+
+// Step 3: Poll for final status
+async function waitForConfirmation(sessionId: string, timeoutMs = 120_000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const res = await fetch(`${COAL_API}/pay/status/${sessionId}`);
+    const { status, txHash, redirectUrl } = await res.json();
+
+    if (status === 'confirmed') return { status, txHash, redirectUrl };
+    if (status === 'failed' || status === 'expired') {
+      throw new Error(`Payment ${status}`);
+    }
+
+    // Not yet confirmed — wait 5 seconds and retry
+    await new Promise(r => setTimeout(r, 5_000));
+  }
+
+  throw new Error('Confirmation timed out');
+}
+
+// Example usage
+const session = await initCheckout('premium-membership');
+console.log(`Send ${session.amount} ${session.currency} to ${session.merchant.payoutAddress}`);
+
+// ... user sends the transfer and you receive the txHash from your frontend ...
+
+await confirmPayment(session.sessionId, '0xabc123...');
+const result = await waitForConfirmation(session.sessionId);
+console.log('Payment confirmed:', result.txHash);
+```
+
+---
 
 ## Next Steps
 
-*   [Create a Checkout Session via API](/docs/api/checkouts)
-*   [Configure Webhooks](/docs/api/webhooks)
+- [Authentication](/docs/authentication) — understand API keys and securing your requests
+- [Payment Flow](/docs/payment-flow) — deep dive into the full end-to-end flow
+- [Webhooks](/docs/api/webhooks) — receive server push notifications on payment confirmation
+- [Products API](/docs/api/products) — manage your product catalog programmatically

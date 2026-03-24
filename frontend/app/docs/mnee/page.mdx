@@ -1,21 +1,92 @@
+# Settlement Token Compatibility
 
-# MNEE Protocol
+This page documents settlement-token compatibility and the legacy `MNEE_*` aliases that Coal still accepts. Coal now describes settlement generically: USDC is the default fallback, and you can configure another Base token when needed.
 
-MNEE is a 1:1 USD-backed stablecoin regulated in Antigua.
+## Key Properties
 
-## Key Features
+| Property | Value |
+|---|---|
+| **Default asset** | USDC on Base |
+| **Custom asset support** | Any Base ERC-20 you explicitly configure |
+| **Decimals** | Defaults to 6, but configurable |
+| **Network** | Base |
+| **Selection model** | Global settlement token per environment |
+| **Compatibility** | Legacy `MNEE_*` env vars still supported |
 
-*   **BSV-20 / 1Sat**: Operates on the Bitcoin SV network via the 1Sat Ordinals protocol.
-*   **Fully Collateralized**: Backed by US Treasury bills and cash.
-*   **Regulatory Compliance**: Full AML/KYC compliance.
+## Default Behavior
 
-## How it works
+- If you do nothing, Coal uses USDC.
+- If you configure a custom settlement token address, Coal uses that token instead.
+- Most docs should describe the settlement asset generically unless the page is specifically about token compatibility.
 
-Unlike account-based stablecoins (like ERC-20), MNEE uses a **UTXO** model. Tokens are "satoshis" with special inscriptions.
+| | Custom token on Base | ETH | USDC |
+|---|---|---|---|
+| Settlement time | ~2 seconds | ~12 seconds | ~2 seconds |
+| Transfer fee | < $0.01 | Variable (gas) | < $0.01 |
+| Price volatility | None (stable) | High | None |
+| Configuration complexity | Higher | N/A | Lowest |
 
-When you send MNEE:
-1.  **Inputs**: You select UTXOs containing MNEE.
-2.  **Outputs**: You create new UTXOs for the recipient and change.
-3.  **Validation**: Indexers verify the provenance of the tokens.
+## How Coal Uses the Configured Settlement Token
 
-Coal handles this complexity for you, so you can just think in "Amounts" and "Recipients".
+When a customer pays via Coal:
+
+1. **Customer** sends the configured settlement token from their wallet to the merchant's payout address on Base
+2. **Coal** verifies the transfer on-chain (checks amount, recipient, Transfer event)
+3. **Merchant** receives funds in their payout wallet, no intermediary
+
+Coal is **non-custodial** — we never hold your funds.
+
+## Setting Your Payout Address
+
+Your payout address is the Base-compatible wallet address where you want to receive payments. Set it in Console → Settings.
+
+<Callout variant="warning" title="Double-check your address">
+  Payments are irreversible. Verify your payout address before going live — if you enter the wrong address, Coal cannot recover the funds.
+</Callout>
+
+Compatible wallets: MetaMask, Coinbase Wallet, Rainbow, any wallet supporting Base (EVM-compatible).
+
+## Token Contract
+
+The currently configured settlement token contract on Base:
+
+```
+0x...  (Base mainnet — see usecoal.xyz for current address)
+```
+
+You can verify any transaction on [Basescan](https://basescan.org) by searching the contract address.
+
+## Amount Formatting
+
+Settlement amounts in Coal's API are strings to avoid floating-point precision errors:
+
+```json
+{ "amount": "49.99" }   // ✓ String — precise
+{ "amount": 49.99 }     // ✓ Also accepted for input
+```
+
+Always store and compare amounts as strings or integers in the smallest unit. Coal's backend uses BigInt arithmetic internally.
+
+## Choosing a Settlement Token
+
+Use USDC if you want the cleanest default setup. Use a custom token only when you intentionally need a different settlement asset for product, treasury, or partner reasons.
+
+| | USDC | Custom token |
+|---|---|---|
+| Default | Yes | No |
+| Configuration | None | Requires token address, decimals, symbol, and name |
+| Network | Base | Base |
+| Checkout display | Automatic | Uses your configured symbol and name |
+| Legacy support | N/A | `MNEE_*` aliases still supported |
+
+**To use USDC (default):** leave `SETTLEMENT_TOKEN_ADDRESS` / `NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS` unset.
+
+**To use a custom token:** set `SETTLEMENT_TOKEN_ADDRESS`, `SETTLEMENT_TOKEN_DECIMALS`, `SETTLEMENT_TOKEN_SYMBOL`, and `SETTLEMENT_TOKEN_NAME` in the backend, plus the matching `NEXT_PUBLIC_...` values in the frontend.
+
+The switch is seamless — the checkout UI, verification flow, and webhook payloads all adapt to the configured settlement token.
+
+## Further Reading
+
+- [Transaction Lifecycle](/docs/mnee/transactions) — how Coal verifies payments on-chain
+- [Multi-Token Payments](/docs/multi-token) — accept any token, settle in the configured asset
+- [Environments](/docs/environments) — full environment variable reference

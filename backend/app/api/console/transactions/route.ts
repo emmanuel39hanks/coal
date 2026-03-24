@@ -1,24 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { getAuthUser } from '@/lib/privy';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
-
-        if (!session) {
+        const user = await getAuthUser(request);
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const transactions = await prisma.transaction.findMany({
             where: {
-                checkout: { merchantId: session.user.id }
+                checkout: { merchantId: user.id }
             },
             orderBy: { createdAt: 'desc' },
-            take: 50, // Limit for MVP
+            take: 50,
             include: {
                 checkout: {
                     select: {
@@ -32,9 +29,10 @@ export async function GET(request: Request) {
         return NextResponse.json({
             transactions: transactions.map(tx => ({
                 id: tx.id,
-                txHash: tx.txHash, // Keep txHash separate for Etherscan linking
-                type: 'Payment', // Future: Payout
+                txHash: tx.txHash,
+                type: 'Payment',
                 amount: tx.amount.toString(),
+                currency: tx.token,
                 status: tx.status === 'confirmed' ? 'Confirmed' : 'Failed',
                 date: tx.createdAt,
                 description: tx.checkout?.product?.name || tx.checkout?.description || "Payment"
@@ -42,7 +40,7 @@ export async function GET(request: Request) {
         });
 
     } catch (error) {
-        console.error("Transactions Error:", error);
+        logger.error({ err: error }, 'Transactions error');
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

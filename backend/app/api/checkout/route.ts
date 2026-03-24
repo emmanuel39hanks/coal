@@ -1,52 +1,75 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { validateApiKey } from '@/lib/api-auth';
+import { logger } from '@/lib/logger';
+
+const LEGACY_ROUTE = '/api/checkout';
+const CANONICAL_ROUTE = '/api/checkouts';
+
+function legacyHeaders() {
+    const headers = new Headers();
+    headers.set('Deprecation', 'true');
+    headers.set('Link', `<${CANONICAL_ROUTE}>; rel="canonical"`);
+    return headers;
+}
 
 export async function POST(request: Request) {
     try {
-        // 1. Auth
-        const auth = await validateApiKey(request);
-        if (!auth) {
-            return NextResponse.json({ error: 'Unauthorized: Invalid API Key' }, { status: 401 });
+        const body = await request.json().catch(() => ({}));
+
+        if (body && typeof body === 'object' && 'splits' in body && body.splits) {
+            return NextResponse.json(
+                {
+                    error: {
+                        code: 'LEGACY_FIELD_UNSUPPORTED',
+                        message: `Legacy ${LEGACY_ROUTE} no longer accepts inline splits. Use ${CANONICAL_ROUTE} with splitConfigId instead.`,
+                    },
+                },
+                { status: 410, headers: legacyHeaders() },
+            );
         }
 
-        // 2. Validate Body
-        const body = await request.json();
-        const { amount, description, splits, redirectUrl, productId } = body;
+        const payload = {
+            amount: body.amount,
+            currency: body.currency,
+            productId: body.productId,
+            productName: body.productName,
+            productDescription: body.productDescription,
+            productImage: body.productImage,
+            description: body.description,
+            redirectUrl: body.redirectUrl,
+            callbackUrl: body.callbackUrl,
+            splitConfigId: body.splitConfigId,
+        };
 
-        if (!amount || isNaN(parseFloat(amount))) {
-            return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
-        }
+        const forwardedHeaders = new Headers(request.headers);
+        forwardedHeaders.delete('content-length');
+        forwardedHeaders.delete('host');
+        forwardedHeaders.delete('connection');
+        forwardedHeaders.delete('accept-encoding');
 
-        // 3. Create Session
-        const session = await prisma.checkoutSession.create({
-            data: {
-                merchantId: auth.merchantId,
-                amount: parseFloat(amount),
-                description: description || "Coal Checkout",
-                currency: "MNEE",
-                splits: splits ? splits : undefined, // JSON
-                status: 'pending',
-                redirectUrl: redirectUrl,
-                productId: productId,
-                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
-            }
+        const upstream = await fetch(new URL(CANONICAL_ROUTE, request.url), {
+            method: 'POST',
+            headers: forwardedHeaders,
+            body: JSON.stringify(payload),
         });
 
-        // 4. Return URL
-        // In prod, usecoal.xyz/pay/[id]
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        const checkoutUrl = `${baseUrl}/pay/${session.id}`;
+        const responseHeaders = new Headers(upstream.headers);
+        responseHeaders.set('Deprecation', 'true');
+        responseHeaders.set('Link', `<${CANONICAL_ROUTE}>; rel="canonical"`);
 
-        return NextResponse.json({
-            id: session.id,
-            url: checkoutUrl,
-            status: session.status,
-            expiresAt: session.expiresAt
+        return new NextResponse(await upstream.text(), {
+            status: upstream.status,
+            headers: responseHeaders,
         });
-
     } catch (error) {
-        console.error("Checkout Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        logger.error({ err: error }, 'Legacy checkout compatibility error');
+        return NextResponse.json(
+            {
+                error: {
+                    code: 'LEGACY_COMPATIBILITY_ERROR',
+                    message: `Legacy ${LEGACY_ROUTE} failed. Please use ${CANONICAL_ROUTE}.`,
+                },
+            },
+            { status: 500, headers: legacyHeaders() },
+        );
     }
 }

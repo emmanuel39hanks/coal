@@ -1,49 +1,70 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { getAuthUser } from '@/lib/privy';
+import { updateProductSchema, validateBody } from '@/lib/schemas';
+import { errors, apiSuccess } from '@/lib/errors';
+import { syncMerchantArtifacts } from '@/lib/0g/merchant';
 
 export async function PUT(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
-
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
 
         const { id } = await params;
-        const body = await request.json();
-        const { name, description, price, image } = body;
+        const body = await request.json().catch(() => ({}));
+        const validated = validateBody(updateProductSchema, body);
+        if (!validated.success) return validated.error;
 
-        // Verify ownership
-        const existingProduct = await prisma.product.findUnique({
-            where: { id }
-        });
-
-        if (!existingProduct || existingProduct.merchantId !== session.user.id) {
-            return NextResponse.json({ error: 'Product not found or unauthorized' }, { status: 404 });
+        const existing = await prisma.product.findUnique({ where: { id } });
+        if (!existing || existing.merchantId !== user.id) {
+            return errors.notFound('Product');
         }
 
-        const updatedProduct = await prisma.product.update({
+        const {
+            name,
+            description,
+            price,
+            image,
+            billingType,
+            billingInterval,
+            billingIntervalCount,
+        } = validated.data;
+        const updated = await prisma.product.update({
             where: { id },
             data: {
-                name,
-                description,
-                price: parseFloat(price),
-                image
+                ...(name        !== undefined && { name }),
+                ...(description !== undefined && { description }),
+                ...(price       !== undefined && { price }),
+                ...(image       !== undefined && { image: image || null }),
+                ...(billingType !== undefined && {
+                    billingType,
+                    billingInterval: billingType === 'subscription'
+                        ? (billingInterval === undefined || billingInterval === '' ? existing.billingInterval : billingInterval)
+                        : null,
+                    billingIntervalCount: billingType === 'subscription'
+                        ? (billingIntervalCount ?? existing.billingIntervalCount)
+                        : 1,
+                }),
+                ...(billingType === undefined && billingInterval !== undefined && {
+                    billingInterval: billingInterval === '' ? null : billingInterval,
+                }),
+                ...(billingType === undefined && billingIntervalCount !== undefined && {
+                    billingIntervalCount,
+                }),
             }
         });
 
-        return NextResponse.json(updatedProduct);
+        const zeroG = await syncMerchantArtifacts(user.id).catch(() => null);
 
-    } catch (error) {
-        console.error("Update Product Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return apiSuccess({
+            ...updated,
+            zeroG,
+        });
+    } catch {
+        return errors.internal();
     }
 }
 
@@ -52,35 +73,23 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
-
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
 
         const { id } = await params;
-
-        // Verify ownership
-        const existingProduct = await prisma.product.findUnique({
-            where: { id }
-        });
-
-        if (!existingProduct || existingProduct.merchantId !== session.user.id) {
-            return NextResponse.json({ error: 'Product not found or unauthorized' }, { status: 404 });
+        const existing = await prisma.product.findUnique({ where: { id } });
+        if (!existing || existing.merchantId !== user.id) {
+            return errors.notFound('Product');
         }
 
-        // Soft delete
-        const deletedProduct = await prisma.product.update({
-            where: { id },
-            data: { active: false }
+        const deleted = await prisma.product.update({ where: { id }, data: { active: false } });
+        const zeroG = await syncMerchantArtifacts(user.id).catch(() => null);
+
+        return apiSuccess({
+            ...deleted,
+            zeroG,
         });
-
-        return NextResponse.json(deletedProduct);
-
-    } catch (error) {
-        console.error("Delete Product Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    } catch {
+        return errors.internal();
     }
 }

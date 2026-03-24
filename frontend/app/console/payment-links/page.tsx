@@ -7,9 +7,16 @@ import useSWR, { mutate } from 'swr';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { useSearchParams } from 'next/navigation';
-import { fetcher, apiRequest } from '@/lib/api';
+import { useApi } from '@/lib/api';
+import { Skeleton } from '@/components/Skeleton';
+import { useToast } from '@/components/Toast';
+import { getErrorMessage } from '@/lib/api-errors';
+import { PAYER_INFO_FIELD_META, PAYER_INFO_FIELDS, type PayerInfoField } from '@/lib/payer-info';
+import { getSettlementToken } from '@/lib/chain';
 
 export default function PaymentLinksPage() {
+    const { fetcher, request: apiRequest } = useApi();
+    const toast = useToast();
     const { data, error, isLoading } = useSWR('/api/console/links', fetcher);
     const { data: productsData } = useSWR('/api/console/products', fetcher);
 
@@ -25,12 +32,15 @@ export default function PaymentLinksPage() {
     // New Fields for Flexible Links
     const [customTitle, setCustomTitle] = useState('');
     const [customDesc, setCustomDesc] = useState('');
+    const [requirePayerInfo, setRequirePayerInfo] = useState(false);
+    const [payerInfoFields, setPayerInfoFields] = useState<PayerInfoField[]>([]);
 
     // Copy State
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
     // Search State
     const [searchTerm, setSearchTerm] = useState('');
+    const settlementSymbol = getSettlementToken().symbol;
 
     const handleCreate = async () => {
         setCreateLoading(true);
@@ -42,6 +52,12 @@ export default function PaymentLinksPage() {
                 body.title = customTitle;
                 body.description = customDesc;
             }
+            if (payerInfoFields.length > 0) {
+                body.payerInfo = {
+                    required: requirePayerInfo,
+                    fields: payerInfoFields,
+                };
+            }
 
             await apiRequest('/api/console/links', {
                 method: 'POST',
@@ -49,15 +65,18 @@ export default function PaymentLinksPage() {
             });
 
             mutate('/api/console/links');
+            toast('success', 'Payment link created');
             setIsCreateOpen(false);
             setSelectedProduct('');
             setCustomSlug('');
             setCustomTitle('');
             setCustomDesc('');
             setLinkType('product');
+            setRequirePayerInfo(false);
+            setPayerInfoFields([]);
         } catch (e: any) {
             console.error(e);
-            alert('Failed to create link. ' + (e.message || 'Slug might be taken.'));
+            toast('error', getErrorMessage(e, 'Failed to create link. Slug might be taken.'));
         } finally {
             setCreateLoading(false);
         }
@@ -70,9 +89,10 @@ export default function PaymentLinksPage() {
                 method: 'DELETE'
             });
             mutate('/api/console/links');
+            toast('success', 'Payment link deleted');
         } catch (e) {
             console.error(e);
-            alert('Failed to delete link.');
+            toast('error', getErrorMessage(e, 'Failed to delete link.'));
         }
     };
 
@@ -80,6 +100,14 @@ export default function PaymentLinksPage() {
         navigator.clipboard.writeText(text);
         setCopiedId(id);
         setTimeout(() => setCopiedId(null), 2000);
+    };
+
+    const togglePayerField = (field: PayerInfoField) => {
+        setPayerInfoFields((current) =>
+            current.includes(field)
+                ? current.filter((item) => item !== field)
+                : [...current, field]
+        );
     };
 
     const links = data?.links || [];
@@ -137,18 +165,39 @@ export default function PaymentLinksPage() {
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Price</th>
+                                <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Payer Info</th>
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="text-right py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {isLoading ? (
-                                <tr>
-                                    <td colSpan={5} className="py-20 text-center text-gray-400">Loading links...</td>
-                                </tr>
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i} className="border-b border-gray-100">
+                                        <td className="py-4 px-6">
+                                            <div className="flex items-center gap-3">
+                                                <Skeleton className="w-10 h-10 rounded-xl" />
+                                                <div className="space-y-1.5">
+                                                    <Skeleton className="h-3.5 w-32 rounded-full" />
+                                                    <Skeleton className="h-3 w-20 rounded-full" />
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="py-4 px-6"><Skeleton className="h-6 w-20 rounded-full" /></td>
+                                    <td className="py-4 px-6"><Skeleton className="h-3.5 w-16 rounded-full" /></td>
+                                    <td className="py-4 px-6"><Skeleton className="h-6 w-28 rounded-full" /></td>
+                                    <td className="py-4 px-6"><Skeleton className="h-6 w-16 rounded-full" /></td>
+                                    <td className="py-4 px-6 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Skeleton className="h-8 w-8 rounded-full" />
+                                                <Skeleton className="h-8 w-8 rounded-full" />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
                             ) : filteredLinks.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="py-20 text-center text-gray-400">No links found.</td>
+                                    <td colSpan={6} className="py-20 text-center text-gray-400">No links found.</td>
                                 </tr>
                             ) : filteredLinks.map((link: any) => (
                                 <tr key={link.id} className="group hover:bg-gray-50/50 transition-colors">
@@ -181,7 +230,25 @@ export default function PaymentLinksPage() {
                                         )}
                                     </td>
                                     <td className="py-4 px-6 font-medium text-[var(--color-brand-navy)]">
-                                        {link.price === 'Flexible' ? 'Any Amount' : `${link.price} MNEE`}
+                                        {link.price === 'Flexible' ? 'Any Amount' : `${link.price} ${settlementSymbol}`}
+                                    </td>
+                                    <td className="py-4 px-6">
+                                        {link.payerInfoConfig?.fields?.length ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold ${
+                                                    link.payerInfoConfig.required
+                                                        ? 'bg-amber-100 text-amber-700'
+                                                        : 'bg-slate-100 text-slate-700'
+                                                }`}>
+                                                    {link.payerInfoConfig.required ? 'Required' : 'Optional'}
+                                                </span>
+                                                <span className="text-xs font-medium text-gray-500">
+                                                    {link.payerInfoConfig.fields.length} field{link.payerInfoConfig.fields.length > 1 ? 's' : ''}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs font-medium text-gray-400">None</span>
+                                        )}
                                     </td>
                                     <td className="py-4 px-6">
                                         <span className={`inline-flex w-2 h-2 rounded-full ${link.active ? 'bg-green-500' : 'bg-gray-300'}`} />
@@ -267,7 +334,7 @@ export default function PaymentLinksPage() {
                             >
                                 <option value="">Select a product...</option>
                                 {products.map((p: any) => (
-                                    <option key={p.id} value={p.id}>{p.name} ({p.price} MNEE)</option>
+                                    <option key={p.id} value={p.id}>{p.name} ({p.price} {settlementSymbol})</option>
                                 ))}
                             </select>
                         </div>
@@ -316,6 +383,45 @@ export default function PaymentLinksPage() {
                                 className="w-full h-12 pl-14 pr-4 rounded-xl bg-gray-50 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
                                 placeholder="my-cool-link"
                             />
+                        </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-black/5 bg-[var(--color-bg-base)]/70 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h3 className="text-sm font-black text-[var(--color-brand-navy)]">Payer Info</h3>
+                                <p className="mt-1 text-sm font-medium text-[var(--color-text-secondary)]">
+                                    Ask for buyer details before checkout and save them on the payment record.
+                                </p>
+                            </div>
+                            <label className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-[var(--color-brand-navy)] shadow-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={requirePayerInfo}
+                                    onChange={(e) => setRequirePayerInfo(e.target.checked)}
+                                    disabled={payerInfoFields.length === 0}
+                                    className="h-4 w-4 rounded border-black/20 text-[var(--color-brand-orange)] focus:ring-[var(--color-brand-orange)]"
+                                />
+                                Required
+                            </label>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {PAYER_INFO_FIELDS.map((field) => (
+                                <button
+                                    key={field}
+                                    type="button"
+                                    onClick={() => togglePayerField(field)}
+                                    className={`rounded-2xl border px-4 py-3 text-left transition ${
+                                        payerInfoFields.includes(field)
+                                            ? 'border-[var(--color-brand-orange)] bg-white shadow-sm'
+                                            : 'border-black/5 bg-white/60 hover:border-black/10'
+                                    }`}
+                                >
+                                    <div className="text-sm font-bold text-[var(--color-brand-navy)]">{PAYER_INFO_FIELD_META[field].label}</div>
+                                    <div className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">{PAYER_INFO_FIELD_META[field].placeholder}</div>
+                                </button>
+                            ))}
                         </div>
                     </div>
 

@@ -1,18 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { getAuthUser } from '@/lib/privy';
+import { logger } from '@/lib/logger';
 
 export async function DELETE(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
-
-        if (!session) {
+        const user = await getAuthUser(request);
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -23,11 +20,11 @@ export async function DELETE(
             where: { id }
         });
 
-        if (!existingLink || existingLink.merchantId !== session.user.id) {
+        if (!existingLink || existingLink.merchantId !== user.id) {
             return NextResponse.json({ error: 'Link not found or unauthorized' }, { status: 404 });
         }
 
-        // Soft delete (or hard delete? user asked for delete. Let's do soft delete for safety like products)
+        // Soft delete
         const deletedLink = await prisma.paymentLink.update({
             where: { id },
             data: { active: false }
@@ -36,7 +33,7 @@ export async function DELETE(
         return NextResponse.json(deletedLink);
 
     } catch (error) {
-        console.error("Delete Link Error:", error);
+        logger.error({ err: error }, 'Delete link error');
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

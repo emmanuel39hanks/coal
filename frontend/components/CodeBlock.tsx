@@ -78,20 +78,20 @@ export default function CodeBlock({ children, className }: any) {
     };
 
     return (
-        <div className="relative group my-8 rounded-[20px] overflow-hidden border border-black/5 shadow-xl bg-[#1e1e1e]">
+        <div className="not-prose my-8 overflow-hidden rounded-[24px] border border-black/8 bg-[#1f1f1f] shadow-[0_16px_36px_rgba(15,23,42,0.12)]">
             {/* Header */}
-            <div className="absolute top-0 left-0 right-0 h-11 bg-[#2d2d2d] flex items-center justify-between px-4 select-none z-10 border-b border-white/5">
+            <div className="flex h-12 items-center justify-between border-b border-white/6 bg-[#2b2b2b] px-4 select-none">
                 <div className="flex items-center gap-2">
                     <div className="flex gap-1.5">
                         <div className="w-3 h-3 rounded-full bg-[#FF5F56] border border-black/10"></div>
                         <div className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-black/10"></div>
                         <div className="w-3 h-3 rounded-full bg-[#27C93F] border border-black/10"></div>
                     </div>
-                    <span className="text-[11px] font-bold text-gray-500 ml-3 uppercase tracking-wider">{language}</span>
+                    <span className="ml-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{language}</span>
                 </div>
                 <button
                     onClick={handleCopy}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                    className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold text-slate-400 transition-colors hover:bg-white/8 hover:text-white"
                 >
                     {copied ? (
                         <>
@@ -115,8 +115,8 @@ export default function CodeBlock({ children, className }: any) {
             >
                 {({ className, style, tokens, getLineProps, getTokenProps }) => (
                     <pre
-                        className="pt-16 pb-6 px-6 overflow-x-auto text-[13px] leading-relaxed font-mono"
-                        style={{ ...style, backgroundColor: 'transparent' }} // Force transparent to use parent bg
+                        className="m-0 overflow-x-auto bg-transparent px-6 py-5 text-[13px] leading-7 font-mono shadow-none"
+                        style={{ ...style, backgroundColor: 'transparent' }}
                     >
                         {tokens.map((line, i) => (
                             <div key={i} {...getLineProps({ line })}>

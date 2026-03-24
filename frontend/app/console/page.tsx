@@ -6,18 +6,46 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { useState } from 'react';
 import Modal from '@/components/Modal';
-import { fetcher } from '@/lib/api';
+import { useApi } from '@/lib/api';
+import { Skeleton, StatCardSkeleton, ChartSkeleton } from '@/components/Skeleton';
+import { useAuth } from '@/lib/auth';
+import OnboardingChecklist from '@/components/OnboardingChecklist';
+import {
+    ResponsiveContainer,
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    Tooltip,
+    CartesianGrid,
+} from 'recharts';
+import { formatAmount, parseAmountInput } from '@/lib/utils';
+import { getSettlementToken } from '@/lib/chain';
+
+type ChartEntry = { date: string; revenue: string; count: number };
 
 export default function ConsoleOverview() {
+    const { fetcher } = useApi();
+    const { user } = useAuth();
     const { data: stats, error, isLoading } = useSWR('/api/console/stats', fetcher);
+    const { data: settingsData } = useSWR('/api/console/settings', fetcher);
     const [isSelectionOpen, setIsSelectionOpen] = useState(false);
+    const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+    const { data: analytics, isLoading: analyticsLoading } = useSWR(
+        `/api/console/analytics?period=${period}`,
+        fetcher
+    );
 
     if (error) return <div>Failed to load</div>;
 
-    const revenue = stats?.revenue ? parseFloat(stats.revenue) : 0;
+    const merchantId = user?.id ?? 'unknown';
+    const hasPayoutAddress = !!(settingsData?.payoutAddress);
+
+    const revenue = parseAmountInput(stats?.revenue) ?? 0;
     const txCount = stats?.totalTransactions || 0;
     const items = stats?.activeItems || 0;
     const recentTx = stats?.recentActivity || [];
+    const settlementSymbol = getSettlementToken().symbol;
 
     return (
         <div className="space-y-8">
@@ -38,6 +66,14 @@ export default function ConsoleOverview() {
                     New Item
                 </button>
             </motion.div>
+
+            {/* Onboarding Checklist */}
+            {merchantId !== 'unknown' && (
+                <OnboardingChecklist
+                    merchantId={merchantId}
+                    hasPayoutAddress={hasPayoutAddress}
+                />
+            )}
 
             {/* Selection Modal */}
             <Modal
@@ -78,7 +114,7 @@ export default function ConsoleOverview() {
                     </div>
                     <div>
                         <div className="text-[var(--color-text-secondary)] font-bold text-sm mb-1">Total Revenue</div>
-                        <div className="text-3xl font-black text-[var(--color-brand-navy)]">{isLoading ? '...' : `${revenue} MNEE`}</div>
+                        <div className="text-3xl font-black text-[var(--color-brand-navy)]">{isLoading ? <Skeleton className="h-8 w-36 rounded-lg" /> : `${formatAmount(revenue, { maximumFractionDigits: 2 })} ${settlementSymbol}`}</div>
                     </div>
                 </div>
 
@@ -90,7 +126,7 @@ export default function ConsoleOverview() {
                     </div>
                     <div>
                         <div className="text-[var(--color-text-secondary)] font-bold text-sm mb-1">Transactions</div>
-                        <div className="text-3xl font-black text-[var(--color-brand-navy)]">{isLoading ? '...' : txCount}</div>
+                        <div className="text-3xl font-black text-[var(--color-brand-navy)]">{isLoading ? <Skeleton className="h-8 w-20 rounded-lg" /> : txCount}</div>
                     </div>
                 </div>
 
@@ -102,10 +138,77 @@ export default function ConsoleOverview() {
                     </div>
                     <div>
                         <div className="text-[var(--color-text-secondary)] font-bold text-sm mb-1">Active Items</div>
-                        <div className="text-3xl font-black text-[var(--color-brand-navy)]">{isLoading ? '...' : items}</div>
+                        <div className="text-3xl font-black text-[var(--color-brand-navy)]">{isLoading ? <Skeleton className="h-8 w-20 rounded-lg" /> : items}</div>
                     </div>
                 </div>
             </div>
+
+            {/* Revenue Chart */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                className="bg-white rounded-[40px] border-2 border-black/5 p-8"
+            >
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-[var(--color-brand-navy)]">Revenue</h3>
+                    <div className="flex items-center gap-2">
+                        {(['7d', '30d', '90d'] as const).map((p) => (
+                            <button
+                                key={p}
+                                onClick={() => setPeriod(p)}
+                                className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                                    period === p
+                                        ? 'bg-black text-white shadow-[2px_2px_0px_0px_#FF5C16]'
+                                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-base)] hover:text-[var(--color-brand-navy)]'
+                                }`}
+                            >
+                                {p}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {analyticsLoading ? (
+                    <ChartSkeleton height={200} />
+                ) : (
+                    <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={(analytics?.chart ?? []).map((d: ChartEntry) => ({ ...d, revenue: parseAmountInput(d.revenue) ?? 0 }))}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis
+                                dataKey="date"
+                                tick={{ fontSize: 11, fontWeight: 600, fill: '#9ca3af' }}
+                                tickFormatter={(val: string) => val.slice(5)}
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <YAxis
+                                tick={{ fontSize: 11, fontWeight: 600, fill: '#9ca3af' }}
+                                axisLine={false}
+                                tickLine={false}
+                                width={40}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    borderRadius: '12px',
+                                    border: '2px solid rgba(0,0,0,0.05)',
+                                    fontWeight: 600,
+                                    fontSize: 13,
+                                }}
+                                formatter={(value: number) => [`${value} ${settlementSymbol}`, 'Revenue']}
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="revenue"
+                                stroke="#FF5C16"
+                                strokeWidth={2.5}
+                                dot={false}
+                                activeDot={{ r: 5, fill: '#FF5C16' }}
+                            />
+                        </LineChart>
+                    </ResponsiveContainer>
+                )}
+            </motion.div>
 
             {/* Recent Activity */}
             <motion.div
@@ -123,7 +226,22 @@ export default function ConsoleOverview() {
                     <table className="w-full">
                         <tbody className="text-sm font-medium text-[var(--color-brand-navy)]">
                             {isLoading ? (
-                                <tr><td colSpan={4} className="text-center py-4">Loading...</td></tr>
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i}>
+                                        <td className="py-3 pl-4">
+                                            <div className="flex items-center gap-3">
+                                                <Skeleton className="w-10 h-10 rounded-full" />
+                                                <div className="space-y-1.5">
+                                                    <Skeleton className="h-3.5 w-28 rounded-full" />
+                                                    <Skeleton className="h-3 w-20 rounded-full" />
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="py-3"><Skeleton className="h-3.5 w-20 rounded-full" /></td>
+                                        <td className="py-3"><Skeleton className="h-3.5 w-16 rounded-full" /></td>
+                                        <td className="py-3 pr-4 text-right"><Skeleton className="h-6 w-20 rounded-lg ml-auto" /></td>
+                                    </tr>
+                                ))
                             ) : recentTx.length === 0 ? (
                                 <tr><td colSpan={4} className="text-center py-4 text-gray-400">No transactions yet</td></tr>
                             ) : (
@@ -140,7 +258,7 @@ export default function ConsoleOverview() {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="py-4">{parseFloat(tx.amount)} MNEE</td>
+                                        <td className="py-4">{formatAmount(tx.amount, { maximumFractionDigits: 6 })} {settlementSymbol}</td>
                                         <td className="py-4 text-[var(--color-text-secondary)]">
                                             {new Date(tx.date).toLocaleDateString()}
                                         </td>

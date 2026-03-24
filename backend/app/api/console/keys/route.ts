@@ -1,82 +1,69 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { getAuthUser } from '@/lib/privy';
 import crypto from 'crypto';
+import { createKeySchema, validateBody } from '@/lib/schemas';
+import { errors, apiSuccess } from '@/lib/errors';
+import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: Request) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
-
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
 
         const keys = await prisma.apiKey.findMany({
-            where: {
-                merchantId: session.user.id,
-                revokedAt: null
-            },
+            where: { merchantId: user.id, revokedAt: null },
             orderBy: { createdAt: 'desc' }
         });
 
-        return NextResponse.json({
+        return apiSuccess({
             keys: keys.map(k => ({
-                id: k.id,
-                name: k.name,
-                prefix: k.keyPrefix,
-                lastUsed: k.lastUsed,
-                createdAt: k.createdAt
+                id:        k.id,
+                name:      k.name,
+                prefix:    k.keyPrefix,
+                lastUsed:  k.lastUsed,
+                createdAt: k.createdAt,
             }))
         });
-
-    } catch (error) {
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    } catch {
+        return errors.internal();
     }
 }
 
 export async function POST(request: Request) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
 
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const { limited } = await checkRateLimit(rateLimiters.console, user.id);
+        if (limited) return errors.rateLimited();
 
-        const body = await request.json();
-        const { name } = body;
+        const body = await request.json().catch(() => ({}));
+        const validated = validateBody(createKeySchema, body);
+        if (!validated.success) return validated.error;
 
-        // Generate Key: coal_live_[32_random_bytes_hex]
-        const randomBytes = crypto.randomBytes(24).toString('hex');
-        const secretKey = `coal_live_${randomBytes}`;
-
-        // Hash for storage
+        const { name } = validated.data;
+        const secretKey = `coal_live_${crypto.randomBytes(24).toString('hex')}`;
         const hashed = crypto.createHash('sha256').update(secretKey).digest('hex');
 
         const key = await prisma.apiKey.create({
             data: {
-                merchantId: session.user.id,
-                name: name || 'Secret Key',
-                keyPrefix: 'coal_live_',
-                secretHash: hashed
+                merchantId:  user.id,
+                name:        name || 'Secret Key',
+                keyPrefix:   'coal_live_',
+                secretHash:  hashed,
             }
         });
 
-        return NextResponse.json({
+        return apiSuccess({
             key: {
-                id: key.id,
-                name: key.name,
-                secret: secretKey, // Return ONLY once
-                createdAt: key.createdAt
+                id:        key.id,
+                name:      key.name,
+                secret:    secretKey,
+                createdAt: key.createdAt,
             }
-        });
-
-    } catch (error) {
-        console.error("Create Key Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        }, 201);
+    } catch {
+        return errors.internal();
     }
 }

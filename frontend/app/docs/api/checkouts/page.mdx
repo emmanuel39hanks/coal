@@ -1,119 +1,262 @@
+# Checkouts API
 
-# Create a Checkout Session
+Checkout sessions are the core of the Coal payment flow. Create a session to generate a unique payment URL, then redirect your customer to complete payment. Coal verifies the on-chain transfer and notifies your server via webhook.
 
-Create a new checkout session for a one-time payment. This is the core of the Coal payment flow.
+## The Checkout Session Object
 
-**POST** `/api/checkouts`
+```json
+{
+  "id": "clxxx789",
+  "merchantId": "clmerchant456",
+  "slug": "my-product",
+  "amount": "49.99",
+  "currency": "USDC",
+  "status": "pending",
+  "payoutAddress": "0xabc123...",
+  "txHash": null,
+  "redirectUrl": "https://yoursite.com/success",
+  "productId": "clxxx123",
+  "expiresAt": "2026-03-22T12:15:00.000Z",
+  "confirmedAt": null,
+  "createdAt": "2026-03-22T12:00:00.000Z"
+}
+```
 
-## Headers
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique session ID (CUID) |
+| `merchantId` | string | ID of the owning merchant |
+| `slug` | string | Payment link slug this session was created from |
+| `amount` | string | Amount for this session (decimal string) |
+| `currency` | string | Session settlement currency |
+| `status` | string | `pending` → `verifying` → `confirmed`, or `failed` / `expired` |
+| `payoutAddress` | string | Merchant's Base wallet address |
+| `txHash` | string \| null | On-chain transaction hash once confirmed |
+| `redirectUrl` | string \| null | Where to redirect after payment |
+| `payerInfoConfig` | object \| null | Buyer info fields Coal should collect before payment |
+| `payerInfo` | object \| null | Collected payer details once the buyer fills them in |
+| `expiresAt` | ISO 8601 | Session expiry (24 hours from creation) |
+| `confirmedAt` | ISO 8601 \| null | When on-chain confirmation was verified |
 
-| Name        | Type     | Required | Description                                      |
-|:------------|:---------|:---------|:-------------------------------------------------|
-| `x-api-key` | `string` | **Yes**  | Your Coal API key (starts with `coal_live_...`)  |
+---
 
-## Body Parameters
+## Create a Checkout Session
 
-| Name          | Type     | Required | Description                                      |
-|:--------------|:---------|:---------|:-------------------------------------------------|
-| `amount`      | `number` | **Yes**  | The amount to charge in MNEE.                    |
-| `productName` | `string` | No       | Display name for the product.                    |
-| `description` | `string` | No       | A description of the purchase.                   |
-| `currency`    | `string` | No       | Currency code (default: `MNEE`).                 |
-| `redirectUrl` | `string` | No       | Where to redirect the user after success.        |
-| `callbackUrl` | `string` | No       | Webhook URL for server-to-server notifications.  |
-| `productId`   | `string` | No       | The ID of the product being purchased.           |
+<EndpointBadge method="POST" path="/api/checkouts" />
 
-## Example Request
+Creates a new checkout session and returns the session ID and checkout URL. Use the URL to redirect your customer.
+
+**Authentication:** `x-api-key: coal_live_*`
+
+**Request body:**
+
+<ParamTable params={[
+  { name: "amount", type: "number", required: true, description: "Amount to charge for the session" },
+  { name: "currency", type: "string", required: false, description: "Settlement currency. Defaults to the merchant's configured currency." },
+  { name: "productId", type: "string", required: false, description: "Optional product ID to associate with the session" },
+  { name: "productName", type: "string", required: false, description: "Optional display name for the checkout" },
+  { name: "productDescription", type: "string", required: false, description: "Optional product description shown in checkout" },
+  { name: "productImage", type: "string", required: false, description: "Optional product image URL" },
+  { name: "redirectUrl", type: "string", required: false, description: "Where to send the buyer after payment" },
+  { name: "callbackUrl", type: "string", required: false, description: "Optional server-side callback endpoint for payment events" },
+  { name: "splitConfigId", type: "string", required: false, description: "Optional split configuration ID to apply at settlement" },
+  { name: "payerInfo", type: "{ required: boolean; fields: string[] }", required: false, description: "Collect payer details before checkout. Example fields: fullName, email, phone, company, country." },
+]} />
 
 ```bash
-curl -X POST http://localhost:3001/api/checkouts \
+curl -X POST https://api.usecoal.xyz/api/checkouts \
+  -H "x-api-key: coal_live_your_key_here" \
   -H "Content-Type: application/json" \
-  -H "x-api-key: coal_live_12345..." \
   -d '{
-    "amount": 25.00,
-    "productName": "Limited Edition Hoodie",
+    "amount": 49.99,
+    "productName": "Pro Plan",
     "redirectUrl": "https://yoursite.com/success",
-    "callbackUrl": "https://yoursite.com/api/webhook"
+    "payerInfo": {
+      "required": true,
+      "fields": ["fullName", "email"]
+    }
   }'
 ```
 
-## Example Response
-
 ```json
 {
-  "id": "clv9abc123...",
-  "url": "http://localhost:3000/pay/clv9abc123...",
-  "status": "pending",
-  "amount": 25.00,
-  "currency": "MNEE",
-  "expiresAt": "2026-01-07T01:30:00.000Z"
-}
-```
-
-## Node.js / Next.js Example
-
-```typescript
-// app/actions.ts
-'use server';
-import { redirect } from 'next/navigation';
-
-export async function createCheckout(formData: FormData) {
-    const COAL_API_URL = process.env.COAL_API_URL || 'http://localhost:3001/api/checkouts';
-    const API_KEY = process.env.COAL_API_KEY;
-
-    if (!API_KEY) {
-        throw new Error("Missing COAL_API_KEY");
-    }
-
-    const response = await fetch(COAL_API_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': API_KEY,
-        },
-        body: JSON.stringify({
-            amount: parseFloat(formData.get('amount') as string),
-            productName: formData.get('productName') as string,
-            currency: 'MNEE',
-            redirectUrl: 'https://yoursite.com/success',
-            callbackUrl: 'https://yoursite.com/api/webhook'
-        }),
-    });
-
-    if (!response.ok) {
-        throw new Error("Failed to create checkout");
-    }
-
-    const data = await response.json();
-    
-    // Redirect user to Coal payment page
-    redirect(data.url);
-}
-```
-
-## Handling the Redirect
-
-Once you receive the `url`, redirect your user to that page. Coal will:
-
-1. Display a branded payment form
-2. Connect the user's wallet (MetaMask, WalletConnect, etc.)
-3. Process the MNEE transfer
-4. Verify the transaction on-chain
-5. Redirect to your `redirectUrl` with `?session_id=clv9abc123...`
-
-## Webhook Notifications
-
-If you provide a `callbackUrl`, Coal will POST a webhook notification when the payment is confirmed:
-
-```json
-{
-  "event": "checkout.session.completed",
   "data": {
-    "id": "clv9abc123...",
-    "amount": 25.00,
-    "currency": "MNEE",
-    "status": "confirmed",
-    "txHash": "0xabc123..."
+    "id": "clxxx789",
+    "url": "https://usecoal.xyz/pay/checkout/clxxx789",
+    "status": "pending",
+    "amount": 49.99,
+    "currency": "USDC",
+    "expiresAt": "2026-03-22T12:15:00.000Z"
   }
 }
 ```
+
+<Callout variant="info" title="Session Expiry">
+  Sessions expire after **24 hours**. If the customer doesn't complete payment in that window, create a new session. The old session will transition to `expired` status.
+</Callout>
+
+<Callout variant="info" title="Collecting Payer Info">
+  Use `payerInfo` to ask for buyer details before payment. Coal stores the collected values on the checkout session and includes them in the `checkout.session.completed` webhook payload.
+</Callout>
+
+---
+
+## Get Session Status
+
+<EndpointBadge method="GET" path="/api/pay/status/:sessionId" />
+
+Poll this endpoint or use it in your redirect handler to check whether a payment has been confirmed.
+
+```bash
+curl https://api.usecoal.xyz/api/pay/status/clxxx789
+```
+
+```json
+{
+  "status": "confirmed",
+  "txHash": "0xdeadbeef...",
+  "redirectUrl": "https://yoursite.com/success"
+}
+```
+
+**Status values:**
+
+| Status | Description |
+|---|---|
+| `pending` | Session created, awaiting customer payment |
+| `verifying` | Transaction hash received and on-chain verification is running |
+| `confirmed` | Payment verified on-chain |
+| `failed` | Payment transaction failed or was invalid |
+| `expired` | Session timed out without payment |
+
+---
+
+## Confirm a Payment (Merchant-Initiated)
+
+<EndpointBadge method="POST" path="/api/pay/confirm" />
+
+Called by the checkout widget after the customer's wallet submits the transaction. You do **not** call this from your server — it's an internal step handled by Coal's frontend.
+
+<Callout variant="warning">
+  This endpoint is called by the Coal checkout widget, not by your integration. Your server should rely on webhooks or status polling to detect payment confirmation.
+</Callout>
+
+---
+
+## List Sessions (Console only)
+
+<EndpointBadge method="GET" path="/api/console/checkouts" />
+
+Returns all checkout sessions for the authenticated merchant, newest first. This is a dashboard route, not the primary public merchant API.
+
+**Authentication:** `Authorization: Bearer <Privy JWT>`
+
+**Query parameters:**
+
+| Param | Type | Description |
+|---|---|---|
+| `status` | string | Filter by status: `pending`, `confirmed`, `failed`, `expired` |
+| `limit` | number | Max results per page (default: 50, max: 100) |
+| `cursor` | string | Cursor for pagination (from previous response) |
+
+```bash
+curl "https://api.usecoal.xyz/api/console/checkouts?status=confirmed&limit=20" \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+```json
+{
+  "data": {
+    "sessions": [
+      {
+        "id": "clxxx789",
+        "amount": "49.99",
+        "currency": "USDC",
+        "status": "confirmed",
+        "txHash": "0xdeadbeef...",
+        "confirmedAt": "2026-03-22T12:03:41.000Z",
+        "createdAt": "2026-03-22T12:00:00.000Z"
+      }
+    ],
+    "nextCursor": null,
+    "total": 1
+  }
+}
+```
+
+---
+
+## Capture a Payment (Console only)
+
+<EndpointBadge method="POST" path="/api/console/checkouts/:id/capture" />
+
+This is a dashboard route for legacy or internal hold flows. See [Authorize & Capture](/docs/auth-capture) for the legacy walkthrough.
+
+**Authentication:** `Authorization: Bearer <Privy JWT>`
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/checkouts/clxxx789/capture \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{ "amount": 49.99 }'
+```
+
+```json
+{
+  "data": {
+    "id": "clxxx789",
+    "status": "confirmed",
+    "capturedAt": "2026-03-22T15:00:00.000Z",
+    "amount": "49.99"
+  }
+}
+```
+
+---
+
+## Void an Authorization (Console only)
+
+<EndpointBadge method="POST" path="/api/console/checkouts/:id/void" />
+
+Releases a reserved authorization without capturing funds.
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/checkouts/clxxx789/void \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+```json
+{
+  "data": {
+    "id": "clxxx789",
+    "status": "voided",
+    "voidedAt": "2026-03-22T15:00:00.000Z"
+  }
+}
+```
+
+---
+
+## Webhook Events
+
+| Event | Fired when |
+|---|---|
+| `checkout.confirmed` | Payment verified on-chain |
+| `checkout.failed` | Transaction failed or invalid |
+| `checkout.expired` | Session timed out |
+| `checkout.authorized` | Auth & Capture — funds reserved |
+| `checkout.voided` | Authorization released |
+
+See [Webhooks Overview](/docs/webhooks) and [Signature Verification](/docs/webhooks/signatures) for integration details.
+
+---
+
+## Error Codes
+
+| Code | HTTP | Description |
+|---|---|---|
+| `NOT_FOUND` | 404 | Session or slug does not exist |
+| `SESSION_EXPIRED` | 410 | Session has passed its 15-minute window |
+| `ALREADY_CONFIRMED` | 409 | Session has already been paid |
+| `UNAUTHORIZED` | 401 | Missing or invalid API key |
+| `INVALID_AMOUNT` | 400 | Capture amount exceeds authorized amount |

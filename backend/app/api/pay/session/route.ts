@@ -1,52 +1,93 @@
-
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { prisma } from '@/lib/prisma';
+import { createSessionSchema, validateBody } from '@/lib/schemas';
+import { errors, apiSuccess } from '@/lib/errors';
+import { rateLimiters, checkRateLimit, getIP } from '@/lib/rate-limit';
+import { validateAmount } from '@/lib/validation';
+import { logger } from '@/lib/logger';
+import { getSettlementToken } from '@/lib/chain';
+import { normalizePayerInfoConfig, validatePayerInfo } from '@/lib/payer-info';
+import { toPrismaNullableJson } from '@/lib/prisma-json';
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
-        const { linkId, amount } = body;
+        const { limited } = await checkRateLimit(rateLimiters.public, getIP(request));
+        if (limited) return errors.rateLimited();
 
-        if (!linkId) {
-            return NextResponse.json({ error: "Link ID required" }, { status: 400 });
-        }
+        const body = await request.json().catch(() => ({}));
+        const validated = validateBody(createSessionSchema, body);
+        if (!validated.success) return validated.error;
+
+        const { linkId, amount, customerEmail, subscriptionConsentAccepted, payerInfo } = validated.data;
+        const settlementToken = getSettlementToken();
 
         const link = await prisma.paymentLink.findUnique({
             where: { id: linkId },
             include: { product: true }
         });
+        if (!link || !link.active) return errors.notFound('Link');
+        const payerInfoConfig = normalizePayerInfoConfig(link.payerInfoConfig);
 
-        if (!link || !link.active) {
-            return NextResponse.json({ error: "Link not found or inactive" }, { status: 404 });
-        }
-
-        // Determine amount
-        let sessionAmount = 0;
+        let sessionAmount: number;
         if (link.product) {
-            sessionAmount = parseFloat(link.product.price);
-        } else {
-            if (!amount) {
-                return NextResponse.json({ error: "Amount required for flexible link" }, { status: 400 });
+            const parsed = validateAmount(link.product.price.toString());
+            if (parsed === null) return errors.internal('Product has an invalid price');
+            sessionAmount = parsed;
+            if (link.product.billingType === 'subscription' && subscriptionConsentAccepted !== true) {
+                return errors.validation({
+                    subscriptionConsentAccepted: ['Recurring products require billing consent'],
+                });
             }
-            sessionAmount = parseFloat(amount);
+        } else {
+            if (amount === undefined) {
+                return errors.validation({ amount: ['Amount required for flexible link'] });
+            }
+            sessionAmount = amount;
         }
 
-        // Create Checkout Session
+        const payerInfoValidation = validatePayerInfo(payerInfoConfig, payerInfo || null);
+        if (!payerInfoValidation.ok) {
+            return errors.validation(payerInfoValidation.errors);
+        }
+        const normalizedPayerInfo = payerInfoValidation.normalized;
+        const resolvedCustomerEmail = normalizedPayerInfo?.email || customerEmail || null;
+
         const session = await prisma.checkoutSession.create({
             data: {
-                merchantId: link.merchantId,
-                amount: sessionAmount,
-                currency: "MNEE",
-                description: link.product ? link.product.name : (link.title || "Payment"),
-                status: "pending",
-                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
+                merchantId:  link.merchantId,
+                productId:   link.product?.id ?? null,
+                amount:      sessionAmount,
+                currency:    settlementToken.symbol,
+                description: link.product ? link.product.name : (link.title || 'Payment'),
+                customerEmail: resolvedCustomerEmail,
+                payerInfoConfig: toPrismaNullableJson(payerInfoConfig),
+                payerInfo: toPrismaNullableJson(normalizedPayerInfo),
+                billingReason: link.product?.billingType === 'subscription' ? 'subscription_initial' : 'one_time',
+                metadata: link.product
+                    ? {
+                        productId: link.product.id,
+                        productName: link.product.name,
+                        productDescription: link.product.description,
+                        productImage: link.product.image,
+                        billingType: link.product.billingType,
+                        billingInterval: link.product.billingInterval,
+                        billingIntervalCount: link.product.billingIntervalCount,
+                        customerEmail: resolvedCustomerEmail,
+                        payerInfoValues: normalizedPayerInfo,
+                        subscriptionConsentAccepted: subscriptionConsentAccepted === true,
+                    }
+                    : {
+                        customerEmail: resolvedCustomerEmail,
+                        payerInfoValues: normalizedPayerInfo,
+                    },
+                status:      'pending',
+                expiresAt:   new Date(Date.now() + 24 * 60 * 60 * 1000),
             }
         });
 
-        return NextResponse.json({ sessionId: session.id });
+        return apiSuccess({ sessionId: session.id });
 
     } catch (error) {
-        console.error("Create session error:", error);
-        return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+        logger.error({ err: error }, 'Create session error');
+        return errors.internal();
     }
 }

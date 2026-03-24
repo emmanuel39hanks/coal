@@ -1,0 +1,51 @@
+{
+  "name": "coal-react",
+  "version": "0.3.0",
+  "description": "React component and hook for Coal crypto checkout",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "coal",
+    "crypto",
+    "payments",
+    "checkout",
+    "react",
+    "base",
+    "usdc",
+    "web3"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/schemalabs/coal"
+  },
+  "homepage": "https://usecoal.xyz",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,5 +1,21 @@
+import { NextResponse } from "next/server";
 
-import { auth } from "@/lib/auth";
-import { toNextJsHandler } from "better-auth/next-js";
+function legacyAuthRetiredResponse() {
+  return NextResponse.json(
+    {
+      error: {
+        code: "LEGACY_AUTH_RETIRED",
+        message: "Legacy Better Auth endpoints have been retired. Coal dashboard auth now runs through Privy.",
+      },
+    },
+    { status: 410 },
+  );
+}
 
-export const { GET, POST } = toNextJsHandler(auth);
+export async function GET() {
+  return legacyAuthRetiredResponse();
+}
+
+export async function POST() {
+  return legacyAuthRetiredResponse();
+}

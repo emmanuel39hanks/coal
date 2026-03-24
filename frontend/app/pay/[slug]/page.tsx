@@ -1,12 +1,12 @@
 
 import { notFound } from "next/navigation";
 import PaymentView from "@/components/PaymentView";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from "@/lib/api-base";
 
 async function getPaymentData(slug: string) {
+    const apiBaseUrl = getApiBaseUrl();
     // Try to resolve as a payment link first (short slugs like "abc123")
-    const linkRes = await fetch(`${API_URL}/api/resolve/link?slug=${slug}`, {
+    const linkRes = await fetch(`${apiBaseUrl}/api/resolve/link?slug=${slug}`, {
         cache: 'no-store'
     });
 
@@ -16,13 +16,18 @@ async function getPaymentData(slug: string) {
     }
 
     // If not a link, try to resolve as a checkout session (longer UUIDs like "clv...")
-    const sessionRes = await fetch(`${API_URL}/api/resolve/session?id=${slug}`, {
+    const sessionRes = await fetch(`${apiBaseUrl}/api/resolve/session?id=${slug}`, {
         cache: 'no-store'
     });
 
     if (sessionRes.ok) {
         const sessionData = await sessionRes.json();
         return { data: sessionData, type: 'session' as const };
+    }
+
+    // 410 = session exists but is expired — show expired UI instead of 404
+    if (sessionRes.status === 410) {
+        return { data: { expired: true }, type: 'session' as const };
     }
 
     return null;

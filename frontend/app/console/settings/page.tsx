@@ -2,16 +2,39 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Wallet, TickCircle, EmptyWallet } from 'iconsax-reactjs';
+import { User, TickCircle, EmptyWallet, AddCircle, Trash } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
-import { fetcher, API_URL } from '@/lib/api';
+import { useApi } from '@/lib/api';
+import { Skeleton } from '@/components/Skeleton';
+import { useToast } from '@/components/Toast';
+import { getErrorMessage } from '@/lib/api-errors';
+
+type TeamMemberUser = { id: string; name: string | null; email: string };
+type TeamMember = { id: string; role: string; createdAt: string; user: TeamMemberUser };
+
+const ROLE_COLORS: Record<string, string> = {
+    owner: 'bg-[var(--color-brand-navy)] text-white',
+    admin: 'bg-[var(--color-brand-orange)] text-white',
+    member: 'bg-blue-100 text-blue-700',
+    viewer: 'bg-gray-100 text-gray-500',
+};
 
 export default function SettingsPage() {
+    const { fetcher, request } = useApi();
+    const toast = useToast();
     const { data: user, error, isLoading } = useSWR('/api/console/settings', fetcher);
+    const { data: teamData, isLoading: teamLoading } = useSWR('/api/console/team', fetcher);
     const [name, setName] = useState('');
     const [payoutAddress, setPayoutAddress] = useState('');
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState(false);
+
+    // Team invite form
+    const [showInviteForm, setShowInviteForm] = useState(false);
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
+    const [inviting, setInviting] = useState(false);
+    const [inviteError, setInviteError] = useState('');
 
     useEffect(() => {
         if (user) {
@@ -24,27 +47,88 @@ export default function SettingsPage() {
         setSaving(true);
         setSuccess(false);
         try {
-            const res = await fetch('/api/console/settings', {
+            await request('/api/console/settings', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, payoutAddress })
             });
-
-            if (res.ok) {
-                mutate('/api/console/settings');
-                setSuccess(true);
-                setTimeout(() => setSuccess(false), 3000);
-            } else {
-                alert('Failed to save settings');
-            }
+            mutate('/api/console/settings');
+            setSuccess(true);
+            toast('success', 'Settings saved');
+            setTimeout(() => setSuccess(false), 3000);
         } catch (e) {
             console.error(e);
+            toast('error', getErrorMessage(e, 'Failed to save settings'));
         } finally {
             setSaving(false);
         }
     };
 
-    if (isLoading) return <div className="text-center py-20 text-gray-400">Loading settings...</div>;
+    const handleInvite = async () => {
+        if (!inviteEmail.trim()) return;
+        setInviting(true);
+        setInviteError('');
+        try {
+            await request('/api/console/team', {
+                method: 'POST',
+                body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+            });
+            mutate('/api/console/team');
+            toast('success', 'Team invite sent');
+            setInviteEmail('');
+            setInviteRole('member');
+            setShowInviteForm(false);
+        } catch (e: any) {
+            const message = getErrorMessage(e, 'Failed to invite member');
+            setInviteError(message);
+            toast('error', message);
+        } finally {
+            setInviting(false);
+        }
+    };
+
+    const handleRemoveMember = async (memberId: string) => {
+        try {
+            await request(`/api/console/team/${memberId}`, { method: 'DELETE' });
+            mutate('/api/console/team');
+            toast('success', 'Team member removed');
+        } catch (e) {
+            console.error(e);
+            toast('error', getErrorMessage(e, 'Failed to remove team member'));
+        }
+    };
+
+    if (isLoading) return (
+        <div className="space-y-8 max-w-2xl mx-auto">
+            <div className="space-y-2">
+                <Skeleton className="h-9 w-28 rounded-xl" />
+                <Skeleton className="h-4 w-52 rounded-full" />
+            </div>
+            <div className="bg-white rounded-[40px] border-2 border-black/5 p-8 space-y-6">
+                {[1, 2].map((i) => (
+                    <div key={i} className="space-y-2">
+                        <Skeleton className="h-4 w-32 rounded-full ml-4" />
+                        <Skeleton className="h-14 w-full rounded-full" />
+                    </div>
+                ))}
+                <Skeleton className="h-14 w-full rounded-full" />
+            </div>
+            <div className="bg-white rounded-[40px] border-2 border-black/5 p-8 space-y-4">
+                <div className="flex items-center justify-between">
+                    <Skeleton className="h-6 w-24 rounded-lg" />
+                    <Skeleton className="h-9 w-32 rounded-full" />
+                </div>
+                {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between py-3 border-b border-black/5">
+                        <div className="space-y-1.5">
+                            <Skeleton className="h-4 w-28 rounded-full" />
+                            <Skeleton className="h-3 w-40 rounded-full" />
+                        </div>
+                        <Skeleton className="h-6 w-16 rounded-full" />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 
     return (
         <div className="space-y-8 max-w-2xl mx-auto">
@@ -79,7 +163,7 @@ export default function SettingsPage() {
                     <div>
                         <div className="flex items-center gap-2 mb-2 pl-4">
                             <EmptyWallet size={18} variant="Bold" className="text-[var(--color-brand-orange)]" />
-                            <label className="text-sm font-bold text-[var(--color-brand-navy)]">MNEE Payout Address</label>
+                            <label className="text-sm font-bold text-[var(--color-brand-navy)]">Settlement Payout Address</label>
                         </div>
                         <input
                             value={payoutAddress} onChange={e => setPayoutAddress(e.target.value)}
@@ -115,6 +199,121 @@ export default function SettingsPage() {
                         </button>
                     </div>
                 </div>
+            </motion.div>
+
+            {/* Team Management */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="bg-white rounded-[40px] border-2 border-black/5 p-8 shadow-sm"
+            >
+                <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 className="text-xl font-black text-[var(--color-brand-navy)]">Team</h2>
+                        <p className="text-sm text-[var(--color-text-secondary)] font-medium">
+                            Invite teammates to help manage your account.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => { setShowInviteForm(v => !v); setInviteError(''); }}
+                        className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-full text-sm font-bold shadow-[3px_3px_0px_0px_#FF5C16] hover:shadow-[1px_1px_0px_0px_#FF5C16] hover:translate-x-[2px] hover:translate-y-[2px] transition-all active:shadow-none active:translate-x-[3px] active:translate-y-[3px]"
+                    >
+                        <AddCircle size={16} variant="Bold" />
+                        Invite Member
+                    </button>
+                </div>
+
+                {/* Invite Form */}
+                {showInviteForm && (
+                    <div className="mb-6 p-6 bg-gray-50 rounded-3xl space-y-4">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <input
+                                value={inviteEmail}
+                                onChange={e => setInviteEmail(e.target.value)}
+                                className="flex-1 h-12 px-5 rounded-full bg-white border-2 border-black/10 focus:border-[var(--color-brand-orange)] outline-none font-medium text-[var(--color-brand-navy)]"
+                                placeholder="colleague@example.com"
+                                type="email"
+                            />
+                            <select
+                                value={inviteRole}
+                                onChange={e => setInviteRole(e.target.value as 'admin' | 'member' | 'viewer')}
+                                className="h-12 px-5 rounded-full bg-white border-2 border-black/10 focus:border-[var(--color-brand-orange)] outline-none font-bold text-[var(--color-brand-navy)] cursor-pointer"
+                            >
+                                <option value="admin">Admin</option>
+                                <option value="member">Member</option>
+                                <option value="viewer">Viewer</option>
+                            </select>
+                            <button
+                                onClick={handleInvite}
+                                disabled={inviting || !inviteEmail.trim()}
+                                className="h-12 px-6 bg-black text-white rounded-full font-bold text-sm shadow-[3px_3px_0px_0px_#FF5C16] hover:shadow-[1px_1px_0px_0px_#FF5C16] hover:translate-x-[2px] hover:translate-y-[2px] transition-all active:shadow-none disabled:opacity-50 disabled:pointer-events-none"
+                            >
+                                {inviting ? 'Inviting...' : 'Send Invite'}
+                            </button>
+                        </div>
+                        {inviteError && (
+                            <p className="text-sm text-red-500 font-medium pl-2">{inviteError}</p>
+                        )}
+                    </div>
+                )}
+
+                {/* Members List */}
+                {teamLoading ? (
+                    <div className="space-y-3">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="flex items-center justify-between p-4">
+                                <div className="flex items-center gap-3">
+                                    <Skeleton className="w-10 h-10 rounded-full" />
+                                    <div className="space-y-1.5">
+                                        <Skeleton className="h-3.5 w-28 rounded-full" />
+                                        <Skeleton className="h-3 w-40 rounded-full" />
+                                    </div>
+                                </div>
+                                <Skeleton className="h-6 w-16 rounded-full" />
+                            </div>
+                        ))}
+                    </div>
+                ) : !teamData?.members?.length ? (
+                    <div className="text-center py-6 text-gray-400 font-medium">No team members yet.</div>
+                ) : (
+                    <div className="space-y-3">
+                        {teamData.members.map((member: TeamMember) => (
+                            <div
+                                key={member.id}
+                                className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50 transition-colors"
+                            >
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                                        <User size={18} variant="Bold" className="text-[var(--color-brand-navy)]" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-[var(--color-brand-navy)] truncate">
+                                            {member.user.name || member.user.email}
+                                        </p>
+                                        <p className="text-xs text-[var(--color-text-secondary)] truncate">
+                                            {member.user.email}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 shrink-0 ml-4">
+                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold capitalize ${ROLE_COLORS[member.role] ?? 'bg-gray-100 text-gray-500'}`}>
+                                        {member.role}
+                                    </span>
+                                    {member.role !== 'owner' && (
+                                        <button
+                                            onClick={() => handleRemoveMember(member.id)}
+                                            className="text-gray-300 hover:text-red-500 transition-colors"
+                                            title="Remove member"
+                                        >
+                                            <Trash size={16} variant="Bold" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </motion.div>
         </div>
     );

@@ -1,0 +1,7 @@
+{
+  "name": "@coal/js",
+  "version": "0.1.0",
+  "description": "Coal checkout widget SDK",
+  "main": "coal.js",
+  "files": ["coal.js"]
+}

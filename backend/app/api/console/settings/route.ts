@@ -1,66 +1,96 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { getAuthUser } from '@/lib/privy';
+import crypto from 'crypto';
+import { updateSettingsSchema, validateBody } from '@/lib/schemas';
+import { errors, apiSuccess } from '@/lib/errors';
+import { validateWebhookUrl } from '@/lib/ssrf';
+import { logger } from '@/lib/logger';
+import { syncMerchantArtifacts } from '@/lib/0g/merchant';
 
 export async function GET(request: Request) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
 
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Return user settings
-        // Since session might be stale, fetch fresh user
-        const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
+        // Fetch fresh user — auto-generate webhookSecret if missing
+        let dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
             select: {
                 name: true,
                 email: true,
-                payoutAddress: true
+                payoutAddress: true,
+                webhookSecret: true,
+                webhookUrl: true,
             }
         });
 
-        return NextResponse.json(user);
+        if (!dbUser) return errors.notFound('User');
+
+        // Auto-provision webhook secret for merchants that don't have one yet
+        if (!dbUser.webhookSecret) {
+            const generated = `whsec_${crypto.randomBytes(32).toString('hex')}`;
+            dbUser = await prisma.user.update({
+                where: { id: user.id },
+                data: { webhookSecret: generated },
+                select: { name: true, email: true, payoutAddress: true, webhookSecret: true, webhookUrl: true }
+            });
+        }
+
+        // Mask the secret — show only last 4 chars
+        const raw = dbUser.webhookSecret!;
+        const masked = `${raw.slice(0, 10)}...${raw.slice(-4)}`;
+
+        return apiSuccess({
+            name: dbUser.name,
+            email: dbUser.email,
+            payoutAddress: dbUser.payoutAddress,
+            webhookSecretMasked: masked,
+            webhookUrl: dbUser.webhookUrl,
+        });
 
     } catch (error) {
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return errors.internal();
     }
 }
 
 export async function PUT(request: Request) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
 
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const body = await request.json().catch(() => ({}));
+        const validated = validateBody(updateSettingsSchema, body);
+        if (!validated.success) return validated.error;
 
-        const body = await request.json();
-        const { payoutAddress, name } = body;
+        const { name, payoutAddress, webhookUrl } = validated.data;
 
-        // Basic validation for EVM address
-        if (payoutAddress && !/^0x[a-fA-F0-9]{40}$/.test(payoutAddress)) {
-            return NextResponse.json({ error: 'Invalid EVM Address' }, { status: 400 });
+        if (webhookUrl) {
+            const urlCheck = validateWebhookUrl(webhookUrl);
+            if (!urlCheck.valid) {
+                return errors.validation({ webhookUrl: [urlCheck.reason || 'Invalid webhook URL'] });
+            }
         }
 
         const updated = await prisma.user.update({
-            where: { id: session.user.id },
+            where: { id: user.id },
             data: {
-                name: name || undefined,
-                payoutAddress: payoutAddress || undefined
-            }
+                name:         name         !== undefined ? name         : undefined,
+                payoutAddress: payoutAddress !== undefined ? payoutAddress : undefined,
+                webhookUrl:   webhookUrl   !== undefined ? (webhookUrl || null) : undefined,
+            },
+            select: { name: true, email: true, payoutAddress: true, webhookUrl: true }
         });
 
-        return NextResponse.json(updated);
+        const merchantSync = await syncMerchantArtifacts(user.id).catch(() => null);
+
+        return apiSuccess({
+            ...updated,
+            zeroG: merchantSync,
+        });
 
     } catch (error) {
-        console.error("Update Settings Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        logger.error({ err: error }, 'Update settings error');
+        return errors.internal();
     }
 }
