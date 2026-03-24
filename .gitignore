@@ -17,6 +17,24 @@ dist/
 # Misc
 .DS_Store
 *.pem
+.claude/
+.playwright-cli/
+output/
+agents/
+bugs/
+bugs-2/
+context/
+docs/
+security/
+tasks/
+0g/
+coal-docs/
+playwright-report/
+test-results/
+attestation_report.json
+broker_attestation_report.json
+llm_attestation_report.json
+.vercel/
 
 # Debug
 npm-debug.log*
@@ -38,3 +56,4 @@ next-env.d.ts
 # Editors
 .vscode/
 .idea/
+.vercel

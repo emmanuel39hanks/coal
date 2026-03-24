@@ -1,94 +1,258 @@
+# Webhooks API
 
-# Webhooks
+Register HTTPS endpoints to receive real-time event notifications from Coal. When a payment is confirmed, an authorization is captured, or a session expires, Coal fires a signed POST request to your webhook URL.
 
-Webhooks allow your application to receive real-time notifications about events in your Coal account. Instead of polling our API, Coal pushes data to your server as soon as it happens.
+This is a console-managed endpoint family. The public merchant API uses `x-api-key`; these `/api/console/*` routes use Privy Bearer tokens and are dashboard-only.
 
-> [!IMPORTANT]
-> Webhooks are the most reliable way to handle post-payment logic, such as fulfilling orders or updating user balances.
-
-## The Webhook Event
-
-Coal currently supports the `checkout.session.completed` event, which is fired when a payment is successfully confirmed on the blockchain.
-
-### Payload Structure
-
-When an event occurs, Coal sends a `POST` request to your configured `callbackUrl`. The body of the request will contain the event object.
+## The Webhook Object
 
 ```json
 {
-  "event": "checkout.session.completed",
+  "id": "clwh001",
+  "merchantId": "clmerchant456",
+  "url": "https://yoursite.com/api/webhooks/coal",
+  "secret": "whsec_...",
+  "events": ["checkout.confirmed", "checkout.failed"],
+  "active": true,
+  "createdAt": "2026-01-15T10:00:00.000Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique webhook ID (CUID) |
+| `merchantId` | string | ID of the owning merchant |
+| `url` | string | Your HTTPS endpoint that receives events |
+| `secret` | string | Signing secret used to verify requests (`whsec_...`) |
+| `events` | string[] | List of event types subscribed to |
+| `active` | boolean | `false` = webhook is paused |
+| `createdAt` | ISO 8601 | Creation timestamp |
+
+---
+
+## Event Types
+
+| Event | Fired when |
+|---|---|
+| `checkout.confirmed` | Payment verified on-chain |
+| `checkout.failed` | Transaction failed or was invalid |
+| `checkout.expired` | Session timed out without payment |
+| `checkout.authorized` | Auth & Capture — funds reserved |
+| `checkout.voided` | Authorization released without capture |
+
+Subscribe to `*` to receive all events.
+
+---
+
+## Event Payload Structure
+
+Every webhook request is a `POST` with `Content-Type: application/json`:
+
+```json
+{
+  "id": "evt_clxxx001",
+  "event": "checkout.confirmed",
+  "createdAt": "2026-03-22T12:03:41.000Z",
   "data": {
-    "id": "cs_cl9...",
-    "amount": "50.00",
-    "currency": "MNEE",
+    "sessionId": "clxxx789",
+    "amount": "49.99",
+    "currency": "USDC",
     "status": "confirmed",
-    "customer_details": {
-      "email": "customer@example.com"
-    }
+    "txHash": "0xdeadbeef...",
+    "merchantId": "clmerchant456",
+    "productId": "clxxx123",
+    "confirmedAt": "2026-03-22T12:03:41.000Z"
   }
 }
 ```
 
-## Security & Verification
+<Callout variant="info">
+  Always use `event.id` to deduplicate — Coal may retry failed deliveries, and your handler may receive the same event more than once.
+</Callout>
 
-To ensure that webhook requests are genuinely from Coal and haven't been tampered with, every request includes a `Coal-Signature` header.
+---
 
-The header format is:
-`t=TIMESTAMP,v1=SIGNATURE`
+## List Webhooks
 
-### Verifying Signatures
+<EndpointBadge method="GET" path="/api/console/webhooks" />
 
-You should compute the HMAC-SHA256 of the payload and compare it to the signature provided in the header.
+**Authentication:** `Authorization: Bearer <Privy JWT>`
 
-1.  **Extract the timestamp and signature** from the header.
-2.  **Prepare the `signed_payload`** string: concatenate the timestamp, a period (`.`), and the raw JSON body.
-3.  **Compute the HMAC** using your API Secret Key.
-4.  **Compare** your computed signature with the one in the header.
+```bash
+curl https://api.usecoal.xyz/api/console/webhooks \
+  -H "Authorization: Bearer <Privy JWT>"
+```
 
-### Example Code (Next.js / Node.js)
-
-Here is a robust example of how to handle verify Coal webhooks in a Next.js App Router API route.
-
-```typescript
-// app/api/webhook/route.ts
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-
-export async function POST(request: Request) {
-    const rawBody = await request.text();
-    const signatureHeader = request.headers.get('Coal-Signature');
-
-    if (!signatureHeader) {
-        return NextResponse.json({ error: "Missing signature" }, { status: 400 });
-    }
-
-    // 1. Extract pieces
-    const [t, v1] = signatureHeader.split(',').map(part => part.split('=')[1]);
-    
-    // 2. Prepare payload
-    const signedPayload = `${t}.${rawBody}`;
-
-    // 3. Compute HMAC
-    const hmac = crypto.createHmac('sha256', process.env.COAL_SECRET_KEY!);
-    const digest = hmac.update(signedPayload).digest('hex');
-
-    // 4. Compare (Timing Safe)
-    if (!crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(v1))) {
-         return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-    }
-
-    // Process Event
-    const event = JSON.parse(rawBody);
-    
-    if (event.event === 'checkout.session.completed') {
-        const session = event.data;
-        console.log(`💰 Payment confirmed: ${session.amount} ${session.currency}`);
-        // TODO: Fulfill order
-    }
-
-    return NextResponse.json({ received: true });
+```json
+{
+  "data": {
+    "webhooks": [
+      {
+        "id": "clwh001",
+        "url": "https://yoursite.com/api/webhooks/coal",
+        "events": ["checkout.confirmed"],
+        "active": true,
+        "createdAt": "2026-01-15T10:00:00.000Z"
+      }
+    ]
+  }
 }
 ```
 
-> [!TIP]
-> Always return a `200` OK response quickly to acknowledge receipt. If you have complex processing, consider using a background queue.
+---
+
+## Register a Webhook
+
+<EndpointBadge method="POST" path="/api/console/webhooks" />
+
+**Authentication:** `Authorization: Bearer <Privy JWT>`
+
+<ParamTable params={[
+  { name: "url", type: "string", required: true, description: "Your HTTPS endpoint. Must be publicly reachable and return 2xx within 10 seconds." },
+  { name: "events", type: "string[]", required: true, description: "Array of event types to subscribe to. Pass [\"*\"] to receive all events." },
+]} />
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/webhooks \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://yoursite.com/api/webhooks/coal",
+    "events": ["checkout.confirmed", "checkout.failed"]
+  }'
+```
+
+```json
+{
+  "data": {
+    "id": "clwh001",
+    "url": "https://yoursite.com/api/webhooks/coal",
+    "secret": "whsec_a1b2c3d4e5f6...",
+    "events": ["checkout.confirmed", "checkout.failed"],
+    "active": true
+  }
+}
+```
+
+<Callout variant="warning" title="Save your secret">
+  The `secret` is shown only once at creation. Store it securely (e.g. in an environment variable) — you'll need it to verify incoming signatures.
+</Callout>
+
+---
+
+## Update a Webhook
+
+<EndpointBadge method="PUT" path="/api/console/webhooks/:id" />
+
+All fields optional.
+
+```bash
+curl -X PUT https://api.usecoal.xyz/api/console/webhooks/clwh001 \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{ "active": false }'
+```
+
+---
+
+## Delete a Webhook
+
+<EndpointBadge method="DELETE" path="/api/console/webhooks/:id" />
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/webhooks/clwh001 \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+```json
+{
+  "data": { "success": true }
+}
+```
+
+---
+
+## Verifying Signatures
+
+Every request includes a `Coal-Signature` header. **Always verify it** before processing the event.
+
+```
+Coal-Signature: t=1711108821,v1=a8f3b2c1...
+```
+
+**Verification algorithm:**
+
+1. Extract `t` (timestamp) and `v1` (signature) from the header
+2. Build the signed payload string: `"{t}.{raw_body}"`
+3. Compute `HMAC-SHA256(signed_payload, webhook_secret)`
+4. Compare with `v1` using a timing-safe comparison
+
+```typescript
+// app/api/webhooks/coal/route.ts
+import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+
+export async function POST(req: Request) {
+  const rawBody = await req.text();
+  const sig = req.headers.get('Coal-Signature') ?? '';
+
+  const parts = Object.fromEntries(sig.split(',').map((p) => p.split('=')));
+  const { t, v1 } = parts;
+
+  if (!t || !v1) {
+    return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+  }
+
+  const signedPayload = `${t}.${rawBody}`;
+  const expected = crypto
+    .createHmac('sha256', process.env.COAL_WEBHOOK_SECRET!)
+    .update(signedPayload)
+    .digest('hex');
+
+  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+  }
+
+  const event = JSON.parse(rawBody);
+
+  switch (event.event) {
+    case 'checkout.confirmed':
+      await fulfillOrder(event.data.sessionId);
+      break;
+    case 'checkout.failed':
+      await notifyCustomer(event.data.sessionId);
+      break;
+  }
+
+  return NextResponse.json({ received: true });
+}
+```
+
+See [Signature Verification](/docs/webhooks/signatures) for the full guide including timestamp tolerance and replay protection.
+
+---
+
+## Retry Behavior
+
+Coal retries failed deliveries with exponential back-off:
+
+| Attempt | Delay |
+|---|---|
+| 1st retry | 1 minute |
+| 2nd retry | 5 minutes |
+| 3rd retry | 30 minutes |
+| 4th retry | 2 hours |
+| 5th retry | 8 hours |
+
+After 5 failed attempts, the event is marked `failed` and no further retries are made. See [Retry Logic](/docs/webhooks/retries) for how to replay missed events.
+
+---
+
+## Error Codes
+
+| Code | HTTP | Description |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | Missing or invalid Privy JWT |
+| `NOT_FOUND` | 404 | Webhook does not exist or belongs to another merchant |
+| `VALIDATION_ERROR` | 400 | Invalid URL or unknown event type |
+| `URL_UNREACHABLE` | 422 | Coal could not reach the provided URL during registration |

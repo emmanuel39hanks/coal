@@ -1,30 +1,96 @@
+# Coal Documentation
 
-# Introduction
+Coal is a **crypto-native payments platform** for hosted checkout, payment links, paywalls, and programmable revenue routing. Accept stablecoin payments on Base, keep funds in your own wallet, and plug Coal into apps, agents, and internal tools.
 
-Welcome to the Coal API documentation. Coal is the comprehensive payment rail for **MNEE**, ensuring you can build stablecoin flows for any application.
+Merchant API requests use `x-api-key` with `coal_live_*` keys. Dashboard and `/api/console/*` routes use Privy Bearer tokens and are for console use, not the primary public merchant surface.
 
-## What is MNEE?
+<div className="not-prose mt-10 mb-12 grid grid-cols-1 sm:grid-cols-2 gap-4">
+  {[
+    {
+      title: "Accept in 5 min",
+      description: "Create your first checkout session and start receiving payments.",
+      href: "/docs/quickstart",
+      emoji: "⚡",
+      accent: "bg-orange-50 border-orange-200 hover:border-[var(--color-brand-orange)]",
+    },
+    {
+      title: "API Reference",
+      description: "Full REST API docs — checkouts, products, webhooks, and more.",
+      href: "/docs/api/checkouts",
+      emoji: "📄",
+      accent: "bg-blue-50 border-blue-200 hover:border-blue-400",
+    },
+    {
+      title: "Webhooks",
+      description: "React to payment events in real-time with signed webhook delivery.",
+      href: "/docs/webhooks",
+      emoji: "🔔",
+      accent: "bg-purple-50 border-purple-200 hover:border-purple-400",
+    },
+    {
+      title: "Widget SDK",
+      description: "Drop a <CoalCheckout /> React component into any page in minutes.",
+      href: "/docs/sdk/javascript",
+      emoji: "🧩",
+      accent: "bg-green-50 border-green-200 hover:border-green-400",
+    },
+  ].map((card) => (
+    <a
+      key={card.href}
+      href={card.href}
+      className={`group flex flex-col gap-2 rounded-2xl border p-5 transition-all no-underline ${card.accent}`}
+    >
+      <div className="text-2xl">{card.emoji}</div>
+      <div className="font-bold text-[var(--color-brand-navy)] text-[15px] group-hover:text-[var(--color-brand-orange)] transition-colors">
+        {card.title}
+      </div>
+      <div className="text-sm text-gray-500 leading-relaxed">{card.description}</div>
+    </a>
+  ))}
+</div>
 
-MNEE (pronounced “money”) is a fast, USD-backed stablecoin designed for digital payments, gaming, and remittances.
+## What you can build
 
-*   **⚡ Instant Transactions**: Send and receive in under a second.
-*   **💸 Low Fees**: Microtransactions are finally viable.
-*   **🌍 Multi-Chain**: Works across Ordinals and Ethereum ecosystems.
+<div className="not-prose mb-10 grid grid-cols-1 sm:grid-cols-2 gap-3">
+  {[
+    { icon: "🛒", title: "E-commerce checkouts", body: "Issue payment links or hosted checkout sessions that settle instantly to your wallet." },
+    { icon: "🔒", title: "Content paywalls", body: "Gate any HTTP resource via the x402 protocol — one header, no server changes needed." },
+    { icon: "✂️", title: "Revenue splits", body: "Define split rules once; Coal distributes funds to multiple wallets at settlement." },
+    { icon: "🔗", title: "Embedded widgets", body: "A single <script> tag drops a full checkout UI with crypto or fiat on-ramp support." },
+  ].map((item) => (
+    <div key={item.title} className="flex gap-3 rounded-xl border border-black/8 bg-gray-50/60 p-4">
+      <span className="text-xl shrink-0">{item.icon}</span>
+      <div>
+        <p className="font-bold text-[var(--color-brand-navy)] text-sm mb-0.5">{item.title}</p>
+        <p className="text-sm text-gray-500 leading-relaxed">{item.body}</p>
+      </div>
+    </div>
+  ))}
+</div>
 
-Coal abstracts the complexity of MNEE ledgers, providing a clean REST API for merchants and developers.
+## Core concepts
 
-## Getting Started
-
-1.  **[Quickstart](/docs/quickstart)**: Make your first payment in 2 minutes.
-2.  **[Authentication](/docs/authentication)**: Secure your API requests.
-3.  **[Products](/docs/api/products)**: Organize your inventory.
+| Concept | Description |
+|---|---|
+| **Session** | A single checkout attempt tied to an amount, currency, and recipient wallet. Expires after 15 minutes. |
+| **Merchant** | An authenticated account with a Coal API key. Merchants own products, links, and split configs. |
+| **Product** | A named, priced item in your catalog. Attach a product to a session to auto-populate checkout details. |
+| **Webhook** | An HTTPS endpoint you register to receive signed event notifications (e.g. `payment.confirmed`). |
+| **Paywall** | An HTTP-level payment gate powered by the x402 protocol — the server returns `402 Payment Required` until proof of payment is presented. |
 
 ## Base URL
-
-All API requests should be made to:
 
 ```bash
 https://api.usecoal.xyz/api
 ```
 
-(Production: `https://api.usecoal.xyz/api`)
+All requests must be made over HTTPS. Requests to `http://` will be rejected. Merchant API keys are passed via the `x-api-key` header, and console routes use `Authorization: Bearer <Privy JWT>`.
+
+```bash
+curl https://api.usecoal.xyz/api/checkouts \
+  -H "x-api-key: coal_live_..."
+```
+
+## Need help?
+
+Open an issue or start a discussion on [GitHub](https://github.com/schemalabs/coal). For urgent production issues, reach out via the [Console](/console).

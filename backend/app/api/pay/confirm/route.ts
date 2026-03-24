@@ -1,207 +1,127 @@
-import { prisma } from "@/lib/prisma";
-import { sendWebhook } from "@/lib/webhooks";
-import { NextResponse } from "next/server";
-import { createPublicClient, http, formatUnits, decodeEventLog, parseAbi } from 'viem';
-import { mainnet } from 'viem/chains';
-
-// MNEE Contract Details
-const MNEE_CONTRACT_ADDRESS = '0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF'.toLowerCase();
-const MNEE_DECIMALS = 18;
-
-// ERC-20 Transfer event ABI
-const ERC20_TRANSFER_ABI = parseAbi([
-    'event Transfer(address indexed from, address indexed to, uint256 value)'
-]);
-
-// Alchemy RPC endpoint (reliable and fast)
-const ALCHEMY_RPC_URL = `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`;
-
-const publicClient = createPublicClient({
-    chain: mainnet,
-    transport: http(ALCHEMY_RPC_URL)
-});
-
-// Retry helper with fixed delay (for slow networks/pending transactions)
-async function withRetry<T>(
-    fn: () => Promise<T>,
-    maxRetries: number = 15,      // 15 retries = up to 5+ minutes
-    delayMs: number = 20000       // 20 seconds between each retry
-): Promise<T> {
-    let lastError: Error | null = null;
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-        try {
-            return await fn();
-        } catch (e) {
-            lastError = e as Error;
-
-            const isRetryable =
-                lastError.message.includes('not found') ||
-                lastError.message.includes('could not be found') ||
-                lastError.message.includes('pending') ||
-                lastError.message.includes('not be processed');
-
-            if (!isRetryable || attempt === maxRetries - 1) {
-                throw e;
-            }
-
-            console.log(`Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${delayMs / 1000}s...`);
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-    }
-
-    throw lastError;
-}
+import { prisma } from '@/lib/prisma';
+import { confirmPaymentSchema, validateBody } from '@/lib/schemas';
+import { errors, apiSuccess } from '@/lib/errors';
+import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
+import { paymentLogger } from '@/lib/logger';
+import { normalizePayerInfoConfig, normalizePayerInfoValues, validatePayerInfo } from '@/lib/payer-info';
+import { toPrismaNullableJson } from '@/lib/prisma-json';
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
-        const { sessionId, txHash } = body;
+        const body = await request.json().catch(() => ({}));
+        const validated = validateBody(confirmPaymentSchema, body);
+        if (!validated.success) return validated.error;
 
-        if (!sessionId || !txHash) {
-            return NextResponse.json({ error: "Session ID and TxHash required" }, { status: 400 });
-        }
+        const {
+            sessionId,
+            txHash: rawHash,
+            payerAddress,
+            customerEmail,
+            subscriptionConsentAccepted,
+            payerInfo,
+        } = validated.data;
+        const normalizedHash = rawHash.toLowerCase();
 
-        // 1. Get Session & Validate
+        // Rate limit per session
+        const { limited } = await checkRateLimit(rateLimiters.confirm, sessionId);
+        if (limited) return errors.rateLimited();
+
         const session = await prisma.checkoutSession.findUnique({
             where: { id: sessionId },
-            include: {
-                merchant: {
-                    include: {
-                        apiKeys: { take: 1 }
-                    }
-                }
-            }
+            include: { product: true },
         });
+        if (!session) return errors.notFound('Session');
 
-        if (!session) {
-            return NextResponse.json({ error: "Session not found" }, { status: 404 });
+        const metadata =
+            session.metadata && typeof session.metadata === 'object'
+                ? (session.metadata as Record<string, unknown>)
+                : {};
+        const payerInfoConfig = normalizePayerInfoConfig(
+            session.payerInfoConfig || metadata.payerInfoConfig,
+        );
+        const existingPayerInfo = normalizePayerInfoValues(
+            session.payerInfo || metadata.payerInfoValues,
+        );
+        const payerInfoValidation = validatePayerInfo(
+            payerInfoConfig,
+            payerInfo || existingPayerInfo || null,
+        );
+        if (!payerInfoValidation.ok) {
+            return errors.validation(payerInfoValidation.errors);
         }
+        const normalizedPayerInfo = payerInfoValidation.normalized;
+        const resolvedCustomerEmail =
+            normalizedPayerInfo?.email ||
+            customerEmail ||
+            session.customerEmail ||
+            (typeof metadata.customerEmail === 'string' ? metadata.customerEmail : null);
+        const isRecurringProduct =
+            session.product?.billingType === 'subscription' ||
+            metadata.billingType === 'subscription';
 
-        // 2. Verify Transaction using Alchemy RPC
-        let receipt;
-        let transferAmount: bigint = BigInt(0);
-        let transferTo: string = '';
-        let transferFrom: string = '';
-
-        try {
-            // Wait for transaction to be mined (longer wait for slow networks)
-            console.log('Waiting 50s for transaction to be mined...');
-            await new Promise(resolve => setTimeout(resolve, 50000));
-
-            receipt = await withRetry(async () => {
-                // Get transaction receipt using Alchemy RPC
-                const rcpt = await publicClient.getTransactionReceipt({
-                    hash: txHash as `0x${string}`
+        if (isRecurringProduct) {
+            if (subscriptionConsentAccepted !== true && metadata.subscriptionConsentAccepted !== true) {
+                return errors.validation({
+                    subscriptionConsentAccepted: ['Recurring products require billing consent'],
                 });
-
-                if (!rcpt) {
-                    throw new Error('Transaction receipt not found');
-                }
-
-                return rcpt;
-            }, 15, 20000); // 15 retries, 20s between each
-
-            if (receipt.status !== 'success') {
-                return NextResponse.json({ error: "Transaction reverted on-chain" }, { status: 400 });
             }
 
-            // Parse ERC-20 Transfer event from logs
-            const transferLog = receipt.logs.find(log => {
-                try {
-                    if (log.address.toLowerCase() !== MNEE_CONTRACT_ADDRESS) {
-                        return false;
-                    }
-                    const decoded = decodeEventLog({
-                        abi: ERC20_TRANSFER_ABI,
-                        data: log.data,
-                        topics: log.topics
-                    });
-                    return decoded.eventName === 'Transfer';
-                } catch {
-                    return false;
-                }
-            });
-
-            if (!transferLog) {
-                return NextResponse.json({ error: "No MNEE transfer found in transaction" }, { status: 400 });
+            if (!payerAddress && !session.customerAddress && typeof metadata.payerAddress !== 'string') {
+                return errors.validation({
+                    payerAddress: ['Recurring products require a payer wallet address'],
+                });
             }
-
-            // Decode the transfer details
-            const decoded = decodeEventLog({
-                abi: ERC20_TRANSFER_ABI,
-                data: transferLog.data,
-                topics: transferLog.topics
-            });
-
-            transferFrom = (decoded.args as any).from;
-            transferTo = (decoded.args as any).to;
-            transferAmount = (decoded.args as any).value;
-
-        } catch (e) {
-            console.error("Alchemy RPC Verification Failed:", e);
-            return NextResponse.json({
-                error: "Failed to verify transaction: " + (e as Error).message
-            }, { status: 400 });
         }
 
-        // Verify Recipient
-        const expectedRecipient = session.merchant.payoutAddress?.toLowerCase();
-        if (transferTo.toLowerCase() !== expectedRecipient) {
-            return NextResponse.json({
-                error: `Recipient mismatch. Expected ${expectedRecipient}, got ${transferTo}`
-            }, { status: 400 });
+        paymentLogger.info({ sessionId, merchantId: session.merchantId }, 'Payment confirmation started');
+
+        // Idempotency — same session + same hash is a safe retry
+        if (session.pendingTxHash === normalizedHash || session.txHash === normalizedHash) {
+            return apiSuccess({ status: session.status, sessionId });
         }
 
-        // Verify Amount
-        const transferAmountDecimal = parseFloat(formatUnits(transferAmount, MNEE_DECIMALS));
-        const expectedAmount = session.amount;
-
-        if (Math.abs(transferAmountDecimal - expectedAmount) > 0.00001) {
-            return NextResponse.json({
-                error: `Amount mismatch. Expected ${expectedAmount} MNEE, got ${transferAmountDecimal} MNEE`
-            }, { status: 400 });
+        if (session.status !== 'pending') {
+            return errors.conflict('SESSION_ALREADY_CONFIRMED', `Session is already ${session.status}`);
         }
 
-        // 3. Update Checkout Session
+        if (session.expiresAt < new Date()) {
+            await prisma.checkoutSession.update({ where: { id: sessionId }, data: { status: 'expired' } });
+            return errors.gone('Checkout session has expired');
+        }
+
+        const existingTx = await prisma.transaction.findUnique({ where: { txHash: normalizedHash } });
+        if (existingTx) return errors.conflict('TXHASH_ALREADY_USED', 'Transaction hash already used');
+
+        const conflictingSession = await prisma.checkoutSession.findFirst({
+            where: { pendingTxHash: normalizedHash, id: { not: sessionId } }
+        });
+        if (conflictingSession) {
+            return errors.conflict('TXHASH_IN_ANOTHER_SESSION', 'Transaction hash already submitted to another session');
+        }
+
         await prisma.checkoutSession.update({
             where: { id: sessionId },
             data: {
-                status: "confirmed",
-                txHash: txHash,
-                transactions: {
-                    create: {
-                        txHash: txHash,
-                        from: transferFrom,
-                        to: transferTo,
-                        amount: transferAmountDecimal,
-                        status: "confirmed"
-                    }
-                }
+                pendingTxHash: normalizedHash,
+                status: 'verifying',
+                customerEmail: resolvedCustomerEmail,
+                customerAddress: payerAddress?.toLowerCase() || session.customerAddress || null,
+                payerInfo: toPrismaNullableJson(normalizedPayerInfo),
+                metadata: {
+                    ...metadata,
+                    ...(resolvedCustomerEmail ? { customerEmail: resolvedCustomerEmail } : {}),
+                    ...(payerAddress ? { payerAddress: payerAddress.toLowerCase() } : {}),
+                    ...(normalizedPayerInfo ? { payerInfoValues: normalizedPayerInfo } : {}),
+                    ...(subscriptionConsentAccepted === true ? { subscriptionConsentAccepted: true } : {}),
+                },
             }
         });
 
-        // 4. Fire Webhook
-        if (session.callbackUrl) {
-            const secret = session.merchant.apiKeys[0]?.secretHash || "default_secret";
-            await sendWebhook(session.callbackUrl, {
-                event: "checkout.session.completed",
-                data: {
-                    id: session.id,
-                    amount: session.amount,
-                    currency: session.currency,
-                    status: "confirmed",
-                    txHash: txHash,
-                    customer_details: { email: "customer@example.com" }
-                }
-            }, secret);
-        }
-
-        console.log(`✅ Payment confirmed! ${transferAmountDecimal} MNEE from ${transferFrom.slice(0, 10)}... to ${transferTo.slice(0, 10)}...`);
-        return NextResponse.json({ success: true, redirectUrl: session.redirectUrl });
+        paymentLogger.info({ sessionId, txHash: normalizedHash }, 'On-chain verification started');
+        return apiSuccess({ status: 'verifying', sessionId });
 
     } catch (error) {
-        console.error("Confirm error:", error);
-        return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+        paymentLogger.error({ err: error }, 'Payment confirmation error');
+        return errors.internal();
     }
 }

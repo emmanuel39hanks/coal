@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
+import { logger } from '@/lib/logger';
 
 // DEV ONLY: Do not deploy to prod without auth protection
 export async function GET(request: Request) {
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
         });
 
     } catch (error) {
-        console.error(error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        logger.error({ err: error }, 'Seed error');
+        return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
     }
 }

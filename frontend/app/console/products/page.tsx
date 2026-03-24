@@ -6,11 +6,17 @@ import { Add, SearchNormal1, Box, Trash, Edit2 } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
 import { UploadButton } from '@/utils/uploadthing';
 import Modal from '@/components/Modal';
-import { fetcher, apiRequest } from '@/lib/api';
+import { useApi } from '@/lib/api';
+import { ProductCardSkeleton } from '@/components/Skeleton';
+import { useToast } from '@/components/Toast';
+import { getErrorMessage } from '@/lib/api-errors';
+import { getSettlementToken } from '@/lib/chain';
 
 import { useSearchParams } from 'next/navigation';
 
 export default function ProductsPage() {
+    const { fetcher, request: apiRequest } = useApi();
+    const toast = useToast();
     const { data, error, isLoading } = useSWR('/api/console/products', fetcher);
     const searchParams = useSearchParams();
     const [isCreateOpen, setIsCreateOpen] = useState(searchParams.get('new') === 'true');
@@ -21,11 +27,18 @@ export default function ProductsPage() {
     const [description, setDescription] = useState('');
     const [price, setPrice] = useState('');
     const [image, setImage] = useState('');
+    const [billingType, setBillingType] = useState<'one_time' | 'subscription'>('one_time');
+    const [billingInterval, setBillingInterval] = useState<'day' | 'week' | 'month' | 'year'>('month');
+    const [billingIntervalCount, setBillingIntervalCount] = useState('1');
     const [editingProduct, setEditingProduct] = useState<any | null>(null);
+    const settlementSymbol = getSettlementToken().symbol;
 
     const handleOpenCreate = () => {
         setEditingProduct(null);
         setName(''); setDescription(''); setPrice(''); setImage('');
+        setBillingType('one_time');
+        setBillingInterval('month');
+        setBillingIntervalCount('1');
         setIsCreateOpen(true);
     };
 
@@ -35,6 +48,9 @@ export default function ProductsPage() {
         setDescription(product.description || '');
         setPrice(product.price);
         setImage(product.image || '');
+        setBillingType(product.billingType || 'one_time');
+        setBillingInterval(product.billingInterval || 'month');
+        setBillingIntervalCount(String(product.billingIntervalCount || 1));
         setIsCreateOpen(true);
     };
 
@@ -49,16 +65,29 @@ export default function ProductsPage() {
 
             await apiRequest(url, {
                 method,
-                body: JSON.stringify({ name, description, price, image })
+                body: JSON.stringify({
+                    name,
+                    description,
+                    price,
+                    image,
+                    billingType,
+                    billingInterval: billingType === 'subscription' ? billingInterval : undefined,
+                    billingIntervalCount: billingType === 'subscription' ? Number(billingIntervalCount || 1) : undefined,
+                })
             });
 
             mutate('/api/console/products'); // Refresh
+            toast('success', editingProduct ? 'Product updated' : 'Product created');
             setIsCreateOpen(false);
             setEditingProduct(null);
             // Reset
             setName(''); setDescription(''); setPrice(''); setImage('');
+            setBillingType('one_time');
+            setBillingInterval('month');
+            setBillingIntervalCount('1');
         } catch (e) {
             console.error(e);
+            toast('error', getErrorMessage(e, editingProduct ? 'Failed to update product' : 'Failed to create product'));
         } finally {
             setCreateLoading(false);
         }
@@ -71,8 +100,10 @@ export default function ProductsPage() {
                 method: 'DELETE'
             });
             mutate('/api/console/products');
+            toast('success', 'Product deleted');
         } catch (e) {
             console.error(e);
+            toast('error', getErrorMessage(e, 'Failed to delete product'));
         }
     };
 
@@ -108,7 +139,7 @@ export default function ProductsPage() {
                 className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
             >
                 {isLoading ? (
-                    <div className="col-span-full py-20 text-center text-gray-400">Loading products...</div>
+                    Array.from({ length: 6 }).map((_, i) => <ProductCardSkeleton key={i} />)
                 ) : products.length === 0 ? (
                     <div className="col-span-full py-20 text-center text-gray-400">No products yet. Create one!</div>
                 ) : (
@@ -140,8 +171,18 @@ export default function ProductsPage() {
                                 )}
                             </div>
                             <div className="flex justify-between items-start mb-2">
-                                <h3 className="font-bold text-lg text-[var(--color-brand-navy)]">{product.name}</h3>
-                                <span className="px-3 py-1 bg-gray-100 rounded-lg text-sm font-bold">{product.price} MNEE</span>
+                                <div>
+                                    <h3 className="font-bold text-lg text-[var(--color-brand-navy)]">{product.name}</h3>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        <span className="px-3 py-1 bg-gray-100 rounded-lg text-sm font-bold">{product.price} {settlementSymbol}</span>
+                                        {product.billingType === 'subscription' && (
+                                            <span className="px-3 py-1 rounded-lg text-sm font-bold bg-[var(--color-brand-orange)]/10 text-[var(--color-brand-orange)]">
+                                                Every {product.billingIntervalCount > 1 ? `${product.billingIntervalCount} ` : ''}{product.billingInterval}
+                                                {product.billingIntervalCount > 1 ? 's' : ''}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                             <p className="text-sm text-[var(--color-text-secondary)] mb-4 line-clamp-2">{product.description}</p>
                             <div className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-secondary)]">
@@ -178,7 +219,7 @@ export default function ProductsPage() {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Price (MNEE)</label>
+                        <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Price ({settlementSymbol})</label>
                         <input
                             type="number" step="0.01"
                             value={price} onChange={e => setPrice(e.target.value)}
@@ -186,6 +227,54 @@ export default function ProductsPage() {
                             placeholder="0.00"
                         />
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Billing Type</label>
+                            <select
+                                value={billingType}
+                                onChange={e => setBillingType(e.target.value as 'one_time' | 'subscription')}
+                                className="w-full h-12 px-6 rounded-full bg-gray-100 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
+                            >
+                                <option value="one_time">One-time</option>
+                                <option value="subscription">Recurring subscription</option>
+                            </select>
+                        </div>
+
+                        {billingType === 'subscription' && (
+                            <div>
+                                <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Billing Interval</label>
+                                <select
+                                    value={billingInterval}
+                                    onChange={e => setBillingInterval(e.target.value as 'day' | 'week' | 'month' | 'year')}
+                                    className="w-full h-12 px-6 rounded-full bg-gray-100 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
+                                >
+                                    <option value="day">Daily</option>
+                                    <option value="week">Weekly</option>
+                                    <option value="month">Monthly</option>
+                                    <option value="year">Yearly</option>
+                                </select>
+                            </div>
+                        )}
+                    </div>
+
+                    {billingType === 'subscription' && (
+                        <div>
+                            <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Repeat Every</label>
+                            <input
+                                type="number"
+                                min="1"
+                                max="12"
+                                value={billingIntervalCount}
+                                onChange={e => setBillingIntervalCount(e.target.value)}
+                                className="w-full h-12 px-6 rounded-full bg-gray-100 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
+                                placeholder="1"
+                            />
+                            <p className="mt-2 pl-4 text-xs font-medium text-[var(--color-text-secondary)]">
+                                Coal will save a billing mandate on first payment and generate renewal checkouts on this cadence.
+                            </p>
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Image</label>
@@ -212,7 +301,7 @@ export default function ProductsPage() {
                                         }
                                     }}
                                     onUploadError={(error: Error) => {
-                                        alert(`ERROR! ${error.message}`);
+                                        toast('error', error.message || 'Image upload failed');
                                     }}
                                 />
                             )}

@@ -1,29 +1,52 @@
-// API URL for direct backend calls (bypasses rewrites for cookie handling)
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { useCallback } from 'react';
+import { useAuth } from '@/lib/auth';
+import { readApiError } from '@/lib/api-errors';
+import { getApiBaseUrl } from '@/lib/api-base';
 
-// Fetcher with credentials for cross-origin cookie handling
-export const fetcher = (url: string) =>
-    fetch(`${API_URL}${url}`, {
-        credentials: 'include'
-    }).then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch');
-        return res.json();
-    });
-
-// POST/PUT/DELETE helper with credentials
-export async function apiRequest(url: string, options: RequestInit = {}) {
-    const response = await fetch(`${API_URL}${url}`, {
-        ...options,
-        credentials: 'include',
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error('Request failed');
-    }
-
-    return response.json();
+export function getApiUrl() {
+  return getApiBaseUrl();
 }
+
+export async function apiFetch(
+  path: string,
+  options: RequestInit = {},
+  getToken?: () => Promise<string | null>
+): Promise<Response> {
+  const token = getToken ? await getToken() : null;
+  return fetch(`${getApiBaseUrl()}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+}
+
+// Hook that returns an authenticated SWR fetcher + mutation helper
+export function useApi() {
+  const { getAccessToken } = useAuth();
+
+  const fetcher = useCallback(async (url: string) => {
+    const res = await apiFetch(url, {}, getAccessToken);
+    if (!res.ok) throw await readApiError(res);
+    return res.json();
+  }, [getAccessToken]);
+
+  const request = useCallback(async (path: string, options: RequestInit = {}) => {
+    const res = await apiFetch(path, options, getAccessToken);
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    return res.json();
+  }, [getAccessToken]);
+
+  return { fetcher, request };
+}
+
+// Unauthenticated fetcher for public endpoints only
+export const fetcher = (url: string) =>
+  fetch(`${getApiBaseUrl()}${url}`).then(async (res) => {
+    if (!res.ok) throw await readApiError(res);
+    return res.json();
+  });

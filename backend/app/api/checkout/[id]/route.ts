@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { logger } from '@/lib/logger';
+
+const CANONICAL_ROUTE = '/api/resolve/session';
+
+function legacyHeaders() {
+    const headers = new Headers();
+    headers.set('Deprecation', 'true');
+    headers.set('Link', `<${CANONICAL_ROUTE}>; rel="canonical"`);
+    headers.set('Cache-Control', 'no-store');
+    return headers;
+}
 
 export async function GET(
     request: Request,
@@ -7,47 +17,35 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
-
-        const session = await prisma.checkoutSession.findUnique({
-            where: { id },
-            include: {
-                product: {
-                    select: {
-                        name: true,
-                        image: true
-                    }
+        const upstream = await fetch(
+            new URL(`${CANONICAL_ROUTE}?id=${encodeURIComponent(id)}`, request.url),
+            {
+                headers: {
+                    accept: 'application/json',
                 },
-                merchant: {
-                    select: {
-                        name: true,
-                        image: true
-                    }
-                }
-            }
-        });
-
-        if (!session) {
-            return NextResponse.json({ error: 'Session not found' }, { status: 404 });
-        }
-
-        // Return public details needed for the Payment Page
-        return NextResponse.json({
-            id: session.id,
-            amount: session.amount.toString(), // Decimal to string
-            currency: session.currency,
-            description: session.description,
-            status: session.status,
-            expiresAt: session.expiresAt,
-            merchant: {
-                name: session.merchant.name,
-                image: session.merchant.image
+                cache: 'no-store',
             },
-            product: session.product,
-            splits: session.splits
-        });
+        );
 
+        const headers = new Headers(upstream.headers);
+        headers.set('Deprecation', 'true');
+        headers.set('Link', `<${CANONICAL_ROUTE}>; rel="canonical"`);
+        headers.set('Cache-Control', 'no-store');
+
+        return new NextResponse(await upstream.text(), {
+            status: upstream.status,
+            headers,
+        });
     } catch (error) {
-        console.error("Get Session Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        logger.error({ err: error }, 'Legacy checkout lookup compatibility error');
+        return NextResponse.json(
+            {
+                error: {
+                    code: 'LEGACY_COMPATIBILITY_ERROR',
+                    message: `Legacy /api/checkout/[id] failed. Use ${CANONICAL_ROUTE}?id=... instead.`,
+                },
+            },
+            { status: 500, headers: legacyHeaders() },
+        );
     }
 }

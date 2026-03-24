@@ -1,215 +1,434 @@
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Hero from "@/components/Hero";
-import FeatureSection, { FeatureCard } from "@/components/FeatureSection";
-import CodeBlock from "@/components/CodeBlock";
 import BlurReveal from "@/components/BlurReveal";
+import CodeBlock from "@/components/CodeBlock";
+import LandingTokenRow from "@/components/LandingTokenRow";
 import {
-  Code1,
-  Judge,
-  Flash,
   Lock,
+  Flash,
   Card,
   Hierarchy,
-  EmptyWallet,
-  SecuritySafe
+  Link21,
+  Notification,
+  Code1,
 } from "iconsax-reactjs";
 
+// ─── Feature card ────────────────────────────────────────────────────────────
+
+function FeatureCard({
+  icon: Icon,
+  title,
+  description,
+  delay = 0,
+}: {
+  icon: any;
+  title: string;
+  description: string;
+  delay?: number;
+}) {
+  return (
+    <BlurReveal delay={delay}>
+      <div className="p-8 bg-white rounded-[32px] border-2 border-black/8 hover:border-[var(--color-brand-orange)] hover:-translate-y-1 transition-all duration-300 h-full shadow-sm hover:shadow-[4px_4px_0px_0px_var(--color-brand-orange)]">
+        <div className="w-12 h-12 rounded-2xl bg-[var(--color-bg-base)] flex items-center justify-center mb-5 border border-black/8">
+          <Icon size={24} variant="Bold" className="text-[var(--color-brand-navy)]" />
+        </div>
+        <h3 className="text-lg font-bold mb-2 text-[var(--color-brand-navy)] tracking-tight">{title}</h3>
+        <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed font-medium">{description}</p>
+      </div>
+    </BlurReveal>
+  );
+}
+
+// ─── Pricing table cell ───────────────────────────────────────────────────────
+
+function PricingCell({
+  value,
+  highlight = false,
+}: {
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <td
+      className={`px-4 py-4 text-sm font-semibold text-center ${
+        highlight
+          ? "text-[var(--color-brand-navy)] bg-[var(--color-brand-orange)]/8"
+          : "text-[var(--color-text-secondary)]"
+      }`}
+    >
+      {value}
+    </td>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function Home() {
+  const curlSnippet = `curl -X POST https://api.usecoal.xyz/api/checkouts \\
+  -H "x-api-key: coal_live_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "amount": 49.99, "productName": "Pro Plan" }'
+
+# Response
+# {
+#   "id": "chk_abc123",
+#   "checkoutUrl": "https://usecoal.xyz/pay/checkout/chk_abc123"
+# }`;
+
   return (
     <main className="min-h-screen">
       <Navbar />
 
-      <Hero />
+      <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(255,92,22,0.16),transparent_30%),radial-gradient(circle_at_left_35%,rgba(67,98,209,0.14),transparent_26%),linear-gradient(180deg,#f8f5ef_0%,#f5f2ed_55%,#f5f2ed_100%)]">
+        <Hero />
 
-      {/* How It Works Section */}
-      <section id="how-it-works" className="py-24 bg-white">
-        <div className="container mx-auto px-6">
-          <div className="flex flex-col lg:flex-row items-center gap-16">
-            <div className="lg:w-1/2">
-              <BlurReveal>
-                <div className="inline-block mb-4 px-3 py-1 rounded-full bg-[var(--color-bg-base)] text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase">
-                  The Flow
-                </div>
-                <h2 className="text-4xl md:text-5xl font-bold mb-8 text-[var(--color-brand-navy)] tracking-tighter">
-                  How Coal Works
-                </h2>
-              </BlurReveal>
-              <div className="space-y-10">
-                <BlurReveal delay={0.1}>
-                  <div className="flex gap-6 group">
-                    <div className="w-14 h-14 rounded-2xl bg-[var(--color-brand-navy)] text-white flex items-center justify-center shrink-0 font-bold text-xl shadow-lg group-hover:scale-110 transition-transform duration-300">1</div>
-                    <div>
-                      <h3 className="text-2xl font-bold mb-2 text-[var(--color-brand-navy)]">Create a Checkout</h3>
-                      <p className="text-[var(--color-text-secondary)] text-lg leading-relaxed">
-                        Your app calls <code className="bg-gray-100 px-1 py-0.5 rounded text-sm text-pink-600 font-mono">POST /api/checkout</code>.
-                        Coal creates a session and returns a payment URL.
-                      </p>
-                    </div>
-                  </div>
-                </BlurReveal>
-                <BlurReveal delay={0.2}>
-                  <div className="flex gap-6 group">
-                    <div className="w-14 h-14 rounded-2xl bg-[var(--color-bg-base)] border-2 border-[var(--color-brand-navy)] text-[var(--color-brand-navy)] flex items-center justify-center shrink-0 font-bold text-xl group-hover:rotate-6 transition-transform duration-300">2</div>
-                    <div>
-                      <h3 className="text-2xl font-bold mb-2 text-[var(--color-brand-navy)]">User Pays with MNEE</h3>
-                      <p className="text-[var(--color-text-secondary)] text-lg leading-relaxed">
-                        The user sees a simple payment UI and pays with their MNEE wallet.
-                        Coal tracks the transaction.
-                      </p>
-                    </div>
-                  </div>
-                </BlurReveal>
-                <BlurReveal delay={0.3}>
-                  <div className="flex gap-6 group">
-                    <div className="w-14 h-14 rounded-2xl bg-[var(--color-brand-orange)] text-white flex items-center justify-center shrink-0 font-bold text-xl shadow-md group-hover:-translate-y-2 transition-transform duration-300">3</div>
-                    <div>
-                      <h3 className="text-2xl font-bold mb-2 text-[var(--color-brand-navy)]">Instant Split & Settle</h3>
-                      <p className="text-[var(--color-text-secondary)] text-lg leading-relaxed">
-                        Coal triggers the MNEE transfer, automatically splitting funds to all recipients.
-                        You get a webhook when it's done.
-                      </p>
-                    </div>
-                  </div>
-                </BlurReveal>
+        <section className="relative -mt-2 pb-20 md:-mt-6 md:pb-24">
+          <div className="container mx-auto px-6">
+            <BlurReveal>
+              <div className="mx-auto flex max-w-5xl flex-col items-center gap-8">
+                <p className="text-center text-sm font-bold uppercase tracking-[0.22em] text-[var(--color-text-secondary)]">
+                  Accept payments in
+                </p>
+                <LandingTokenRow />
               </div>
+            </BlurReveal>
+          </div>
+        </section>
+      </div>
+
+      <section id="how-it-works" className="py-24 bg-[var(--color-bg-base)]">
+        <div className="container mx-auto px-6">
+          <BlurReveal>
+            <div className="inline-block mb-4 px-3 py-1 rounded-full bg-white text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-black/8">
+              The Flow
             </div>
-            <div className="lg:w-1/2 w-full">
-              <BlurReveal delay={0.2} xOffset={20}>
-                <CodeBlock className="language-json">
-                  {`{
-  "id": "cs_test_a1b2c3d4",
-  "object": "checkout.session",
-  "amount": 5000,
-  "currency": "MNEE",
-  "status": "pending",
-  "customer_details": {
-    "email": "customer@example.com"
-  },
-  "payment_link": "https://usecoal.xyz/pl_123..."
-}`}
+            <h2 className="text-4xl md:text-5xl font-bold mb-16 text-[var(--color-brand-navy)] tracking-tighter max-w-xl">
+              Up and running in 3 steps
+            </h2>
+          </BlurReveal>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <BlurReveal delay={0.1}>
+              <div className="flex flex-col gap-5 group">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--color-brand-navy)] text-white flex items-center justify-center shrink-0 font-bold text-xl shadow-[4px_4px_0px_0px_var(--color-brand-orange)] group-hover:scale-110 transition-transform duration-300">
+                  1
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-2 text-[var(--color-brand-navy)]">
+                    Create a payment link
+                  </h3>
+                  <p className="text-[var(--color-text-secondary)] leading-relaxed font-medium">
+                    Set up your product in the console. Name it, set the amount, choose your settlement wallet — done in seconds.
+                  </p>
+                </div>
+              </div>
+            </BlurReveal>
+
+            <BlurReveal delay={0.2}>
+              <div className="flex flex-col gap-5 group">
+                <div className="w-14 h-14 rounded-2xl bg-white border-2 border-[var(--color-brand-navy)] text-[var(--color-brand-navy)] flex items-center justify-center shrink-0 font-bold text-xl shadow-[4px_4px_0px_0px_var(--color-brand-navy)] group-hover:scale-110 transition-transform duration-300">
+                  2
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-2 text-[var(--color-brand-navy)]">
+                    Customer pays with supported tokens
+                  </h3>
+                  <p className="text-[var(--color-text-secondary)] leading-relaxed font-medium">
+                    Your customer connects their wallet or pays with a card. Routing moves supported assets into your chosen settlement path on Base.
+                  </p>
+                </div>
+              </div>
+            </BlurReveal>
+
+            <BlurReveal delay={0.3}>
+              <div className="flex flex-col gap-5 group">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--color-brand-orange)] text-white flex items-center justify-center shrink-0 font-bold text-xl shadow-[4px_4px_0px_0px_#c73f00] group-hover:scale-110 transition-transform duration-300">
+                  3
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-2 text-[var(--color-brand-navy)]">
+                    Funds arrive in your wallet
+                  </h3>
+                  <p className="text-[var(--color-text-secondary)] leading-relaxed font-medium">
+                    Settlement lands on-chain in ~2 seconds. A signed webhook fires immediately so your backend can fulfil the order.
+                  </p>
+                </div>
+              </div>
+            </BlurReveal>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" className="py-24 bg-white">
+        <div className="container mx-auto px-6">
+          <BlurReveal>
+            <div className="inline-block mb-4 px-3 py-1 rounded-full bg-[var(--color-bg-base)] text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase">
+              Why Coal
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold mb-16 text-[var(--color-brand-navy)] tracking-tighter max-w-xl">
+              Everything you need, nothing you don't
+            </h2>
+          </BlurReveal>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <FeatureCard
+              icon={Lock}
+              title="Non-custodial"
+              description="Funds flow directly to your wallet. Coal never holds them — no escrow, no counterparty risk, no waiting."
+              delay={0.05}
+            />
+            <FeatureCard
+              icon={Flash}
+              title="Flexible token routing"
+              description="Route supported ERC-20 payments into your preferred settlement asset on Base without forcing a custom payment flow."
+              delay={0.1}
+            />
+            <FeatureCard
+              icon={Card}
+              title="Pay with card"
+              description="MoonPay on-ramp is built in. Customers who don't have crypto can still pay with Visa or Mastercard."
+              delay={0.15}
+            />
+            <FeatureCard
+              icon={Notification}
+              title="Webhook events"
+              description="Every payment fires a signed webhook so your backend can fulfil orders, update databases, or trigger workflows in real time."
+              delay={0.2}
+            />
+            <FeatureCard
+              icon={Hierarchy}
+              title="Revenue splits"
+              description="Configure automatic multi-party payouts once. Funds split instantly between platform, creator, partner, and DAO."
+              delay={0.25}
+            />
+            <FeatureCard
+              icon={Code1}
+              title="x402 Paywalls"
+              description="Gate any HTTP resource with a single response header. Charge per-request without building a full checkout flow."
+              delay={0.3}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" className="py-24 bg-[var(--color-bg-base)]">
+        <div className="container mx-auto px-6">
+
+          {/* Header */}
+          <BlurReveal>
+            <div className="inline-block mb-4 px-3 py-1 rounded-full bg-white text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-black/8">
+              Pricing
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-[var(--color-brand-navy)] tracking-tighter">
+              Stripe charges 2.9%.<br />Coal doesn't.
+            </h2>
+            <p className="text-[var(--color-text-secondary)] text-lg font-medium mb-16 max-w-xl">
+              No transaction fees. Ever. You only pay gas — less than $0.01 per payment on Base.
+            </p>
+          </BlurReveal>
+
+          {/* Plan cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+
+            {/* Starter */}
+            <BlurReveal delay={0.05}>
+              <div className="flex flex-col p-8 rounded-[32px] bg-white border-2 border-black/8 h-full hover:border-black/20 transition-all">
+                <div className="mb-6">
+                  <p className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-widest mb-2">Starter</p>
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-5xl font-black text-[var(--color-brand-navy)] tracking-tighter">Free</span>
+                  </div>
+                  <p className="text-sm text-[var(--color-text-secondary)] font-medium">Forever. No credit card required.</p>
+                </div>
+                <ul className="flex flex-col gap-3 mb-8 flex-1">
+                  {[
+                    "Unlimited payment links",
+                    "Unlimited checkout sessions",
+                    "Webhook notifications",
+                    "USDC or configured settlement token",
+                    "MoonPay card payments",
+                    "1 team seat",
+                    "Community support",
+                  ].map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm font-medium text-[var(--color-brand-navy)]">
+                      <span className="w-4 h-4 rounded-full bg-[var(--color-bg-base)] border border-black/10 flex items-center justify-center shrink-0 text-[10px] text-[var(--color-brand-navy)] font-black">✓</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <a href="/signup" className="mt-auto block text-center py-3 px-6 rounded-full border-2 border-[var(--color-brand-navy)] font-bold text-sm text-[var(--color-brand-navy)] hover:bg-[var(--color-brand-navy)] hover:text-white transition-all">
+                  Get started free
+                </a>
+              </div>
+            </BlurReveal>
+
+            {/* Pro — highlighted */}
+            <BlurReveal delay={0.1}>
+              <div className="flex flex-col p-8 rounded-[32px] bg-[var(--color-brand-navy)] border-2 border-[var(--color-brand-navy)] shadow-[6px_6px_0px_0px_var(--color-brand-orange)] h-full relative">
+                <div className="absolute top-6 right-6">
+                  <span className="px-3 py-1 rounded-full bg-[var(--color-brand-orange)] text-white text-[10px] font-black uppercase tracking-wider">Most popular</span>
+                </div>
+                <div className="mb-6">
+                  <p className="text-xs font-bold text-white/50 uppercase tracking-widest mb-2">Pro</p>
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-5xl font-black text-white tracking-tighter">$29</span>
+                    <span className="text-white/50 font-medium">/month</span>
+                  </div>
+                  <p className="text-sm text-white/50 font-medium">Billed monthly. Cancel anytime.</p>
+                </div>
+                <ul className="flex flex-col gap-3 mb-8 flex-1">
+                  {[
+                    "Everything in Starter",
+                    "Revenue splits",
+                    "x402 HTTP paywalls",
+                    "Advanced analytics + CSV export",
+                    "Up to 5 team seats",
+                    "Priority email support",
+                    "Higher API rate limits",
+                  ].map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm font-medium text-white">
+                      <span className="w-4 h-4 rounded-full bg-[var(--color-brand-orange)]/20 border border-[var(--color-brand-orange)]/40 flex items-center justify-center shrink-0 text-[10px] text-[var(--color-brand-orange)] font-black">✓</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <a href="/signup" className="mt-auto block text-center py-3 px-6 rounded-full bg-[var(--color-brand-orange)] border-2 border-[var(--color-brand-orange)] font-bold text-sm text-white shadow-[3px_3px_0px_0px_#c73f00] hover:shadow-[1px_1px_0px_0px_#c73f00] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
+                  Start free trial
+                </a>
+              </div>
+            </BlurReveal>
+
+            {/* Enterprise */}
+            <BlurReveal delay={0.15}>
+              <div className="flex flex-col p-8 rounded-[32px] bg-white border-2 border-black/8 h-full hover:border-black/20 transition-all">
+                <div className="mb-6">
+                  <p className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-widest mb-2">Enterprise</p>
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-5xl font-black text-[var(--color-brand-navy)] tracking-tighter">Custom</span>
+                  </div>
+                  <p className="text-sm text-[var(--color-text-secondary)] font-medium">Volume pricing. Dedicated SLA.</p>
+                </div>
+                <ul className="flex flex-col gap-3 mb-8 flex-1">
+                  {[
+                    "Everything in Pro",
+                    "Unlimited team seats",
+                    "White-label checkout",
+                    "Configured settlement tokens",
+                    "99.9% uptime SLA",
+                    "Dedicated support channel",
+                    "Volume discounts",
+                  ].map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm font-medium text-[var(--color-brand-navy)]">
+                      <span className="w-4 h-4 rounded-full bg-[var(--color-bg-base)] border border-black/10 flex items-center justify-center shrink-0 text-[10px] text-[var(--color-brand-navy)] font-black">✓</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <a href="mailto:hello@usecoal.xyz" className="mt-auto block text-center py-3 px-6 rounded-full border-2 border-[var(--color-brand-navy)] font-bold text-sm text-[var(--color-brand-navy)] hover:bg-[var(--color-brand-navy)] hover:text-white transition-all">
+                  Talk to us
+                </a>
+              </div>
+            </BlurReveal>
+          </div>
+
+          {/* Gas fee callout */}
+          <BlurReveal delay={0.2}>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white rounded-[20px] border-2 border-black/8 px-8 py-5 mb-16">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⛽</span>
+                <div>
+                  <p className="font-bold text-[var(--color-brand-navy)] text-sm">Gas fees only — no platform cut</p>
+                  <p className="text-xs text-[var(--color-text-secondary)] font-medium">Every plan pays &lt;$0.01 in Base gas per transaction. Coal takes 0%.</p>
+                </div>
+              </div>
+              <span className="shrink-0 px-4 py-1.5 rounded-full bg-green-50 border border-green-200 text-green-700 text-xs font-black uppercase tracking-wide">0% fees</span>
+            </div>
+          </BlurReveal>
+
+          {/* Comparison table */}
+          <BlurReveal delay={0.25}>
+            <p className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-widest mb-6">vs. the alternatives</p>
+            <div className="overflow-x-auto rounded-[28px] border-2 border-black/8 bg-white shadow-sm">
+              <table className="w-full min-w-[560px] text-left border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-black/8">
+                    <th className="px-4 py-4 text-sm font-bold text-[var(--color-text-secondary)] w-1/4"></th>
+                    <th className="px-4 py-4 text-sm font-black text-center text-[var(--color-brand-navy)] bg-[var(--color-brand-orange)]/8">Coal</th>
+                    <th className="px-4 py-4 text-sm font-bold text-center text-[var(--color-text-secondary)]">Stripe</th>
+                    <th className="px-4 py-4 text-sm font-bold text-center text-[var(--color-text-secondary)]">Traditional Crypto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-black/5">
+                    <td className="px-4 py-4 text-sm font-bold text-[var(--color-brand-navy)]">Transaction fee</td>
+                    <PricingCell value="&lt;$0.01 gas" highlight />
+                    <PricingCell value="2.9% + 30¢" />
+                    <PricingCell value="Variable" />
+                  </tr>
+                  <tr className="border-b border-black/5">
+                    <td className="px-4 py-4 text-sm font-bold text-[var(--color-brand-navy)]">Settlement time</td>
+                    <PricingCell value="~2 seconds" highlight />
+                    <PricingCell value="2–7 days" />
+                    <PricingCell value="Minutes–hours" />
+                  </tr>
+                  <tr className="border-b border-black/5">
+                    <td className="px-4 py-4 text-sm font-bold text-[var(--color-brand-navy)]">Custodial</td>
+                    <PricingCell value="No" highlight />
+                    <PricingCell value="Yes" />
+                    <PricingCell value="Yes (exchanges)" />
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-4 text-sm font-bold text-[var(--color-brand-navy)]">Code integration</td>
+                    <PricingCell value="5 lines" highlight />
+                    <PricingCell value="~50 lines" />
+                    <PricingCell value="Complex" />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </BlurReveal>
+
+        </div>
+      </section>
+
+      <section className="py-24 bg-[var(--color-brand-navy)] relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[var(--color-brand-orange)]/10 rounded-full blur-[120px] translate-x-1/3 -translate-y-1/3 pointer-events-none" />
+
+        <div className="container mx-auto px-6 relative z-10">
+          <div className="flex flex-col lg:flex-row items-start gap-16">
+            <div className="lg:w-2/5">
+              <BlurReveal>
+                <div className="inline-block mb-4 px-3 py-1 rounded-full bg-white/10 text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-white/10">
+                  Integration
+                </div>
+                <h2 className="text-4xl md:text-5xl font-bold mb-6 text-white tracking-tighter">
+                  One API call.<br />That's it.
+                </h2>
+                <p className="text-white/60 text-lg leading-relaxed font-medium mb-8">
+                  POST one endpoint. Get back a hosted checkout URL. Redirect your customer.
+                  Webhooks are available when you need fulfillment hooks, and you can skip SDKs at launch.
+                </p>
+                <div className="flex items-center gap-4">
+                  <Link21 size={20} variant="Bold" className="text-[var(--color-brand-orange)] shrink-0" />
+                  <a
+                    href="/docs"
+                    className="text-white/80 hover:text-white font-bold underline underline-offset-4 transition-colors"
+                  >
+                    Read the full API docs →
+                  </a>
+                </div>
+              </BlurReveal>
+            </div>
+
+            <div className="lg:w-3/5 w-full">
+              <BlurReveal delay={0.2}>
+                <CodeBlock className="language-bash">
+                  {curlSnippet}
                 </CodeBlock>
               </BlurReveal>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* The Problem Section */}
-      <FeatureSection title="The Problem" id="features">
-        <FeatureCard
-          icon={Code1}
-          title="Custom Contracts"
-          description="Apps today must write custom smart contracts for every new integration, introducing security risks and delay."
-          className="rotate-[-2deg] md:translate-y-4"
-          delay={0.1}
-        />
-        <FeatureCard
-          icon={Judge}
-          title="Manual Splits"
-          description="Handling payment splitting manually is error-prone and requires complex reconciliation logic."
-          className="rotate-[3deg] z-10"
-          delay={0.2}
-        />
-        <FeatureCard
-          icon={Flash}
-          title="Slow Integration"
-          description="Rebuilding checkout logic for every app slows teams down and breaks the payment experience."
-          className="rotate-[-4deg] md:translate-y-8"
-          delay={0.3}
-        />
-      </FeatureSection>
-
-      {/* What You Can Build Section */}
-      <section className="py-32 bg-[var(--color-brand-navy)] text-white relative overflow-hidden">
-
-        <div className="container mx-auto px-6 relative z-10">
-          <BlurReveal>
-            <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 tracking-tighter">
-              What You Can Build With Coal
-            </h2>
-          </BlurReveal>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <BlurReveal delay={0.1} className="h-full">
-              <div className="p-10 rounded-[40px] bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-all duration-300 group h-full">
-                <div className="w-16 h-16 rounded-2xl bg-[var(--color-brand-orange)] flex items-center justify-center mb-6 border-2 border-[var(--color-brand-navy)] shadow-[4px_4px_0px_0px_#180D43] group-hover:rotate-6 transition-transform duration-300">
-                  <Card size={32} className="text-white" variant="Bold" />
-                </div>
-                <h3 className="text-2xl font-bold mb-3 tracking-tight text-white">In-App Checkouts</h3>
-                <p className="text-white/60 leading-relaxed font-medium">Sell digital goods, credits, or features inside your app seamlessly.</p>
-              </div>
-            </BlurReveal>
-
-            <BlurReveal delay={0.2} className="h-full">
-              <div className="p-10 rounded-[40px] bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-all duration-300 group h-full">
-                <div className="w-16 h-16 rounded-2xl bg-[var(--color-brand-orange)] flex items-center justify-center mb-6 border-2 border-[var(--color-brand-navy)] shadow-[4px_4px_0px_0px_#180D43] group-hover:rotate-6 transition-transform duration-300">
-                  <Lock size={32} className="text-white" variant="Bold" />
-                </div>
-                <h3 className="text-2xl font-bold mb-3 tracking-tight text-white">Paywalls</h3>
-                <p className="text-white/60 leading-relaxed font-medium">Lock content or APIs behind MNEE payments tailored to your needs.</p>
-              </div>
-            </BlurReveal>
-
-            <BlurReveal delay={0.3} className="h-full">
-              <div className="p-10 rounded-[40px] bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-all duration-300 group h-full">
-                <div className="w-16 h-16 rounded-2xl bg-[var(--color-brand-orange)] flex items-center justify-center mb-6 border-2 border-[var(--color-brand-navy)] shadow-[4px_4px_0px_0px_#180D43] group-hover:rotate-6 transition-transform duration-300">
-                  <Hierarchy size={32} className="text-white" variant="Bold" />
-                </div>
-                <h3 className="text-2xl font-bold mb-3 tracking-tight text-white">Revenue Splits</h3>
-                <p className="text-white/60 leading-relaxed font-medium">Automatically split payments between Platform, Creator, Partner, and DAO.</p>
-              </div>
-            </BlurReveal>
-
-            <BlurReveal delay={0.4} className="h-full">
-              <div className="p-10 rounded-[40px] bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-all duration-300 group h-full">
-                <div className="w-16 h-16 rounded-2xl bg-[var(--color-brand-orange)] flex items-center justify-center mb-6 border-2 border-[var(--color-brand-navy)] shadow-[4px_4px_0px_0px_#180D43] group-hover:rotate-6 transition-transform duration-300">
-                  <EmptyWallet size={32} className="text-white" variant="Bold" />
-                </div>
-                <h3 className="text-2xl font-bold mb-3 tracking-tight text-white">Simple Payouts</h3>
-                <p className="text-white/60 leading-relaxed font-medium">Send funds directly to settlement wallets. No checking, no custody risk.</p>
-              </div>
-            </BlurReveal>
-          </div>
-        </div>
-      </section>
-
-      {/* Security Section */}
-      <section className="py-24">
-        <div className="container mx-auto px-6 text-center max-w-4xl">
-          <BlurReveal>
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-white text-[var(--color-brand-orange)] mb-10 border-2 border-[var(--color-brand-navy)] shadow-[6px_6px_0px_0px_#180D43] rotate-3 hover:rotate-6 transition-transform">
-              <SecuritySafe size={42} variant="Bold" />
-            </div>
-            <h2 className="text-4xl font-bold mb-6 text-[var(--color-brand-navy)] tracking-tighter">
-              Security & Trust
-            </h2>
-            <p className="text-xl text-[var(--color-text-secondary)] mb-16 max-w-2xl mx-auto">
-              Coal never holds user funds. Payments settle directly on-chain.
-              Merchants remain in full control. Built on audited smart contracts.
-            </p>
-          </BlurReveal>
-
-          <BlurReveal delay={0.2}>
-            <div className="bg-white rounded-[40px] border-2 border-black/5 p-10 md:p-14">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-12 text-left">
-                <div className="group">
-                  <div className="w-12 h-1 bg-[var(--color-brand-orange)] mb-6 rounded-full group-hover:w-20 transition-all"></div>
-                  <h4 className="font-bold text-2xl mb-2 text-[var(--color-brand-navy)] tracking-tight">Non-Custodial</h4>
-                  <p className="text-[var(--color-text-secondary)] font-medium">No middleman wallet.</p>
-                </div>
-                <div className="group">
-                  <div className="w-12 h-1 bg-[var(--color-brand-blue)] mb-6 rounded-full group-hover:w-20 transition-all"></div>
-                  <h4 className="font-bold text-2xl mb-2 text-[var(--color-brand-navy)] tracking-tight">On-Chain</h4>
-                  <p className="text-[var(--color-text-secondary)] font-medium">Verifiable transactions.</p>
-                </div>
-                <div className="group">
-                  <div className="w-12 h-1 bg-[#22c55e] mb-6 rounded-full group-hover:w-20 transition-all"></div>
-                  <h4 className="font-bold text-2xl mb-2 text-[var(--color-brand-navy)] tracking-tight">Instant</h4>
-                  <p className="text-[var(--color-text-secondary)] font-medium">No settlement delays.</p>
-                </div>
-              </div>
-            </div>
-          </BlurReveal>
         </div>
       </section>
 

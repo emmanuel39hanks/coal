@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { getAuthUser } from '@/lib/privy';
+import { logger } from '@/lib/logger';
 
 // DELETE /api/console/keys/[id] - Revoke an API key
 export async function DELETE(
@@ -9,11 +9,8 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
-
-        if (!session) {
+        const user = await getAuthUser(request);
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -23,7 +20,7 @@ export async function DELETE(
         const key = await prisma.apiKey.findFirst({
             where: {
                 id,
-                merchantId: session.user.id,
+                merchantId: user.id,
                 revokedAt: null
             }
         });
@@ -41,7 +38,7 @@ export async function DELETE(
         return NextResponse.json({ success: true, message: 'Key revoked successfully' });
 
     } catch (error) {
-        console.error("Revoke Key Error:", error);
+        logger.error({ err: error }, 'Revoke key error');
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

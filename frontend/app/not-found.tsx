@@ -34,12 +34,20 @@ export default function NotFound() {
                         Using a headless API doesn't mean you should lose your head. Let's get you back on track.
                     </p>
 
-                    <Link href="/">
-                        <button className="group bg-black text-white px-8 py-4 rounded-full text-lg font-bold flex items-center gap-2 shadow-[6px_6px_0px_0px_#FF5C16] hover:shadow-[3px_3px_0px_0px_#FF5C16] hover:translate-x-[3px] hover:translate-y-[3px] transition-all active:translate-x-[6px] active:translate-y-[6px] active:shadow-none">
-                            Go Home
-                            <ArrowRight size={20} variant="Linear" className="group-hover:translate-x-1 transition-transform" />
-                        </button>
-                    </Link>
+                    <div className="flex items-center gap-4 flex-wrap justify-center">
+                        <Link href="/">
+                            <button className="group bg-black text-white px-8 py-4 rounded-full text-lg font-bold flex items-center gap-2 shadow-[6px_6px_0px_0px_#FF5C16] hover:shadow-[3px_3px_0px_0px_#FF5C16] hover:translate-x-[3px] hover:translate-y-[3px] transition-all active:translate-x-[6px] active:translate-y-[6px] active:shadow-none">
+                                Go Home
+                                <ArrowRight size={20} variant="Linear" className="group-hover:translate-x-1 transition-transform" />
+                            </button>
+                        </Link>
+
+                        <Link href="/docs">
+                            <button className="px-8 py-4 rounded-full text-lg font-bold border-2 border-[var(--color-brand-navy)] text-[var(--color-brand-navy)] hover:bg-[var(--color-brand-navy)] hover:text-white transition-all">
+                                View Docs
+                            </button>
+                        </Link>
+                    </div>
                 </motion.div>
             </div>
         </div>

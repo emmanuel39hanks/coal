@@ -1,22 +1,17 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth'; // Better Auth Server
-import { headers } from 'next/headers';
+import { getAuthUser } from '@/lib/privy';
+import { logger } from '@/lib/logger';
 
 export async function GET(request: Request) {
     try {
-        // 1. Session Auth
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
-
-        if (!session) {
+        const user = await getAuthUser(request);
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const userId = session.user.id;
+        const userId = user.id;
 
-        // 2. Fetch Stats
         // Total Volume (Sum of confirmed transactions)
         const totalVolume = await prisma.transaction.aggregate({
             where: {
@@ -64,7 +59,7 @@ export async function GET(request: Request) {
         });
 
     } catch (error) {
-        console.error("Stats Error:", error);
+        logger.error({ err: error }, 'Stats error');
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

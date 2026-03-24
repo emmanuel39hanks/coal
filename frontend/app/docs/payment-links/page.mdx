@@ -1,28 +1,243 @@
 
 # Payment Links
 
-Payment Links are the fastest way to accept payments with Coal. They allow you to sell products or accept donations without writing a single line of code.
+Payment Links are shareable URLs that let you accept crypto payments without writing a single line of code. Send one in an email, post it on social media, or drop it in a Notion page — anyone who clicks it lands on a hosted Coal checkout page branded with your merchant profile.
 
-> [!NOTE]
-> Payment Links are perfect for no-code use cases, newsletters, social media, and direct messages.
+This is a console-managed surface. The public merchant API uses `x-api-key`; these `/api/console/*` routes use Privy Bearer tokens.
 
-## How it works
+> **Note:** Payment Links are ideal for direct sales, content creators, and no-code use cases. If you need programmatic control over the checkout flow, see [Checkout Sessions](/docs/checkout-sessions).
 
-1.  **Create a Link**: Go to the **Console**, navigate to **Payment Links**, and click "Create New".
-2.  **Configure**: Choose a specific product to sell, or leave it open for donations (flexible amount).
-3.  **Share**: Copy the generated URL (e.g. `usecoal.xyz/pay/my-product`) and send it to your customers.
+---
 
-## Use Cases
+## Types of Payment Links
 
-### Selling Products
-If you have a fixed price item (like the "Super Coffee" in our demo), you can link a Payment Link directly to a **Product**. When the user visits the link, they will see the product details and price automatically.
+### Product-Linked
 
-### Accepting Donations
-If you select "Donation" or leave the product field empty, the user can enter any amount they wish to pay. This is ideal for:
-*   Content creators accepting tips.
-*   Open source projects.
-*   Charity causes.
+A product-linked link is tied to a specific item in your product catalog. The checkout page automatically displays the product name, image, description, and fixed price. The buyer cannot change the amount.
 
-## Customization
+Use this for: fixed-price digital goods, SaaS plan purchases, event tickets.
 
-Payment Links automatically use your **Merchant Profile** settings (Name, Logo) to brand the checkout page, ensuring a trusted experience for your users.
+### Flexible (Custom Amount)
+
+A flexible link has no product attached. The buyer enters any amount they choose before paying. You can provide a title and description to give context.
+
+Use this for: donations, tips, pay-what-you-want offers, open-source sponsorships.
+
+---
+
+## Creating a Payment Link in the Console
+
+1. Go to the **Console** and navigate to **Payment Links** in the sidebar.
+2. Click **Create Link**.
+3. **Choose a type:**
+   - Select a product from the dropdown to create a product-linked link.
+   - Leave the product field empty to create a flexible link.
+4. **Set a slug** (optional). The slug becomes the last segment of your URL: `usecoal.xyz/pay/{slug}`. If you leave it blank, Coal generates a random one for you.
+5. For flexible links, add a **Title** and **Description** so buyers know what they are paying for.
+6. Click **Create** — your link is live instantly.
+
+---
+
+## Creating a Payment Link via API
+
+**`POST /api/console/links`**
+
+Requires a valid session (authenticated merchant). All requests must include:
+
+```
+Authorization: Bearer <Privy JWT>
+```
+
+### Product-linked link
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -d '{
+    "productId": "clxxx",
+    "slug": "pro-plan"
+  }'
+```
+
+### Flexible link
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -d '{
+    "title": "Donation",
+    "description": "Support our open-source project",
+    "slug": "donate"
+  }'
+```
+
+### Request body parameters
+
+| Field         | Type     | Required | Description                                                             |
+|:--------------|:---------|:---------|:------------------------------------------------------------------------|
+| `productId`   | `string` | No       | ID of a product from your catalog. Mutually exclusive with `title`.     |
+| `slug`        | `string` | No       | Custom URL-safe slug. Auto-generated if omitted.                        |
+| `title`       | `string` | No       | Display title for flexible links.                                       |
+| `description` | `string` | No       | Description shown on the checkout page.                                 |
+
+### Response
+
+```json
+{
+  "id": "clz9abc123",
+  "slug": "pro-plan",
+  "url": "https://usecoal.xyz/pay/pro-plan",
+  "active": true,
+  "productId": "clxxx",
+  "title": null,
+  "description": null,
+  "createdAt": "2026-03-22T10:00:00.000Z"
+}
+```
+
+---
+
+## URL Structure
+
+Every payment link resolves to:
+
+```
+https://usecoal.xyz/pay/{slug}
+```
+
+The slug must be URL-safe (letters, numbers, hyphens). Slugs are globally unique across Coal — if a slug is already taken, the API returns a `409 SLUG_TAKEN` error.
+
+---
+
+## Listing Payment Links
+
+**`GET /api/console/links`**
+
+Returns all active links for your account, including the resolved product name and price.
+
+```bash
+curl https://api.usecoal.xyz/api/console/links \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+```json
+{
+  "links": [
+    {
+      "id": "clz9abc123",
+      "slug": "pro-plan",
+      "url": "https://usecoal.xyz/pay/pro-plan",
+      "productName": "Pro Plan",
+      "productImage": "https://cdn.example.com/pro.png",
+      "price": "49.00",
+      "active": true,
+      "createdAt": "2026-03-22T10:00:00.000Z"
+    },
+    {
+      "id": "clz9def456",
+      "slug": "donate",
+      "url": "https://usecoal.xyz/pay/donate",
+      "productName": "Donation",
+      "productImage": null,
+      "price": "Flexible",
+      "active": true,
+      "createdAt": "2026-03-20T08:30:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+## Deleting a Payment Link
+
+**`DELETE /api/console/links/:id`**
+
+Links are soft-deleted — the record is kept in the database but `active` is set to `false`. The URL immediately stops resolving for buyers.
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/links/clz9abc123 \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+Returns the updated link object with `active: false`.
+
+---
+
+## Node.js Examples
+
+### Create a product-linked link
+
+```typescript
+const response = await fetch('https://api.usecoal.xyz/api/console/links', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer <Privy JWT>',
+  },
+  body: JSON.stringify({
+    productId: 'clxxx',
+    slug: 'pro-plan',
+  }),
+});
+
+const link = await response.json();
+console.log(link.url); // https://usecoal.xyz/pay/pro-plan
+```
+
+### Create a flexible donation link
+
+```typescript
+const response = await fetch('https://api.usecoal.xyz/api/console/links', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer <Privy JWT>',
+  },
+  body: JSON.stringify({
+    title: 'Support Us',
+    description: 'Every payment helps keep the servers on.',
+    slug: 'support',
+  }),
+});
+
+const link = await response.json();
+console.log(link.url); // https://usecoal.xyz/pay/support
+```
+
+### List and delete links
+
+```typescript
+// List
+const res = await fetch('https://api.usecoal.xyz/api/console/links', {
+  headers: { 'Authorization': 'Bearer <Privy JWT>' },
+});
+const { links } = await res.json();
+
+// Delete the first link
+const deleteRes = await fetch(
+  `https://api.usecoal.xyz/api/console/links/${links[0].id}`,
+  {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer <Privy JWT>' },
+  }
+);
+```
+
+---
+
+## Embedding Payment Links
+
+Payment links are plain URLs — you can embed them anywhere a hyperlink works.
+
+**Email campaigns** — Link a button to `https://usecoal.xyz/pay/your-slug`. No redirects, no tracking pixels required.
+
+**Social media** — Post the link directly. The checkout page has Open Graph meta tags so it renders a preview card on Twitter/X, LinkedIn, and Discord.
+
+**Notion / Confluence** — Paste the URL as a linked button block. Notion automatically unfurls it as a bookmark card.
+
+**QR codes** — Use any QR generator (e.g. `qrcode.react`) to encode the URL for print materials or event badges.
+
+**Direct messages** — Drop the URL in Telegram, Slack, or iMessage. Coal handles the rest.

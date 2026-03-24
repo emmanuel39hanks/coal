@@ -73,3 +73,7 @@ html {
 .card-rounded {
   border-radius: 48px;
 }
+
+@keyframes shimmer {
+  100% { transform: translateX(200%); }
+}

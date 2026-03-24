@@ -1,3 +1,5 @@
+import './env'; // Validate required env vars at startup
+import './0g/env'; // Validate optional 0G config and surface warnings when enabled
 import { PrismaClient } from "@prisma/client";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { neonConfig } from "@neondatabase/serverless";

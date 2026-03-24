@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Add, Key, Copy, CloseCircle, ShieldTick, TickCircle, Trash, Warning2 } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
-import { fetcher, API_URL } from '@/lib/api';
+import { useApi } from '@/lib/api';
+import { Skeleton } from '@/components/Skeleton';
 
 export default function KeysPage() {
+    const { fetcher, request } = useApi();
     const { data, error, isLoading } = useSWR('/api/console/keys', fetcher);
     // Keys state
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -26,19 +28,13 @@ export default function KeysPage() {
     const handleCreate = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/console/keys`, {
+            const json = await request('/api/console/keys', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ name: createName })
             });
-
-            if (res.ok) {
-                const json = await res.json();
-                setCreatedKey(json.key);
-                mutate('/api/console/keys');
-                setCreateName('');
-            }
+            setCreatedKey(json.key);
+            mutate('/api/console/keys');
+            setCreateName('');
         } catch (e) {
             console.error(e);
         } finally {
@@ -51,17 +47,9 @@ export default function KeysPage() {
 
         setRevoking(true);
         try {
-            const res = await fetch(`${API_URL}/api/console/keys/${revokeModal.keyId}`, {
-                method: 'DELETE',
-                credentials: 'include',
-            });
-
-            if (res.ok) {
-                mutate('/api/console/keys');
-                setRevokeModal({ isOpen: false, keyId: null, keyName: '' });
-            } else {
-                console.error('Failed to revoke key');
-            }
+            await request(`/api/console/keys/${revokeModal.keyId}`, { method: 'DELETE' });
+            mutate('/api/console/keys');
+            setRevokeModal({ isOpen: false, keyId: null, keyName: '' });
         } catch (e) {
             console.error('Error revoking key:', e);
         } finally {
@@ -119,7 +107,21 @@ export default function KeysPage() {
                         </thead>
                         <tbody className="text-sm font-medium text-[var(--color-brand-navy)]">
                             {isLoading ? (
-                                <tr><td colSpan={5} className="text-center py-6">Loading keys...</td></tr>
+                                Array.from({ length: 3 }).map((_, i) => (
+                                    <tr key={i} className="group">
+                                        <td className="py-4 pl-4 rounded-l-xl">
+                                            <Skeleton className="h-4 w-32 rounded-full" />
+                                        </td>
+                                        <td className="py-4">
+                                            <Skeleton className="h-3.5 w-28 rounded-full font-mono" />
+                                        </td>
+                                        <td className="py-4"><Skeleton className="h-3.5 w-20 rounded-full" /></td>
+                                        <td className="py-4"><Skeleton className="h-3.5 w-16 rounded-full" /></td>
+                                        <td className="py-4 pr-4 rounded-r-xl text-right">
+                                            <Skeleton className="h-6 w-16 rounded-full ml-auto" />
+                                        </td>
+                                    </tr>
+                                ))
                             ) : keys.length === 0 ? (
                                 <tr><td colSpan={5} className="text-center py-6 text-gray-400">No active keys</td></tr>
                             ) : (

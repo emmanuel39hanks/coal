@@ -1,42 +1,61 @@
 'use client';
 
 import * as React from 'react';
-import { WagmiProvider, createConfig, http } from "wagmi";
-import { mainnet, sepolia } from "wagmi/chains";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ConnectKitProvider, getDefaultConfig } from "connectkit";
-
-const config = createConfig(
-    getDefaultConfig({
-        // Your dApps chains
-        chains: [mainnet, sepolia],
-        transports: {
-            // RPC URL for each chain
-            [mainnet.id]: http(), // Fallback to public RPCs
-            [sepolia.id]: http(),
-        },
-
-        // Required API Keys
-        walletConnectProjectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "YOUR_PROJECT_ID",
-
-        // Required App Info
-        appName: "Coal Payment App",
-
-        // Optional App Info
-        appDescription: "Accept MNEE stablecoin. Split money automatically. Settle instantly.",
-        appUrl: "https://usecoal.xyz", // your app's url
-        appIcon: "https://usecoal.xyz/logo.png", // your app's icon
-    }),
-);
+import { ToastProvider } from './Toast';
+import { PrivyProvider } from '@privy-io/react-auth';
+import type { PrivyClientConfig } from '@privy-io/react-auth';
+import { base, baseSepolia } from 'viem/chains';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
 
+const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+const defaultChain = process.env.NEXT_PUBLIC_CHAIN_ENV === 'testnet' ? baseSepolia : base;
+
+// Stable config object — must be module-level to avoid recreating on every render,
+// which would cause Privy's internal useMemo to recompute and potentially
+// re-trigger connector initialization.
+const privyConfig: PrivyClientConfig = {
+  defaultChain,
+  supportedChains: [base, baseSepolia],
+  loginMethods: ['email', 'google', 'apple', 'passkey'],
+  embeddedWallets: {
+    ethereum: { createOnLogin: 'all-users' },
+    solana: { createOnLogin: 'all-users' },
+  },
+  appearance: {
+    theme: 'light',
+    accentColor: '#FF5C16',
+    logo: 'https://usecoal.xyz/logo.png',
+    showWalletLoginFirst: false,
+  },
+  legal: {
+    termsAndConditionsUrl: 'https://usecoal.xyz/terms',
+    privacyPolicyUrl: 'https://usecoal.xyz/privacy',
+  },
+};
+
 export function Providers({ children }: { children: React.ReactNode }) {
+  if (!PRIVY_APP_ID) {
     return (
-        <WagmiProvider config={config}>
-            <QueryClientProvider client={queryClient}>
-                <ConnectKitProvider>{children}</ConnectKitProvider>
-            </QueryClientProvider>
-        </WagmiProvider>
+      <ToastProvider>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      </ToastProvider>
     );
+  }
+
+  return (
+    <ToastProvider>
+      <PrivyProvider
+        appId={PRIVY_APP_ID}
+        config={privyConfig}
+      >
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      </PrivyProvider>
+    </ToastProvider>
+  );
 }

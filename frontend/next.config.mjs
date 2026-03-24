@@ -1,9 +1,37 @@
 
 import createMDX from '@next/mdx';
 
+const securityHeaders = [
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   pageExtensions: ['js', 'jsx', 'md', 'mdx', 'ts', 'tsx'],
+  webpack(config) {
+    config.resolve.alias['@base-org/account'] = new URL('./lib/base-account-stub.js', import.meta.url).pathname;
+    return config;
+  },
+  turbopack: {
+    resolveAlias: {
+      '@base-org/account': './lib/base-account-stub.js',
+    },
+  },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: securityHeaders,
+      },
+    ];
+  },
   // Note: We removed rewrites and now call the API directly with credentials
   // This is necessary for cross-subdomain cookie handling
   images: {
@@ -21,9 +49,6 @@ const nextConfig = {
         hostname: 'images.unsplash.com',
       },
     ],
-  },
-  typescript: {
-    ignoreBuildErrors: true,
   },
 };
 

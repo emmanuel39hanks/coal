@@ -4,12 +4,17 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ExportSquare, FilterSearch, SearchNormal, CloseCircle } from 'iconsax-reactjs';
 import useSWR from 'swr';
-import { fetcher } from '@/lib/api';
+import { useApi } from '@/lib/api';
+import { Skeleton } from '@/components/Skeleton';
+import { formatAmount } from '@/lib/utils';
+import { EXPLORER_URL, getSettlementToken } from '@/lib/chain';
 
 export default function TransactionsPage() {
+    const { fetcher } = useApi();
     const { data, error, isLoading } = useSWR('/api/console/transactions', fetcher);
 
     const allTransactions = data?.transactions || [];
+    const settlementSymbol = getSettlementToken().symbol;
 
     // Filter state
     const [searchQuery, setSearchQuery] = useState('');
@@ -43,15 +48,15 @@ export default function TransactionsPage() {
             tx.txHash || tx.id,
             tx.type,
             tx.description || '',
-            parseFloat(tx.amount),
-            'MNEE',
+            tx.amount ?? '',
+            tx.currency || settlementSymbol,
             new Date(tx.date).toISOString(),
             tx.status
         ]);
 
         const csvContent = [
             headers.join(','),
-            ...rows.map(row => row.map((cell: any) => `"${cell}"`).join(','))
+            ...rows.map((row: (string | number)[]) => row.map((cell) => `"${cell}"`).join(','))
         ].join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -69,9 +74,8 @@ export default function TransactionsPage() {
         return `${hash.substring(0, 6)}...${hash.substring(hash.length - 4)}`;
     };
 
-    // Etherscan URL (mainnet)
-    const getEtherscanUrl = (txHash: string) => {
-        return `https://etherscan.io/tx/${txHash}`;
+    const getExplorerUrl = (txHash: string) => {
+        return `${EXPLORER_URL}/tx/${txHash}`;
     };
 
     return (
@@ -186,7 +190,20 @@ export default function TransactionsPage() {
                         </thead>
                         <tbody className="text-sm font-medium text-[var(--color-brand-navy)]">
                             {isLoading ? (
-                                <tr><td colSpan={6} className="text-center py-8">Loading transactions...</td></tr>
+                                Array.from({ length: 8 }).map((_, i) => (
+                                    <tr key={i} className="group">
+                                        <td className="py-4 pl-4 rounded-l-xl">
+                                            <Skeleton className="h-3.5 w-28 rounded-full font-mono" />
+                                        </td>
+                                        <td className="py-4"><Skeleton className="h-6 w-20 rounded-lg" /></td>
+                                        <td className="py-4"><Skeleton className="h-3.5 w-36 rounded-full" /></td>
+                                        <td className="py-4"><Skeleton className="h-3.5 w-20 rounded-full" /></td>
+                                        <td className="py-4"><Skeleton className="h-3.5 w-16 rounded-full" /></td>
+                                        <td className="py-4 pr-4 rounded-r-xl text-right">
+                                            <Skeleton className="h-6 w-20 rounded-full ml-auto" />
+                                        </td>
+                                    </tr>
+                                ))
                             ) : transactions.length === 0 ? (
                                 <tr><td colSpan={6} className="text-center py-8 text-gray-400">
                                     {allTransactions.length > 0 ? 'No transactions match your filters' : 'No transactions found'}
@@ -197,7 +214,7 @@ export default function TransactionsPage() {
                                         <td className="py-4 pl-4 rounded-l-xl">
                                             {tx.txHash ? (
                                                 <a
-                                                    href={getEtherscanUrl(tx.txHash)}
+                                                    href={getExplorerUrl(tx.txHash)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="font-mono text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] transition-colors inline-flex items-center gap-1.5 group/link cursor-pointer"
@@ -219,7 +236,7 @@ export default function TransactionsPage() {
                                             </span>
                                         </td>
                                         <td className="py-4">{tx.description}</td>
-                                        <td className="py-4 font-bold">{parseFloat(tx.amount)} MNEE</td>
+                                        <td className="py-4 font-bold">{formatAmount(tx.amount, { maximumFractionDigits: 6 })} {tx.currency || settlementSymbol}</td>
                                         <td className="py-4 text-[var(--color-text-secondary)]">
                                             {new Date(tx.date).toLocaleDateString()}
                                         </td>

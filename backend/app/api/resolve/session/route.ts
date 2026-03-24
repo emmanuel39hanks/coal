@@ -28,8 +28,16 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    // Extract product info from splits JSON (used as metadata storage)
-    const metadata = session.splits as any || {};
+    // Reject expired sessions — mark DB and return 410
+    if (session.status === "expired" || (session.expiresAt < new Date() && session.status !== "confirmed")) {
+        if (session.status !== "expired") {
+            await prisma.checkoutSession.update({ where: { id }, data: { status: "expired" } });
+        }
+        return NextResponse.json({ error: "Session expired", status: "expired" }, { status: 410 });
+    }
+
+    // Extract product info — prefer metadata, fall back to splits for older sessions
+    const metadata = (session.metadata as any) || (session.splits as any) || {};
 
     // Build response with product info from either linked product or splits metadata
     const response = {
@@ -38,6 +46,11 @@ export async function GET(request: Request) {
         currency: session.currency,
         description: session.description,
         status: session.status,
+        billingReason: session.billingReason,
+        customerEmail: session.customerEmail,
+        customerAddress: session.customerAddress,
+        payerInfoConfig: session.payerInfoConfig || (metadata.payerInfoConfig ?? null),
+        payerInfo: session.payerInfo || (metadata.payerInfoValues ?? null),
         redirectUrl: session.redirectUrl,
         merchant: session.merchant,
         // Product info - prefer linked product, fallback to metadata in splits
@@ -46,11 +59,17 @@ export async function GET(request: Request) {
             price: session.product.price.toString(),
             image: session.product.image,
             description: session.product.description,
+            billingType: session.product.billingType,
+            billingInterval: session.product.billingInterval,
+            billingIntervalCount: session.product.billingIntervalCount,
         } : metadata.productName ? {
             name: metadata.productName,
             price: session.amount.toString(),
             image: metadata.productImage,
             description: metadata.productDescription,
+            billingType: typeof metadata.billingType === 'string' ? metadata.billingType : 'one_time',
+            billingInterval: typeof metadata.billingInterval === 'string' ? metadata.billingInterval : null,
+            billingIntervalCount: typeof metadata.billingIntervalCount === 'number' ? metadata.billingIntervalCount : 1,
         } : null
     };
 

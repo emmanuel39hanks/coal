@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Coal - Programmable Commerce",
-  description: "Accept MNEE stablecoin. Split money automatically. Settle instantly.",
+  description: "Accept crypto payments, route popular assets, and settle into your configured token on Base.",
 };
 
 export default function RootLayout({

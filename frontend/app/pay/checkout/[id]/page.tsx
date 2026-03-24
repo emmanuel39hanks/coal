@@ -1,9 +1,10 @@
 
 import { notFound } from "next/navigation";
 import PaymentView from "@/components/PaymentView";
+import { getApiBaseUrl } from "@/lib/api-base";
 
 async function getSession(id: string) {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/resolve/session?id=${id}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/resolve/session?id=${id}`, {
         cache: 'no-store'
     });
 
@@ -12,7 +13,8 @@ async function getSession(id: string) {
 }
 
 export default async function CheckoutSessionPage({ params }: { params: { id: string } }) {
-    const data = await getSession(params.id);
+    const { id } = await params;
+    const data = await getSession(id);
 
     if (!data) {
         notFound();

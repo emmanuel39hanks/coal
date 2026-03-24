@@ -1,79 +1,82 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { getAuthUser } from '@/lib/privy';
+import { createProductSchema, validateBody } from '@/lib/schemas';
+import { errors, apiSuccess } from '@/lib/errors';
+import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
+import { syncMerchantArtifacts } from '@/lib/0g/merchant';
 
 export async function GET(request: Request) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
-
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
 
         const products = await prisma.product.findMany({
-            where: {
-                merchantId: session.user.id,
-                active: true
-            },
+            where: { merchantId: user.id, active: true },
             orderBy: { createdAt: 'desc' },
-            include: {
-                _count: {
-                    select: { checkoutSessions: true }
-                }
-            }
+            include: { _count: { select: { checkoutSessions: true } } }
         });
 
-        return NextResponse.json({
+        return apiSuccess({
             products: products.map(p => ({
-                id: p.id,
-                name: p.name,
+                id:          p.id,
+                name:        p.name,
                 description: p.description,
-                price: p.price.toString(),
-                image: p.image,
-                sales: p._count.checkoutSessions
+                price:       p.price.toString(),
+                image:       p.image,
+                billingType: p.billingType,
+                billingInterval: p.billingInterval,
+                billingIntervalCount: p.billingIntervalCount,
+                sales:       p._count.checkoutSessions,
             }))
         });
-
-    } catch (error) {
-        console.error("Get Products Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    } catch {
+        return errors.internal();
     }
 }
 
 export async function POST(request: Request) {
     try {
-        const session = await auth.api.getSession({
-            headers: await headers()
-        });
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
 
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const { limited } = await checkRateLimit(rateLimiters.console, user.id);
+        if (limited) return errors.rateLimited();
 
-        const body = await request.json();
-        const { name, description, price, image } = body;
+        const body = await request.json().catch(() => ({}));
+        const validated = validateBody(createProductSchema, body);
+        if (!validated.success) return validated.error;
 
-        if (!name || !price) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-        }
+        const {
+            name,
+            description,
+            price,
+            image,
+            billingType,
+            billingInterval,
+            billingIntervalCount,
+        } = validated.data;
 
         const product = await prisma.product.create({
             data: {
-                merchantId: session.user.id,
+                merchantId: user.id,
                 name,
                 description,
-                price: parseFloat(price),
-                image
+                price,
+                image: image || null,
+                billingType,
+                billingInterval: billingType === 'subscription' ? billingInterval || null : null,
+                billingIntervalCount: billingType === 'subscription' ? billingIntervalCount || 1 : 1,
             }
         });
 
-        return NextResponse.json(product);
+        const merchantSync = await syncMerchantArtifacts(user.id).catch(() => null);
 
-    } catch (error) {
-        console.error("Create Product Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return apiSuccess({
+            ...product,
+            zeroG: merchantSync,
+        }, 201);
+    } catch {
+        return errors.internal();
     }
 }

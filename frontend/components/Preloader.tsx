@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import { useEffect, useState } from 'react';
 
 export default function Preloader() {
@@ -20,7 +20,7 @@ export default function Preloader() {
     const sentence = "coal";
     const letters = sentence.split("");
 
-    const container = {
+    const container: Variants = {
         hidden: { opacity: 0 },
         show: {
             opacity: 1,
@@ -39,7 +39,7 @@ export default function Preloader() {
         }
     };
 
-    const child = {
+    const child: Variants = {
         hidden: {
             y: 200,
             opacity: 0,

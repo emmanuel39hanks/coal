@@ -1,12 +1,8 @@
-import { createAuthClient } from "better-auth/react"
+// Privy is the auth provider — hooks are used directly from @privy-io/react-auth
+// This file provides a helper to attach the Privy JWT to API calls
 
-export const authClient = createAuthClient({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001", // Points to Backend
-})
-// Export convenient hooks and methods
-export const {
-    signIn,
-    signUp,
-    signOut,
-    useSession
-} = authClient;
+export async function getAuthHeaders(): Promise<HeadersInit> {
+  // getAccessToken is called from components via usePrivy()
+  // This helper is for non-hook contexts — import usePrivy in components instead
+  return {};
+}

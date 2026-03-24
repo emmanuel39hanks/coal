@@ -1,280 +1,309 @@
-# Coal ⚡
+# Coal
 
-**The Stripe for MNEE Stablecoin Payments**
+**Coal by Schema Labs is a programmable commerce platform for hosted checkout, merchant APIs, payment links, paywalls, recurring billing, and agentic commerce flows.**
 
-Coal is a payment infrastructure that enables merchants to accept MNEE stablecoin payments with instant settlement, on-chain verification, and a beautiful checkout experience.
+Coal is built around a simple split:
 
-![Coal Demo](https://img.shields.io/badge/Built%20for-MNEE%20Hackathon-orange)
-![License](https://img.shields.io/badge/License-MIT-blue)
-![Next.js](https://img.shields.io/badge/Next.js-16.1-black)
+- `Coal` handles checkout orchestration, merchant operations, payer-info capture, recurring billing, and settlement flows on Base.
+- `0G` adds the sidecar layer for artifact storage, receipt proof anchoring, merchant memory, and AI commerce endpoints.
 
-## 🎯 What is Coal?
+This repo is an active product branch, not a tiny demo. The current codebase includes:
 
-Coal provides:
-- **Merchant Console** - Manage products, payment links, and API keys
-- **Checkout API** - Create payment sessions programmatically
-- **Payment Links** - Shareable links for quick payments
-- **On-chain Verification** - Real transaction validation via Alchemy RPC
-- **Instant Settlement** - Funds go directly to merchant wallets
+- hosted checkout and payment links
+- merchant dashboard and onboarding
+- payer-info collection at checkout
+- recurring billing foundations
+- widget/embed and SDK surfaces
+- docs site + OpenAPI playground
+- live 0G storage / chain / compute integration
 
-## 🏗️ Architecture
+## What Is Live
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Demo Store    │────▶│   Coal Backend  │────▶│  Ethereum RPC   │
-│  (Your App)     │     │   (API Layer)   │     │   (Alchemy)     │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                               │
-                               ▼
-                        ┌─────────────────┐
-                        │  Coal Frontend  │
-                        │  (Checkout UI)  │
-                        └─────────────────┘
-```
+### Merchant product surface
 
-**Note:** Backend and Frontend are deployed as **separate** Next.js applications:
-- **Backend** - API-only Next.js app with Prisma (no UI)
-- **Frontend** - UI app that calls backend APIs
+- Products, payment links, paywalls, API keys, team management, analytics, settings
+- Console auth through Privy
+- Async on-chain verification and webhook delivery
+- Hosted renewal checkouts for recurring billing
 
-## 📁 Project Structure
+### Checkout surface
 
-```
+- Public checkout pages under `/pay/[slug]` and `/pay/checkout/[id]`
+- Payer-info configuration and validation
+- Direct settlement-token payments on Base
+- Widget/embed flow using the real checkout lifecycle
+
+### Agentic / 0G surface
+
+- Merchant profile publication to 0G Storage
+- Merchant memory snapshots with encrypted storage payloads
+- Verifiable receipt publication + 0G chain anchoring
+- Agent-facing paywall manifests and verification routes
+- AI commerce APIs backed by 0G Compute
+- Console operator page at `/console/0g`
+
+## Core Thesis
+
+Coal is not being replaced by 0G.
+
+- `Coal` is the payment execution and merchant operations layer.
+- `0G` is the storage, proof, memory, and AI layer around it.
+
+That is the correct mental model for the repo.
+
+## Repo Layout
+
+```text
 coal/
-├── backend/          # Next.js API server (Vercel Project 1)
-├── frontend/         # Next.js frontend + docs (Vercel Project 2)
-├── examples/
-│   └── demo-store/   # Example merchant store
-└── docs/             # MNEE documentation
+├── backend/      # Next.js API app, Prisma, on-chain verification, 0G logic
+├── frontend/     # Next.js UI app, docs site, dashboard, checkout surfaces
+├── contracts/    # 0G receipt anchor contract package
+├── packages/     # JS + React SDK surfaces
+├── examples/     # Demo-store style examples
+├── 0g/           # 0G architecture + rollout planning docs
+├── context/      # Current-state handoff docs for future agents/contributors
+├── bugs/         # Original bug audit
+├── bugs-2/       # Follow-up verification and bug audit
+└── security/     # Security review notes and hardening queue
 ```
 
-## 🚀 Quick Start (Local Development)
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Merchant / App / Agent"] --> B["Coal Frontend"]
+    B --> C["Coal Backend"]
+    C --> D["Base RPC via Alchemy"]
+    C --> E["Postgres via Neon"]
+    C --> F["Webhook Delivery"]
+    C --> G["0G Storage"]
+    C --> H["0G Chain"]
+    C --> I["0G Compute"]
+```
+
+Two separate Next.js apps are deployed from the same repo:
+
+- [backend](/Users/emmanuel/Documents/schemalabs/coal/backend) runs the API, verification jobs, agent routes, and 0G services
+- [frontend](/Users/emmanuel/Documents/schemalabs/coal/frontend) runs the dashboard, docs, checkout UI, and public pages
+
+## Key Surfaces
+
+### Merchant-facing
+
+- [Console dashboard](/Users/emmanuel/Documents/schemalabs/coal/frontend/app/console/page.tsx)
+- [Products](/Users/emmanuel/Documents/schemalabs/coal/frontend/app/console/products/page.tsx)
+- [Payment links](/Users/emmanuel/Documents/schemalabs/coal/frontend/app/console/payment-links/page.tsx)
+- [Subscriptions](/Users/emmanuel/Documents/schemalabs/coal/frontend/app/console/subscriptions/page.tsx)
+- [0G operator page](/Users/emmanuel/Documents/schemalabs/coal/frontend/app/console/0g/page.tsx)
+
+### Public checkout
+
+- [Slug checkout](/Users/emmanuel/Documents/schemalabs/coal/frontend/app/pay/[slug]/page.tsx)
+- [Direct checkout session page](/Users/emmanuel/Documents/schemalabs/coal/frontend/app/pay/checkout/[id]/page.tsx)
+- [Payment view component](/Users/emmanuel/Documents/schemalabs/coal/frontend/components/PaymentView.tsx)
+
+### APIs
+
+- [Merchant API checkouts](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/checkouts/route.ts)
+- [Pay session](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/pay/session/route.ts)
+- [Pay confirm](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/pay/confirm/route.ts)
+- [Verify payments cron](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/cron/verify-payments/route.ts)
+- [0G health](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/0g/health/route.ts)
+- [Console 0G status](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/console/0g/route.ts)
+
+### Agent / 0G routes
+
+- [Merchant profiles](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/agent/merchant-profiles/[merchantId]/route.ts)
+- [Memory ingest](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/agent/memory/ingest/route.ts)
+- [Memory query](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/agent/memory/query/route.ts)
+- [Commerce route](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/agent/commerce/route/route.ts)
+- [Support answer](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/agent/commerce/support-answer/route.ts)
+- [Policy evaluation](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/agent/commerce/policy-eval/route.ts)
+- [Recommendations](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/agent/commerce/recommend/route.ts)
+
+## Authentication Model
+
+Coal has two auth surfaces:
+
+- Merchant API requests use `x-api-key` with `coal_live_*` keys
+- Dashboard and `/api/console/*` routes use Privy Bearer JWTs
+
+Legacy Better Auth has been retired from runtime use.
+
+## Settlement Model
+
+Coal settles to the configured Base settlement token.
+
+- `USDC` is the fallback default
+- older `MNEE_*` environment aliases remain only as compatibility helpers
+- the product is no longer MNEE-first
+
+## Local Development
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
-- PostgreSQL (or use Supabase/Neon)
-- Alchemy API key (free tier works)
+- Node.js `20+`
+- npm
+- Neon or another Postgres database
+- Alchemy API key for Base
+- Privy app credentials
 
-### 1. Clone the Repository
+### 1. Install dependencies
 
 ```bash
-git clone https://github.com/yourusername/coal.git
-cd coal
+cd backend && npm install
+cd ../frontend && npm install
+cd ..
 ```
 
-### 2. Backend Setup
+### 2. Configure environment files
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+Then fill in the required values in:
+
+- [backend/.env.example](/Users/emmanuel/Documents/schemalabs/coal/backend/.env.example)
+- [frontend/.env.example](/Users/emmanuel/Documents/schemalabs/coal/frontend/.env.example)
+
+Important backend values:
+
+- `DATABASE_URL`
+- `ALCHEMY_API_KEY`
+- `PRIVY_APP_ID`
+- `PRIVY_APP_SECRET`
+- `NEXT_PUBLIC_FRONTEND_URL`
+- `NEXT_PUBLIC_API_URL`
+- `CRON_SECRET`
+
+Important frontend values:
+
+- `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_PRIVY_APP_ID`
+- `NEXT_PUBLIC_CHAIN_ENV`
+- `NEXT_PUBLIC_COINBASE_BUNDLER_KEY`
+
+### 3. Prepare the database
 
 ```bash
 cd backend
-npm install
-```
-
-Create `.env`:
-
-```env
-# Database
-DATABASE_URL="postgresql://user:password@host:5432/coal?sslmode=require"
-
-# Auth (Better Auth)
-BETTER_AUTH_SECRET="your-secret-key-here"
-BETTER_AUTH_URL="http://localhost:3001"
-GOOGLE_CLIENT_ID="your-google-client-id"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
-
-# Blockchain
-ALCHEMY_API_KEY="your-alchemy-api-key"
-NEXT_PUBLIC_CHAIN_ID="1"
-
-# URLs
-NEXT_PUBLIC_FRONTEND_URL="http://localhost:3000"
-NEXT_PUBLIC_APP_URL="http://localhost:3001"
-```
-
-Run database migrations:
-
-```bash
 npx prisma db push
 ```
 
-Start the backend:
+### 4. Run both apps
+
+Open two terminals:
 
 ```bash
+# Terminal 1
+cd backend
 npm run dev
 ```
 
-### 3. Frontend Setup
-
 ```bash
+# Terminal 2
 cd frontend
-npm install
-```
-
-Create `.env`:
-
-```env
-# API
-NEXT_PUBLIC_API_URL="http://localhost:3001"
-
-# ConnectKit / Wagmi
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID="your-walletconnect-id"
-
-# Auth
-AUTH_SECRET="your-auth-secret"
-```
-
-Start the frontend:
-
-```bash
 npm run dev
 ```
 
----
+Default local URLs:
 
-## ☁️ Vercel Deployment
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:3001`
 
-Since backend and frontend are in the same repository, you need to create **two separate Vercel projects** pointing to the same repo but with different root directories.
-
-### Deploy Backend
-
-1. **Create new Vercel project** → Import your repository
-2. **Configure project:**
-   - **Root Directory:** `backend`
-   - **Framework Preset:** Next.js
-   - **Build Command:** `npm run build` (includes `prisma generate`)
-   - **Output Directory:** Leave default
-
-3. **Add Environment Variables:**
-
-| Variable | Value |
-|----------|-------|
-| `DATABASE_URL` | `postgresql://...` |
-| `BETTER_AUTH_SECRET` | `your-secret` |
-| `BETTER_AUTH_URL` | `https://your-backend.vercel.app` |
-| `GOOGLE_CLIENT_ID` | `your-google-id` |
-| `GOOGLE_CLIENT_SECRET` | `your-google-secret` |
-| `ALCHEMY_API_KEY` | `your-alchemy-key` |
-| `NEXT_PUBLIC_CHAIN_ID` | `1` |
-| `NEXT_PUBLIC_FRONTEND_URL` | `https://your-frontend.vercel.app` |
-| `NEXT_PUBLIC_APP_URL` | `https://your-backend.vercel.app` |
-
-4. **Deploy!**
-
-### Deploy Frontend
-
-1. **Create another Vercel project** → Import the **same** repository
-2. **Configure project:**
-   - **Root Directory:** `frontend`
-   - **Framework Preset:** Next.js
-   - **Build Command:** Leave default
-   - **Output Directory:** Leave default
-
-3. **Add Environment Variables:**
-
-| Variable | Value |
-|----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://your-backend.vercel.app` |
-| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | `your-walletconnect-id` |
-| `AUTH_SECRET` | `your-auth-secret` |
-
-4. **Deploy!**
-
-### Important Notes
-
-- **Prisma Generation:** Backend's `postinstall` script automatically runs `prisma generate`
-- **CORS:** Backend is configured to allow requests from `NEXT_PUBLIC_FRONTEND_URL`
-- **Frontend doesn't need Prisma** - it only calls backend APIs
-
----
-
-## 🔌 API Usage
-
-### Create a Checkout Session
-
-```bash
-curl -X POST https://your-backend.vercel.app/api/checkouts \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: coal_live_12345..." \
-  -d '{
-    "amount": 25.00,
-    "productName": "Premium Hoodie",
-    "redirectUrl": "https://yoursite.com/success"
-  }'
-```
-
-### Response
-
-```json
-{
-  "id": "clv9abc123...",
-  "url": "https://your-frontend.vercel.app/pay/clv9abc123...",
-  "status": "pending",
-  "amount": 25.00,
-  "currency": "MNEE"
-}
-```
-
-### Redirect User
-
-Redirect your customer to the `url` returned. Coal handles:
-- Wallet connection (MetaMask, WalletConnect)
-- MNEE token transfer
-- On-chain verification
-- Success redirect
-
-## 💰 MNEE Token Details
-
-- **Contract Address**: `0x8ccedbAe4916b79da7F3F612EfB2EB93A2bFD6cF`
-- **Decimals**: 18 (standard ERC-20)
-- **Network**: Ethereum Mainnet
-
-## 🛠️ Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Backend | Next.js 16, Prisma, PostgreSQL |
-| Frontend | Next.js 16, React, TailwindCSS |
-| Auth | Better Auth, Google OAuth |
-| Wallet | ConnectKit, Wagmi, Viem |
-| RPC | Alchemy |
-| Token | MNEE (ERC-20) |
-| Deployment | Vercel |
-
-## 📖 Documentation
-
-Visit `https://your-frontend.vercel.app/docs` for full API documentation.
-
-## 📝 Environment Variables Summary
+## Verification Commands
 
 ### Backend
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | ✅ |
-| `BETTER_AUTH_SECRET` | Auth encryption key | ✅ |
-| `BETTER_AUTH_URL` | Backend URL | ✅ |
-| `ALCHEMY_API_KEY` | Alchemy RPC key | ✅ |
-| `GOOGLE_CLIENT_ID` | Google OAuth ID | ✅ |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth secret | ✅ |
-| `NEXT_PUBLIC_FRONTEND_URL` | Frontend URL | ✅ |
-| `NEXT_PUBLIC_APP_URL` | Backend URL (self) | ✅ |
+```bash
+cd backend
+npm run typecheck
+npm test
+npm run build
+```
 
 ### Frontend
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `NEXT_PUBLIC_API_URL` | Backend URL | ✅ |
-| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | WalletConnect ID | ✅ |
-| `AUTH_SECRET` | Auth secret | ✅ |
+```bash
+cd frontend
+npm run typecheck
+npm run build
+```
 
-## 📄 License
+### 0G storage benchmark
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```bash
+cd backend
+npm run 0g:storage:benchmark
+```
 
-## 🏆 Built for MNEE Hackathon
+## 0G Notes
 
-Coal was built for the [MNEE Hackathon](https://mnee-hackathon.devpost.com/) to demonstrate programmable money for commerce using the MNEE USD stablecoin on Ethereum.
+0G is opt-in. Coal still works without it.
 
----
+Set these only when you are ready to turn the live 0G layer on:
 
-**Made with ⚡**
+- `ZERO_G_ENABLED=true`
+- `ZERO_G_CHAIN_RPC_URL`
+- `ZERO_G_CHAIN_PRIVATE_KEY`
+- `ZERO_G_RECEIPT_ANCHOR_ADDRESS`
+- `ZERO_G_STORAGE_INDEXER_URL`
+- `ZERO_G_STORAGE_ENCRYPTION_KEY`
+- `ZERO_G_COMPUTE_ENABLED=true`
+- `ZERO_G_COMPUTE_PROVIDER`
+- `ZERO_G_COMPUTE_BASE_URL`
+- `ZERO_G_COMPUTE_API_KEY`
+- `ZERO_G_COMPUTE_MODEL`
+
+The main implementation lives in:
+
+- [backend/lib/0g/storage.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/0g/storage.ts)
+- [backend/lib/0g/chain.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/0g/chain.ts)
+- [backend/lib/0g/compute.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/0g/compute.ts)
+- [backend/lib/0g/merchant.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/0g/merchant.ts)
+- [backend/lib/receipts/proof.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/receipts/proof.ts)
+
+## SDK / Widget
+
+Canonical package surfaces:
+
+- JS widget/runtime: [packages/coal-js/coal.js](/Users/emmanuel/Documents/schemalabs/coal/packages/coal-js/coal.js)
+- React package: [packages/react](/Users/emmanuel/Documents/schemalabs/coal/packages/react)
+- Public widget asset: [frontend/public/coal-widget.js](/Users/emmanuel/Documents/schemalabs/coal/frontend/public/coal-widget.js)
+
+## Docs
+
+Coal ships a docs site and a live docs playground:
+
+- Docs: `http://localhost:3000/docs`
+- Playground: `http://localhost:3001/api/docs/ui`
+
+Key files:
+
+- [frontend/app/docs](/Users/emmanuel/Documents/schemalabs/coal/frontend/app/docs)
+- [backend/app/api/docs/route.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/docs/route.ts)
+- [backend/app/api/docs/ui/route.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/app/api/docs/ui/route.ts)
+
+## Deployment
+
+Coal deploys as two Vercel projects from the same repo:
+
+- backend root directory: `backend`
+- frontend root directory: `frontend`
+
+Use [DEPLOYMENT.md](/Users/emmanuel/Documents/schemalabs/coal/DEPLOYMENT.md) for the full production checklist.
+
+## Recommended Orientation Docs
+
+If you are picking up this repo cold, start here:
+
+- [context/01-current-state.md](/Users/emmanuel/Documents/schemalabs/coal/context/01-current-state.md)
+- [context/04-0g-integration.md](/Users/emmanuel/Documents/schemalabs/coal/context/04-0g-integration.md)
+- [context/05-product-surfaces-and-flows.md](/Users/emmanuel/Documents/schemalabs/coal/context/05-product-surfaces-and-flows.md)
+- [context/07-live-0g-hardening-and-explorer.md](/Users/emmanuel/Documents/schemalabs/coal/context/07-live-0g-hardening-and-explorer.md)
+
+## License
+
+MIT

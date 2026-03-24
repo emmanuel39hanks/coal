@@ -1,39 +1,177 @@
-
 # Products API
 
-Manage your product catalog programmatically.
+This is a console-managed endpoint family for merchant catalog operations. The public merchant API uses `x-api-key`; these `/api/console/*` routes use Privy Bearer tokens and are dashboard-only.
 
-## Object Structure
+Manage your product catalog. Products represent items you sell — each has a fixed price, name, and optional image. Attach a product to a Payment Link to auto-populate the checkout page, or mark it as a recurring subscription so Coal can create subscription records and renewal checkout cycles automatically.
+
+## The Product Object
 
 ```json
 {
-  "id": "prod_123",
-  "name": "Super Coffee",
-  "price": "5.00",
-  "currency": "MNEE",
-  "image": "https://...",
-  "active": true
+  "id": "clxxx123",
+  "merchantId": "clmerchant456",
+  "name": "Pro Plan",
+  "description": "Unlimited API calls, priority support, and advanced analytics.",
+  "price": "49.99",
+  "image": "https://cdn.yoursite.com/pro-plan.png",
+  "sku": "PRO-MONTHLY",
+  "billingType": "subscription",
+  "billingInterval": "month",
+  "billingIntervalCount": 1,
+  "active": true,
+  "createdAt": "2026-01-15T10:00:00.000Z",
+  "updatedAt": "2026-03-22T08:30:00.000Z"
 }
 ```
 
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique product ID (CUID) |
+| `merchantId` | string | ID of the owning merchant |
+| `name` | string | Display name shown on checkout |
+| `description` | string \| null | Optional description |
+| `price` | string | Price in the merchant's settlement currency (decimal string) |
+| `image` | string \| null | URL of product image |
+| `sku` | string \| null | Your internal SKU for inventory sync |
+| `billingType` | `one_time` \| `subscription` | Whether this product is sold once or on a recurring cadence |
+| `billingInterval` | `day` \| `week` \| `month` \| `year` \| null | Required when `billingType` is `subscription` |
+| `billingIntervalCount` | number | Repeat multiplier for recurring products |
+| `active` | boolean | `false` = hidden from payment links |
+| `createdAt` | ISO 8601 | Creation timestamp |
+| `updatedAt` | ISO 8601 | Last modified timestamp |
+
+---
+
 ## List Products
 
-`GET /api/console/products`
+<EndpointBadge method="GET" path="/api/console/products" />
 
-Returns a list of all active products.
+Returns all products for the authenticated merchant, ordered by creation date descending.
 
-## Create Product
+**Authentication:** `Authorization: Bearer <Privy JWT>`
 
-`POST /api/console/products`
+```bash
+curl https://api.usecoal.xyz/api/console/products \
+  -H "Authorization: Bearer <Privy JWT>"
+```
 
-| Param | Type | Description |
-| :--- | :--- | :--- |
-| `name` | string | Product name |
-| `price` | number | Price in MNEE |
-| `image` | string | URL of product image |
+```json
+{
+  "data": {
+    "products": [
+      {
+        "id": "clxxx123",
+        "name": "Pro Plan",
+        "price": "49.99",
+        "image": "https://cdn.yoursite.com/pro.png",
+        "active": true,
+        "createdAt": "2026-01-15T10:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Create a Product
+
+<EndpointBadge method="POST" path="/api/console/products" />
+
+**Authentication:** `Authorization: Bearer <Privy JWT>`
+
+**Request body:**
+
+<ParamTable params={[
+  { name: "name", type: "string", required: true, description: "Product display name (shown on checkout page)" },
+  { name: "price", type: "number | string", required: true, description: "Price in the merchant's settlement currency. Accepts decimal up to 6 places." },
+  { name: "description", type: "string", required: false, description: "Optional description displayed under the product name" },
+  { name: "image", type: "string (URL)", required: false, description: "Publicly accessible image URL. Shown on the checkout page." },
+  { name: "sku", type: "string", required: false, description: "Your internal SKU for inventory management" },
+  { name: "billingType", type: "\"one_time\" | \"subscription\"", required: false, description: "Set to `subscription` to create a recurring product." },
+  { name: "billingInterval", type: "\"day\" | \"week\" | \"month\" | \"year\"", required: false, description: "Required for subscription products." },
+  { name: "billingIntervalCount", type: "number", required: false, description: "How often the subscription renews. Defaults to 1." },
+]} />
 
 ```bash
 curl -X POST https://api.usecoal.xyz/api/console/products \
-  -H "x-api-key: ..." \
-  -d '{"name": "Coffee", "price": 5}'
+  -H "Authorization: Bearer <Privy JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pro Plan",
+    "description": "Unlimited API calls and priority support.",
+    "price": 49.99,
+    "image": "https://cdn.yoursite.com/pro.png",
+    "sku": "PRO-MONTHLY",
+    "billingType": "subscription",
+    "billingInterval": "month",
+    "billingIntervalCount": 1
+  }'
 ```
+
+```json
+{
+  "data": {
+    "id": "clxxx123",
+    "name": "Pro Plan",
+    "price": "49.99",
+    "active": true,
+    "createdAt": "2026-03-22T12:00:00.000Z"
+  }
+}
+```
+
+---
+
+## Update a Product
+
+<EndpointBadge method="PUT" path="/api/console/products/:id" />
+
+All fields are optional — only include the ones you want to change.
+
+```bash
+curl -X PUT https://api.usecoal.xyz/api/console/products/clxxx123 \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{ "price": 59.99, "description": "Now includes dedicated support." }'
+```
+
+```json
+{
+  "data": {
+    "id": "clxxx123",
+    "name": "Pro Plan",
+    "price": "59.99",
+    "updatedAt": "2026-03-22T13:00:00.000Z"
+  }
+}
+```
+
+---
+
+## Delete a Product
+
+<EndpointBadge method="DELETE" path="/api/console/products/:id" />
+
+Permanently deletes the product. Any payment links attached to this product will become inactive.
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/products/clxxx123 \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+```json
+{
+  "data": { "success": true }
+}
+```
+
+---
+
+## Error Codes
+
+| Code | HTTP | Description |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | Missing or invalid Privy JWT |
+| `NOT_FOUND` | 404 | Product does not exist or belongs to another merchant |
+| `VALIDATION_ERROR` | 400 | Invalid field values (see `details`) |

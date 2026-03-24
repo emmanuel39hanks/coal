@@ -22,11 +22,10 @@ export async function validateApiKey(req: Request) {
     });
 
     if (keyRecord) {
-        // Update last used asynchronously
-        await prisma.apiKey.update({
+        void prisma.apiKey.update({
             where: { id: keyRecord.id },
             data: { lastUsed: new Date() }
-        });
+        }).catch(() => null);
     }
 
     return keyRecord; // Returns { merchant: User, ... } or null
