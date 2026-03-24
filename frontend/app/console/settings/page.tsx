@@ -68,12 +68,15 @@ export default function SettingsPage() {
         setInviting(true);
         setInviteError('');
         try {
-            await request('/api/console/team', {
+            const res = await request('/api/console/team', {
                 method: 'POST',
                 body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
             });
             mutate('/api/console/team');
-            toast('success', 'Team invite sent');
+            const msg = res?.pending
+                ? `Invite sent to ${res.email}`
+                : 'Team member added';
+            toast('success', msg);
             setInviteEmail('');
             setInviteRole('member');
             setShowInviteForm(false);

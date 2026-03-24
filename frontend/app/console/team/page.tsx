@@ -24,6 +24,7 @@ export default function TeamPage() {
     const [role, setRole] = useState<'admin' | 'member' | 'viewer'>('member');
     const [inviting, setInviting] = useState(false);
     const [inviteError, setInviteError] = useState('');
+    const [inviteSuccess, setInviteSuccess] = useState('');
 
     const [removeModal, setRemoveModal] = useState<{ isOpen: boolean; id: string; name: string }>({
         isOpen: false, id: '', name: '',
@@ -32,16 +33,23 @@ export default function TeamPage() {
 
     const handleInvite = async () => {
         setInviteError('');
+        setInviteSuccess('');
         setInviting(true);
         try {
-            await request('/api/console/team', {
+            const res = await request('/api/console/team', {
                 method: 'POST',
                 body: JSON.stringify({ email, role }),
             });
             mutate('/api/console/team');
-            setIsInviteOpen(false);
-            setEmail('');
-            setRole('member');
+            if (res?.pending) {
+                setInviteSuccess(`Invite sent to ${res.email}. They'll be added when they accept.`);
+                setEmail('');
+                setRole('member');
+            } else {
+                setIsInviteOpen(false);
+                setEmail('');
+                setRole('member');
+            }
         } catch (e: any) {
             setInviteError(e?.message ?? 'Failed to add member');
         } finally {
@@ -206,6 +214,9 @@ export default function TeamPage() {
                                 </div>
                                 {inviteError && (
                                     <p className="text-sm text-red-500 font-medium pl-4">{inviteError}</p>
+                                )}
+                                {inviteSuccess && (
+                                    <p className="text-sm text-green-600 font-medium pl-4">{inviteSuccess}</p>
                                 )}
                                 <button
                                     onClick={handleInvite}

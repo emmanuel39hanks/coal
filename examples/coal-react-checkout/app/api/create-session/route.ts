@@ -53,6 +53,11 @@ export async function POST(req: NextRequest) {
 
   const data = await response.json();
   const sessionId = data.data?.id ?? data.id;
-  const checkoutUrl = data.data?.url ?? data.url ?? null;
+  // Rebuild checkout URL using NEXT_PUBLIC_COAL_BASE_URL so local dev uses the correct
+  // frontend port (3001) rather than whatever the API backend returns.
+  const coalBase = (process.env.NEXT_PUBLIC_COAL_BASE_URL || '').replace(/\/$/, '');
+  const checkoutUrl = sessionId && coalBase
+    ? `${coalBase}/pay/checkout/${encodeURIComponent(sessionId)}`
+    : (data.data?.url ?? data.url ?? null);
   return NextResponse.json({ sessionId, checkoutUrl });
 }

@@ -7,54 +7,36 @@ This page provides a walkthrough of how a Coal payment works end-to-end - from s
 
 ## High-Level Flow Diagram
 
-```
-Merchant Backend                   Coal API                     Base Blockchain
-      │                                │                               │
-      │  POST /api/checkout/init       │                               │
-      │──────────────────────────────▶│                               │
-      │  { slug }                      │                               │
-      │                                │  Creates CheckoutSession      │
-      │  ◀── { sessionId, amount,      │  status: "pending"            │
-      │        currency, merchant,     │                               │
-      │        expiresAt }             │                               │
-      │                                │                               │
-      │                                │                               │
-User Browser                       Coal Frontend                       │
-      │                                │                               │
-      │  GET /pay/:slug                │                               │
-      │──────────────────────────────▶│                               │
-      │  ◀── Checkout page renders     │                               │
-      │       (product, amount, logo)  │                               │
-      │                                │                               │
-      │  Connect wallet                │                               │
-      │──────────────────────────────▶│ (client-side only)            │
-      │                                │                               │
-      │  Sign & send settlement token  │                               │
-      │─────────────────────────────────────────────────────────────▶│
-      │                                │                    tx mined   │
-      │                                │                               │
-      │  POST /api/pay/confirm         │                               │
-      │  { sessionId, txHash }         │                               │
-      │──────────────────────────────▶│                               │
-      │                                │  status → "verifying"         │
-      │  ◀── { status: "verifying" }   │  pendingTxHash saved          │
-      │                                │                               │
-      │  Poll GET /api/pay/status/:id  │                               │
-      │──────────────────────────────▶│                               │
-      │                                │                               │
-      │                         Cron job (every ~1 min)               │
-      │                                │  getTransactionReceipt()      │
-      │                                │─────────────────────────────▶│
-      │                                │  ◀── Transfer event logs      │
-      │                                │  Validate: recipient, amount  │
-      │                                │  status → "confirmed"         │
-      │                                │                               │
-      │  ◀── { status: "confirmed",    │  Fire webhook                 │
-      │        redirectUrl }           │──────────────────────────▶ Merchant webhook endpoint
-      │                                │                               │
-      │  Redirect to redirectUrl       │                               │
-      │──────────────────────────────▶│                               │
-```
+<PaymentFlowDiagram rows={[
+  { kind: 'phase', label: 'Session Creation' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/checkouts', sub: '{ amount, productName, redirectUrl } with x-api-key header' },
+  { kind: 'event', actor: 'coal', label: 'Creates CheckoutSession — status: "pending"' },
+  { kind: 'msg', from: 'coal', to: 'app', label: '{ id, checkoutUrl, amount, currency, expiresAt }' },
+
+  { kind: 'phase', label: 'User Checkout' },
+  { kind: 'msg', from: 'user', to: 'coal', label: 'GET /pay/checkout/:sessionId', sub: 'User visits the hosted checkout URL' },
+  { kind: 'msg', from: 'coal', to: 'user', label: 'Checkout page renders', sub: 'Shows product, amount, wallet connect' },
+  { kind: 'msg', from: 'user', to: 'coal', label: 'Connect wallet', sub: 'MetaMask, Coinbase Wallet, WalletConnect, or Privy embedded' },
+
+  { kind: 'phase', label: 'On-Chain Payment' },
+  { kind: 'msg', from: 'user', to: 'chain', label: 'ERC-20 transfer(to, amount)', sub: 'Signed directly by the user — Coal never holds funds' },
+  { kind: 'event', actor: 'chain', label: 'Transaction mined on Base (~2 sec)' },
+  { kind: 'msg', from: 'user', to: 'coal', label: 'POST /api/pay/confirm', sub: '{ sessionId, txHash }' },
+  { kind: 'event', actor: 'coal', label: 'status → "verifying", pendingTxHash saved' },
+  { kind: 'msg', from: 'coal', to: 'user', label: '{ status: "verifying" }' },
+
+  { kind: 'phase', label: 'Verification & Confirmation' },
+  { kind: 'event', actor: 'coal', label: 'Background cron runs every ~60 sec' },
+  { kind: 'msg', from: 'coal', to: 'chain', label: 'getTransactionReceipt(txHash)' },
+  { kind: 'msg', from: 'chain', to: 'coal', label: 'Transfer event logs + receipt' },
+  { kind: 'event', actor: 'coal', label: 'Validates recipient address + amount — status → "confirmed"' },
+
+  { kind: 'phase', label: 'Completion' },
+  { kind: 'msg', from: 'coal', to: 'app', label: 'POST webhook: checkout.session.completed', sub: 'Signed with HMAC-SHA256 — verify the Coal-Signature header' },
+  { kind: 'msg', from: 'user', to: 'coal', label: 'Poll GET /api/pay/status/:sessionId', sub: 'Frontend polls until status === "confirmed"' },
+  { kind: 'msg', from: 'coal', to: 'user', label: '{ status: "confirmed", redirectUrl }' },
+  { kind: 'event', actor: 'user', label: 'Redirected to your redirectUrl?session_id=...' },
+]} />
 
 ---
 

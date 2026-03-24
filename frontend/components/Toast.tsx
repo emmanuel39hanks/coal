@@ -29,16 +29,10 @@ export function useToast() {
 
 // ─── Styles per type ──────────────────────────────────────────────────────────
 
-const STYLES: Record<ToastType, { border: string; icon: string }> = {
-    error:   { border: 'border-l-4 border-l-red-500',   icon: '✕' },
-    success: { border: 'border-l-4 border-l-green-500', icon: '✓' },
-    info:    { border: 'border-l-4 border-l-blue-500',  icon: 'ℹ' },
-};
-
-const ICON_COLOR: Record<ToastType, string> = {
-    error:   'text-red-500',
-    success: 'text-green-500',
-    info:    'text-blue-500',
+const STYLES: Record<ToastType, { bg: string; iconBg: string; iconColor: string; icon: string }> = {
+    error:   { bg: '', iconBg: 'bg-red-50',   iconColor: 'text-red-500',   icon: '✕' },
+    success: { bg: '', iconBg: 'bg-green-50', iconColor: 'text-green-600', icon: '✓' },
+    info:    { bg: '', iconBg: 'bg-blue-50',  iconColor: 'text-blue-500',  icon: 'ℹ' },
 };
 
 // ─── Single Toast ─────────────────────────────────────────────────────────────
@@ -49,7 +43,7 @@ function ToastItem({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
         return () => clearTimeout(t);
     }, [onDismiss]);
 
-    const { border, icon } = STYLES[item.type];
+    const { iconBg, iconColor, icon } = STYLES[item.type];
 
     return (
         <motion.div
@@ -58,11 +52,11 @@ function ToastItem({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 60, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className={`flex items-start gap-3 bg-white ${border} rounded-2xl shadow-lg p-4 max-w-sm w-full cursor-pointer select-none border border-black/5`}
+            className="flex items-center gap-3 bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.10)] border border-black/6 px-4 py-3 max-w-sm w-full cursor-pointer select-none"
             onClick={onDismiss}
         >
-            <span className={`font-black text-base mt-0.5 ${ICON_COLOR[item.type]}`}>{icon}</span>
-            <p className="text-sm font-semibold text-gray-800 flex-1">{item.message}</p>
+            <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-black ${iconBg} ${iconColor}`}>{icon}</span>
+            <p className="text-sm font-semibold text-[var(--color-brand-navy)] flex-1 leading-5">{item.message}</p>
         </motion.div>
     );
 }
