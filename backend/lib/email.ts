@@ -1,10 +1,21 @@
 import { Resend } from 'resend';
 import { logger } from './logger';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const FROM_ADDRESS = process.env.EMAIL_FROM || 'Coal <noreply@usecoal.xyz>';
 const REPLY_TO = process.env.EMAIL_REPLY_TO || 'support@usecoal.xyz';
+
+let resendClient: Resend | null = null;
+
+function getResendClient(): Resend | null {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return null;
+
+    if (!resendClient) {
+        resendClient = new Resend(apiKey);
+    }
+
+    return resendClient;
+}
 
 export interface SendEmailOptions {
     to: string;
@@ -13,7 +24,9 @@ export interface SendEmailOptions {
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailOptions): Promise<boolean> {
-    if (!process.env.RESEND_API_KEY) {
+    const resend = getResendClient();
+
+    if (!resend) {
         logger.warn({ to, subject }, 'Email skipped — RESEND_API_KEY not set');
         return false;
     }
