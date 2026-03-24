@@ -1,0 +1,137 @@
+# Authorize & Capture
+
+Legacy / internal reference only.
+
+Authorize & Capture is a two-phase payment model that separates the authorization (reserving funds) from the capture (collecting them). This is useful for businesses that need to verify an order before charging the customer.
+
+> **Note:** Coal's live public merchant API focuses on direct-settlement checkout sessions. This page is preserved as legacy/internal reference for the authorize/capture workflow and should not be treated as the primary public merchant integration.
+
+## When to Use It
+
+| Use Case | Example |
+|---|---|
+| Pre-orders | Reserve funds when order placed, capture on ship date |
+| Hotel holds | Auth on check-in, capture on check-out |
+| Metered billing | Auth a limit, capture actual usage |
+| Fraud review | Hold funds while you review the order |
+
+For most use cases - simple product sales, digital downloads, subscriptions - the default direct-settlement mode is sufficient. Use `authorize_capture` only when you need time between reserving and collecting funds in a legacy or internal workflow.
+
+## How It Works
+
+```
+1. Legacy/internal system creates an authorization-capable session
+2. Customer completes authorization via Commerce Payments
+   → status: "authorized", authId set
+3. Merchant reviews order
+4. Merchant captures payment
+   → POST /api/console/payments/capture
+   → status: "confirmed"
+
+   OR voids the authorization:
+   → POST /api/console/payments/void
+   → status: "voided"
+```
+
+Authorizations expire according to the session's `authExpiresAt` value. Check that timestamp before attempting capture or void.
+
+## Status Transitions
+
+```
+pending → authorized → confirmed   (authorized → captured)
+                     → voided      (authorization released)
+         → failed                  (authorization declined)
+         → expired                 (session timed out before auth)
+```
+
+## Creating an Authorize & Capture Session
+
+This workflow is documented for legacy/internal systems only. Coal's current public hosted checkout flow is direct-settlement first, and the public `POST /api/checkout/init` route does not expose `authorize_capture` as a new merchant integration surface.
+
+If you are maintaining an older internal integration, keep the authorization logic on the server and use the capture/void routes below once an authorization already exists.
+
+## Capturing a Payment
+
+Once authorized, capture the payment from your server:
+
+<EndpointBadge method="POST" path="/api/console/payments/capture" />
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/payments/capture \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{ "sessionId": "clxxx" }'
+```
+
+```json
+{
+  "data": {
+    "sessionId": "clxxx",
+    "txHash": "0xabc123..."
+  }
+}
+```
+
+## Voiding an Authorization
+
+To release the hold without capturing:
+
+<EndpointBadge method="POST" path="/api/console/payments/void" />
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/payments/void \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+```json
+{
+  "data": {
+    "sessionId": "clxxx",
+    "status": "voided"
+  }
+}
+```
+
+## Webhook Events
+
+| Event | Fired when |
+|---|---|
+| `checkout.authorized` | Customer successfully authorizes |
+| `checkout.confirmed` | Capture completes |
+| `checkout.voided` | Authorization released |
+| `checkout.failed` | Authorization or capture fails |
+
+## Node.js Integration Example
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+
+// Route: POST /api/orders/:orderId/fulfill
+export async function POST(req: NextRequest, { params }: { params: { orderId: string } }) {
+  const order = await db.orders.findById(params.orderId);
+
+  if (!order || order.status !== 'pending_review') {
+    return NextResponse.json({ error: 'Order not ready for fulfillment' }, { status: 400 });
+  }
+
+  // Capture the authorized payment
+  const res = await fetch(`${process.env.COAL_API_URL}/api/console/payments/capture`, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer <Privy JWT>',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ sessionId: order.coalSessionId }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    return NextResponse.json({ error: err.error?.message }, { status: 502 });
+  }
+
+  await db.orders.update(params.orderId, { status: 'paid' });
+  await fulfillOrder(order);
+
+  return NextResponse.json({ success: true });
+}
+```

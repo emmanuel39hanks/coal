@@ -1,0 +1,366 @@
+
+# Payment Flow
+
+This page provides a walkthrough of how a Coal payment works end-to-end - from session creation to on-chain confirmation and webhook delivery. Understanding this flow will help you build reliable integrations and debug issues when they arise.
+
+---
+
+## High-Level Flow Diagram
+
+```
+Merchant Backend                   Coal API                     Base Blockchain
+      │                                │                               │
+      │  POST /api/checkout/init       │                               │
+      │──────────────────────────────▶│                               │
+      │  { slug }                      │                               │
+      │                                │  Creates CheckoutSession      │
+      │  ◀── { sessionId, amount,      │  status: "pending"            │
+      │        currency, merchant,     │                               │
+      │        expiresAt }             │                               │
+      │                                │                               │
+      │                                │                               │
+User Browser                       Coal Frontend                       │
+      │                                │                               │
+      │  GET /pay/:slug                │                               │
+      │──────────────────────────────▶│                               │
+      │  ◀── Checkout page renders     │                               │
+      │       (product, amount, logo)  │                               │
+      │                                │                               │
+      │  Connect wallet                │                               │
+      │──────────────────────────────▶│ (client-side only)            │
+      │                                │                               │
+      │  Sign & send settlement token  │                               │
+      │─────────────────────────────────────────────────────────────▶│
+      │                                │                    tx mined   │
+      │                                │                               │
+      │  POST /api/pay/confirm         │                               │
+      │  { sessionId, txHash }         │                               │
+      │──────────────────────────────▶│                               │
+      │                                │  status → "verifying"         │
+      │  ◀── { status: "verifying" }   │  pendingTxHash saved          │
+      │                                │                               │
+      │  Poll GET /api/pay/status/:id  │                               │
+      │──────────────────────────────▶│                               │
+      │                                │                               │
+      │                         Cron job (every ~1 min)               │
+      │                                │  getTransactionReceipt()      │
+      │                                │─────────────────────────────▶│
+      │                                │  ◀── Transfer event logs      │
+      │                                │  Validate: recipient, amount  │
+      │                                │  status → "confirmed"         │
+      │                                │                               │
+      │  ◀── { status: "confirmed",    │  Fire webhook                 │
+      │        redirectUrl }           │──────────────────────────▶ Merchant webhook endpoint
+      │                                │                               │
+      │  Redirect to redirectUrl       │                               │
+      │──────────────────────────────▶│                               │
+```
+
+---
+
+## Step-by-Step Breakdown
+
+### 1. Session Creation
+
+Your server, or the Coal hosted checkout page, calls `POST /api/checkout/init` with a payment link `slug`. Coal looks up the payment link, resolves the product and price, and creates a **CheckoutSession** in the database with status `pending`.
+
+**What happens:**
+- Coal validates the slug and checks the link is `active`
+- For product-linked links: price is read from the `Product` record
+- For flexible (donation) links: you must supply an `amount` in the request body
+- A session is created with a 24-hour expiry
+- The session ID, amount, currency, merchant name, payout address, and expiry are returned
+
+**Request:**
+```json
+POST /api/checkout/init
+{
+  "slug": "premium-membership"
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "sessionId": "cm9x4k2j00003lb08n5qz7v1r",
+    "amount": 25,
+    "currency": "USDC",
+    "description": "Premium Membership",
+    "merchant": {
+      "name": "Acme Corp",
+      "payoutAddress": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+    },
+    "expiresAt": "2026-03-24T14:00:00.000Z"
+  }
+}
+```
+
+---
+
+### 2. Checkout Page Render
+
+When a user visits `usecoal.xyz/pay/:slug`, the frontend fetches the session and displays the hosted payment page. This page shows:
+
+- Merchant name and logo
+- Product name and description
+- Exact amount due
+- A wallet connect button
+
+No authentication is required from the user at this point.
+
+---
+
+### 3. Wallet Connection
+
+The user connects their EVM wallet (MetaMask, Coinbase Wallet, WalletConnect, or a Privy embedded wallet). Coal's frontend reads the connected address and prepares the ERC-20 transfer parameters:
+
+- **Token contract:** Configured settlement token on Base (`SETTLEMENT_TOKEN_ADDRESS`)
+- **Recipient:** the merchant's `payoutAddress`
+- **Amount:** `session.amount` converted to raw token units using the configured token decimals
+
+---
+
+### 4. On-Chain Transfer
+
+The user reviews and signs the settlement-token ERC-20 transfer in their wallet. This is a standard `transfer(address to, uint256 amount)` call on the configured token contract. The transaction is broadcast to the Base network.
+
+**Coal does not hold funds at any point.** The transfer goes directly from the user's wallet to the merchant's configured payout address. Coal's role is to verify the transfer happened correctly.
+
+The transaction is confirmed on Base in approximately **1–2 seconds**.
+
+---
+
+### 5. Transaction Hash Submission
+
+Once the transfer is sent, the frontend captures the transaction hash and POSTs it to Coal:
+
+**Request:**
+```json
+POST /api/pay/confirm
+{
+  "sessionId": "cm9x4k2j00003lb08n5qz7v1r",
+  "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"
+}
+```
+
+**Coal performs these checks synchronously:**
+1. The session exists and is in `pending` status
+2. The session has not expired
+3. The `txHash` has not already been used in a confirmed transaction
+4. The `txHash` is not already submitted to a different session
+
+If all checks pass, the session transitions to `verifying` and the `pendingTxHash` is recorded.
+
+**Response:**
+```json
+{
+  "data": {
+    "status": "verifying",
+    "sessionId": "cm9x4k2j00003lb08n5qz7v1r"
+  }
+}
+```
+
+**Note on idempotency:** If you re-submit the same `sessionId` + `txHash` combination (e.g., due to a network retry), Coal returns the current session status without creating a duplicate. This makes the endpoint safe to call more than once.
+
+---
+
+### 6. Asynchronous On-Chain Verification
+
+Coal runs a background cron job approximately every minute that processes all sessions in `verifying` status. The job:
+
+1. Fetches the transaction receipt from the Base RPC node using `getTransactionReceipt(txHash)`
+2. If the receipt is not yet available (transaction not mined), the session is left in `verifying` and retried on the next cron run
+3. If the transaction **reverted**, the session is marked `failed`
+4. Decodes the ERC-20 `Transfer` event from the receipt logs
+5. Validates the **recipient address** matches the merchant's `payoutAddress` (case-insensitive)
+6. Validates the **transfer amount** matches the session amount (using raw BigInt arithmetic - no floating point)
+7. If all validations pass, the session transitions to `confirmed` and a `Transaction` record is created
+
+**Timing:** Under normal conditions, confirmation happens within 60–90 seconds of the on-chain transfer. In practice, most payments confirm in under 30 seconds since the cron runs frequently and Base block times are ~2 seconds.
+
+---
+
+### 7. Status Polling
+
+Your frontend (or server) can poll `GET /api/pay/status/:sessionId` to monitor the session:
+
+```bash
+GET /api/pay/status/cm9x4k2j00003lb08n5qz7v1r
+```
+
+```json
+{
+  "status": "confirmed",
+  "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b",
+  "redirectUrl": "https://yoursite.com/success"
+}
+```
+
+The `redirectUrl` field is only returned when `status === "confirmed"`. Use this to redirect the user.
+
+---
+
+### 8. Webhook Delivery
+
+When a session is confirmed, Coal fires a `checkout.session.completed` webhook to the `callbackUrl` set on the session (or the merchant's default `webhookUrl` if no per-session URL was provided).
+
+**Webhook payload:**
+
+```json
+{
+  "event": "checkout.session.completed",
+  "data": {
+    "id": "cm9x4k2j00003lb08n5qz7v1r",
+    "amount": "25.000000",
+    "currency": "USDC",
+    "status": "confirmed",
+    "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b",
+    "explorerUrl": "https://basescan.org/tx/0x3a4b5c6d..."
+  }
+}
+```
+
+Webhooks are signed with HMAC-SHA256. The `Coal-Signature` header has the format `t=TIMESTAMP,v1=SIGNATURE`. See [Webhooks](/docs/api/webhooks) for full verification instructions.
+
+---
+
+### 9. User Redirect
+
+After confirmation is detected (either via polling or webhook), the user is redirected to your `redirectUrl` with the session ID appended as a query parameter:
+
+```
+https://yoursite.com/success?session_id=cm9x4k2j00003lb08n5qz7v1r
+```
+
+Use the `session_id` to look up the order on your side if needed.
+
+---
+
+## Session Status State Machine
+
+```
+                         ┌──────────────────────────────┐
+                         │                              │
+            ┌────────────▼──────────┐                  │ expiresAt exceeded
+            │        pending        │──────────────────▶│──────────────┐
+            └───────────────────────┘                   │              │
+                         │                              │              ▼
+            POST /api/pay/confirm                       │         ┌─────────┐
+                         │                              │         │ expired │
+                         ▼                              │         └─────────┘
+            ┌──────────────────────┐                   │
+            │      verifying       │───────────────────┘
+            └──────────────────────┘
+                  │           │
+        cron: tx OK       cron: tx failed / amount
+        recipient OK      mismatch / reverted
+                  │           │
+                  ▼           ▼
+           ┌──────────┐  ┌────────┐
+           │confirmed │  │ failed │
+           └──────────┘  └────────┘
+```
+
+| Status      | Description                                                              |
+|:------------|:-------------------------------------------------------------------------|
+| `pending`   | Session created, waiting for the user to send the transaction            |
+| `verifying` | Transaction hash submitted; background job is checking the chain         |
+| `confirmed` | Transaction verified on-chain; payment complete                          |
+| `failed`    | On-chain check failed (see failure scenarios below)                      |
+| `expired`   | Session passed its `expiresAt` deadline before confirmation              |
+
+---
+
+## Timing Reference
+
+| Event                              | Typical Duration      |
+|:-----------------------------------|:----------------------|
+| Base block time                    | ~2 seconds            |
+| Transaction receipt available      | 2–6 seconds after broadcast |
+| Cron job interval                  | ~60 seconds           |
+| End-to-end confirmation (typical)  | 30–90 seconds         |
+| Session expiry (default)           | 24 hours              |
+
+---
+
+## Failure Scenarios
+
+### Transaction Reverted
+
+The EVM transaction was included in a block but the execution failed (status `0x0` in the receipt). This can happen if the user had insufficient balance or allowance for the configured settlement token at the time of execution.
+
+**Result:** Session moves to `failed`.
+
+**Recovery:** The session cannot be reused. The user must start a new checkout session and attempt the payment again.
+
+---
+
+### Amount Mismatch
+
+The on-chain `Transfer` event shows a different token amount than what was recorded on the session. Coal compares amounts using raw `BigInt` arithmetic after normalizing to the configured token decimals - so even a 1-unit discrepancy can cause a failure.
+
+**Result:** Session moves to `failed`.
+
+**Common cause:** The user edited the transfer amount in their wallet, or fees were deducted from the transfer amount.
+
+---
+
+### Recipient Mismatch
+
+The `to` field in the decoded `Transfer` event does not match the merchant's configured `payoutAddress`. The comparison is case-insensitive.
+
+**Result:** Session moves to `failed`.
+
+**Common cause:** Merchant changed their payout address between session creation and payment, or the user sent to a different address.
+
+---
+
+### Transaction Not Mined (Timeout)
+
+The transaction hash was submitted but the transaction has not been mined within the session expiry window. This can happen if the user submitted a transaction with a very low gas price, causing it to be stuck in the mempool.
+
+**Result:** On each cron run, Coal calls `getTransactionReceipt()`. If the receipt is unavailable, the session stays in `verifying` and is retried on the next run. If the session's `expiresAt` is reached before the transaction mines, the session transitions to `expired`.
+
+---
+
+### No Transfer Event Found
+
+The transaction was mined and succeeded, but the receipt logs do not contain an ERC-20 `Transfer` event from the configured settlement token contract address. This indicates the user sent a different token, called a different contract function, or the token address is misconfigured.
+
+**Result:** Session moves to `failed`.
+
+---
+
+### Session Expiry
+
+If a session reaches its `expiresAt` timestamp (24 hours after creation) without being confirmed, it transitions to `expired`. This is checked both by the status endpoint (on every poll) and by the cron job (on every run).
+
+**Result:** Session moves to `expired`. A new session must be created if the user still wants to pay.
+
+---
+
+## Webhook Retry Policy
+
+If Coal cannot reach your webhook endpoint (connection timeout, non-2xx response), it retries using exponential backoff:
+
+| Attempt | Delay   |
+|:--------|:--------|
+| 1st     | Immediate |
+| 2nd     | 1 minute  |
+| 3rd     | 5 minutes |
+| 4th     | 30 minutes |
+| 5th     | 2 hours   |
+
+After 5 failed attempts, the webhook event is marked `exhausted` and no further retries occur. You can view webhook delivery history in **Console → Webhooks**.
+
+To avoid missed events, always respond with `200 OK` as quickly as possible and process the payload asynchronously (e.g. via a queue).
+
+---
+
+## Next Steps
+
+- [Webhooks](/docs/api/webhooks) — verify signatures and handle events
+- [Quickstart](/docs/quickstart) — end-to-end integration with code examples
+- [Authentication](/docs/authentication) — API key management and security

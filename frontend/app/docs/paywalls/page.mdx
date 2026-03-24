@@ -1,0 +1,244 @@
+
+# Paywalls (x402 Protocol)
+
+<a href="/demo" style={{display:'inline-flex',alignItems:'center',gap:'6px',background:'#FF5C16',color:'white',fontWeight:700,fontSize:'0.875rem',padding:'10px 20px',borderRadius:'9999px',textDecoration:'none',boxShadow:'4px 4px 0px 0px #180D43',marginBottom:'1.5rem'}}>
+  ⚡ Try it live →
+</a>
+
+Paywalls let you gate any API endpoint or piece of content behind a micropayment. A request either carries proof of payment and receives the resource, or it is rejected with an HTTP `402 Payment Required` and instructions on how to pay.
+
+This pattern is defined by the **x402 protocol** — an open standard that assigns real semantics to the long-dormant HTTP 402 status code.
+
+> Paywalls are ideal for pay-per-call APIs, premium content downloads, AI agent tool access, and any flow where charging a subscription is overkill.
+
+---
+
+## How x402 Works
+
+```
+Client                             Coal Paywall
+  │                                     │
+  │  GET /api/paywalls/:id/verify       │
+  │ ─────────────────────────────────► │
+  │                                     │
+  │  402 Payment Required               │
+  │  { amount, address, paywallId }     │
+  │ ◄───────────────────────────────── │
+  │                                     │
+  │  [User/agent pays on-chain]         │
+  │                                     │
+  │  POST /api/paywalls/:id/pay         │
+  │  { txHash, address }                │
+  │ ─────────────────────────────────► │
+  │                                     │
+  │  [Coal verifies txHash on-chain]    │
+  │                                     │
+  │  200 OK                             │
+  │  { accessToken } or content         │
+  │ ◄───────────────────────────────── │
+```
+
+1. **Client requests access** — `GET /api/paywalls/:id/verify?address=0x...`
+2. **Server replies 402** — includes the price, merchant wallet address, and paywall ID.
+3. **Client pays on-chain** — sends the configured settlement token to the merchant address.
+4. **Client submits proof** — `POST /api/paywalls/:id/pay` with the `txHash`.
+5. **Server verifies and responds 200** — returns the gated content or a short-lived access token.
+
+---
+
+## Creating a Paywall
+
+### Via the Console (Phase 3 UI)
+
+1. Open the [Developer Console](/console).
+2. Navigate to **Paywalls → Create Paywall**.
+3. Set the name, price, content type, and pricing model.
+4. Copy the generated paywall ID.
+
+### Via the API
+
+**POST** `/api/console/paywalls`
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/paywalls \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <privy_access_token>" \
+  -d '{
+    "name": "Premium API Access",
+    "price": 1.00,
+    "currency": "USDC",
+    "contentType": "api",
+    "pricingModel": "per_call"
+  }'
+```
+
+#### Body Parameters
+
+| Field | Type | Required | Description |
+|:------|:-----|:---------|:------------|
+| `name` | `string` | Yes | Human-readable label shown on the payment prompt |
+| `price` | `number` | Yes | Amount required to unlock this paywall |
+| `currency` | `string` | No | Settlement currency. Defaults to `USDC` |
+| `contentType` | `string` | Yes | `api` \| `content` \| `download` |
+| `pricingModel` | `string` | Yes | `one_time` \| `per_call` |
+
+#### Response
+
+```json
+{
+  "id": "pw_clx9abc123def456",
+  "name": "Premium API Access",
+  "price": "1.00",
+  "currency": "USDC",
+  "contentType": "api",
+  "pricingModel": "per_call",
+  "createdAt": "2026-03-22T12:00:00.000Z"
+}
+```
+
+---
+
+## Verifying Access (Public API)
+
+### Step 1 — Check if access is permitted
+
+**GET** `/api/paywalls/:id/verify?address=0x...`
+
+If the address has not yet paid (or payment expired), returns `402`:
+
+```json
+{
+  "status": 402,
+  "paywallId": "pw_clx9abc123def456",
+  "amount": "1.00",
+  "currency": "USDC",
+  "merchantAddress": "0xMerchantWallet...",
+  "description": "Premium API Access",
+  "pricingModel": "per_call"
+}
+```
+
+If the address has valid access, returns `200` with the protected resource or an access token:
+
+```json
+{
+  "status": 200,
+  "accessToken": "act_clx9tok...",
+  "expiresAt": "2026-03-22T13:00:00.000Z"
+}
+```
+
+### Step 2 — Submit payment proof
+
+**POST** `/api/paywalls/:id/pay`
+
+```json
+{
+  "txHash": "0xabc123def456...",
+  "address": "0xClientWallet..."
+}
+```
+
+Response on success:
+
+```json
+{
+  "status": 200,
+  "sessionId": "clx7k2p3q0000abc12345",
+  "accessToken": "act_clx9tok...",
+  "expiresAt": "2026-03-22T13:00:00.000Z"
+}
+```
+
+---
+
+## Agentic / AI Integration
+
+Paywalls are a natural fit for AI agents that need to call paid APIs autonomously. Below is a full LangChain tool that handles the x402 flow end-to-end.
+
+```typescript
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
+import { ethers } from 'ethers';
+
+const SETTLEMENT_TOKEN_ADDRESS = '0xSettlementTokenAddress';
+const COAL_API = 'https://api.usecoal.xyz/api';
+
+// ABI fragment — ERC-20 transfer
+const ERC20_ABI = [
+  'function transfer(address to, uint256 amount) returns (bool)',
+];
+
+export const callPaidApi = tool(
+  async ({ paywallId, walletPrivateKey }) => {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const wallet = new ethers.Wallet(walletPrivateKey, provider);
+    const address = wallet.address;
+
+    // 1. Check access
+    const checkRes = await fetch(
+      `${COAL_API}/paywalls/${paywallId}/verify?address=${address}`
+    );
+
+    if (checkRes.status === 200) {
+      const { accessToken } = await checkRes.json();
+      return { accessToken, paid: false };
+    }
+
+    if (checkRes.status !== 402) {
+      throw new Error(`Unexpected status ${checkRes.status}`);
+    }
+
+    // 2. Parse payment instructions
+    const { amount, currency, merchantAddress } = await checkRes.json();
+    // 3. Pay on-chain
+    const token = new ethers.Contract(SETTLEMENT_TOKEN_ADDRESS, ERC20_ABI, wallet);
+    const decimals = 6; // configured settlement token precision
+    const value = ethers.parseUnits(amount, decimals);
+    const tx = await token.transfer(merchantAddress, value);
+    const receipt = await tx.wait();
+
+    // 4. Submit proof
+    const payRes = await fetch(`${COAL_API}/paywalls/${paywallId}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txHash: receipt.hash, address }),
+    });
+
+    if (!payRes.ok) {
+      throw new Error('Payment verification failed');
+    }
+
+    const { accessToken } = await payRes.json();
+    return { accessToken, paid: true, txHash: receipt.hash };
+  },
+  {
+    name: 'call_paid_api',
+    description:
+      'Pays a Coal x402 paywall with the configured settlement token and returns an access token for the gated resource.',
+    schema: z.object({
+      paywallId: z.string().describe('The Coal paywall ID (pw_...)'),
+      walletPrivateKey: z.string().describe('Private key of the funding wallet'),
+    }),
+  }
+);
+```
+
+---
+
+## Pricing Models
+
+| Model | Behaviour | Best for |
+|:------|:----------|:---------|
+| `one_time` | A single payment unlocks access permanently for that address | Content downloads, lifetime API keys |
+| `per_call` | Each API call requires a fresh payment (or valid cached access token) | Metered APIs, AI tool calls, pay-per-use data |
+
+---
+
+## Content Types
+
+| Value | Intended use |
+|:------|:-------------|
+| `api` | REST or GraphQL endpoints — returns an access token |
+| `content` | Articles, videos, PDFs — returns a signed download URL or HTML body |
+| `download` | Binary file downloads — returns a short-lived presigned URL |

@@ -1,0 +1,226 @@
+
+# SDK Events Reference
+
+The Coal widget communicates with your page through the browser's `window.postMessage` API. Both the JavaScript SDK's `.on()` method and React's `onReady` / `onSuccess` / `onError` / `onCancel` callbacks are built on top of these events.
+
+This page documents every event type, its payload shape, and how to listen for events directly if you are not using an SDK.
+
+---
+
+## Event Overview
+
+| Event                    | When it fires                                                |
+|:-------------------------|:-------------------------------------------------------------|
+| `coal:ready`            | Widget iframe is fully loaded and ready for user interaction |
+| `coal:success`          | Payment confirmed by Coal's verification service             |
+| `coal:error`            | Payment failed, was rejected, or encountered an error        |
+| `coal:cancel`           | User dismissed the widget without completing payment         |
+| `coal:close`            | Treated the same as `coal:cancel`                            |
+
+---
+
+## Event Payloads
+
+### `coal:ready`
+
+Fired when the widget has mounted and the user can begin the payment flow.
+
+```typescript
+interface CoalReadyEvent {
+  type: 'coal:ready';
+  sessionId: string;
+}
+```
+
+**Example payload:**
+
+```json
+{
+  "type": "coal:ready",
+  "sessionId": "cm9x4k2j00003lb08n5qz7v1r"
+}
+```
+
+---
+
+### `coal:success`
+
+Fired after Coal confirms the transfer. This is the event you should use to unlock content, fulfill orders, or redirect the user.
+
+```typescript
+interface CoalPaymentSuccessEvent {
+  type: 'coal:success';
+  sessionId: string;
+  txHash: string;
+}
+```
+
+**Example payload:**
+
+```json
+{
+  "type": "coal:success",
+  "sessionId": "cm9x4k2j00003lb08n5qz7v1r",
+  "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"
+}
+```
+
+> **Important:** `coal:success` means Coal has verified the transaction on Base. For critical business logic (order fulfillment, access grants), always corroborate by also listening to the `checkout.session.completed` [webhook](/docs/api/webhooks) from your server. Client-side events can be spoofed; webhooks cannot.
+
+---
+
+### `coal:error`
+
+Fired when the payment cannot be completed. This includes wallet rejections, insufficient balance, network failures, and blocked addresses.
+
+```typescript
+interface CoalPaymentErrorEvent {
+  type: 'coal:error';
+  message: string;
+}
+```
+
+**Example payload:**
+
+```json
+{
+  "type": "coal:error",
+  "message": "Your wallet does not have enough of the configured settlement token to complete this payment."
+}
+```
+
+---
+
+### `coal:cancel`
+
+Fired when the user closes the widget without completing payment (e.g., clicking an X button or pressing Escape). No payload fields beyond `type`.
+
+```typescript
+interface CoalPaymentCancelEvent {
+  type: 'coal:cancel';
+  sessionId: string;
+}
+```
+
+**Example payload:**
+
+```json
+{
+  "type": "coal:cancel",
+  "sessionId": "cm9x4k2j00003lb08n5qz7v1r"
+}
+```
+
+A cancelled session is not reusable — create a new session if the user wants to try again.
+
+---
+
+## Listening via SDK
+
+### JavaScript SDK
+
+```javascript
+const instance = CoalCheckout.mount('#coal-widget', { sessionId });
+
+instance.on('ready', (data) => {
+  console.log('Widget ready for session:', data.sessionId);
+});
+
+instance.on('success', (data) => {
+  console.log('Paid!', data.txHash);
+  window.location.href = '/success?session_id=' + data.sessionId;
+});
+
+instance.on('error', (data) => {
+  console.error(data.message);
+  showErrorToast(data.message);
+  instance.unmount();
+});
+
+instance.on('cancel', () => {
+  instance.unmount();
+  document.getElementById('coal-widget').style.display = 'none';
+});
+```
+
+### React SDK
+
+```tsx
+import { CoalWidget } from '@coal/react';
+
+<CoalWidget
+  sessionId={sessionId}
+  onSuccess={(data) => {
+    // data: { sessionId, txHash }
+    router.push(`/success?session_id=${data.sessionId}`);
+  }}
+  onError={(data) => {
+    setError(data.message);
+  }}
+  onCancel={() => {
+    setShowWidget(false);
+  }}
+/>
+```
+
+---
+
+## Listening Directly via `window.addEventListener`
+
+If you are not using a Coal SDK (e.g., you are embedding the iframe manually), you can listen to raw `postMessage` events. Always validate the `origin` before processing.
+
+```javascript
+window.addEventListener('message', function handleCoalEvent(event) {
+  // SECURITY: Only accept messages from the Coal widget origin
+  if (event.origin !== 'https://usecoal.xyz') return;
+
+  const { type, ...data } = event.data;
+
+  switch (type) {
+    case 'coal:ready':
+      console.log('Widget ready:', data.sessionId);
+      break;
+
+    case 'coal:success':
+      console.log('Payment confirmed:', data.txHash);
+      // Fulfill order, redirect, etc.
+      window.removeEventListener('message', handleCoalEvent);
+      break;
+
+    case 'coal:error':
+      console.error('Payment error:', data.message);
+      window.removeEventListener('message', handleCoalEvent);
+      break;
+
+    case 'coal:cancel':
+    case 'coal:close':
+      console.log('User cancelled session:', data.sessionId);
+      window.removeEventListener('message', handleCoalEvent);
+      break;
+  }
+});
+```
+
+> Always check `event.origin === 'https://usecoal.xyz'` before processing. Failing to validate the origin would allow any page to send fake payment success messages to your handler.
+
+---
+
+## TypeScript: Full Union Type
+
+```typescript
+export type CoalEvent =
+  | { type: 'coal:ready'; sessionId: string }
+  | { type: 'coal:success'; sessionId: string; txHash: string }
+  | { type: 'coal:error'; message: string }
+  | { type: 'coal:cancel'; sessionId: string };
+
+window.addEventListener('message', (event: MessageEvent) => {
+  if (event.origin !== 'https://usecoal.xyz') return;
+  const coalEvent = event.data as CoalEvent;
+
+  if (coalEvent.type === 'coal:success') {
+    // coalEvent is now narrowed to the success shape
+    handleSuccess(coalEvent.txHash);
+  }
+});
+```

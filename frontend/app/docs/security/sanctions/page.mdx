@@ -1,0 +1,76 @@
+# Sanctions Screening
+
+Coal automatically screens every wallet address involved in a payment against international sanctions lists before processing the transaction.
+
+## How It Works
+
+Coal queries the **Chainalysis Sanctions Oracle** — an on-chain smart contract deployed on Base mainnet that reflects OFAC, EU, UK, and UN sanctions lists in near real-time.
+
+```
+Contract: 0x40C57923924B5c5c5455c48D93317139ADDaC8fb (Base mainnet)
+Method:   isSanctioned(address) → bool
+```
+
+The check happens before the checkout session is confirmed. If an address is flagged:
+
+```json
+HTTP/1.1 403 Forbidden
+
+{
+  "error": {
+    "code": "SANCTIONS_MATCH",
+    "message": "This address is on a sanctions list and cannot receive payments.",
+    "requestId": "req_abc123"
+  }
+}
+```
+
+## Fail-Open Policy
+
+<Callout variant="warning" title="Oracle availability">
+  If the Chainalysis oracle is temporarily unavailable (network issue, RPC error), Coal **fails open** — the payment proceeds and a warning is written to the structured log. This prioritizes availability over blocking legitimate transactions during outages.
+
+  In a future release, merchants will be able to configure fail-closed behavior.
+</Callout>
+
+## What Addresses Are Screened
+
+| Scenario | Addresses Checked |
+|---|---|
+| Direct checkout | Customer's `from` wallet address |
+| Split payments | All recipient addresses in the split config |
+| Paywall access | Address submitted in the pay request |
+
+The merchant's own payout address is **not** screened on every transaction (it is validated at account setup time).
+
+## Merchant Obligations
+
+Coal's sanctions screening is a **best-effort layer** and does not substitute for your own compliance obligations. Depending on your jurisdiction, you may be required to:
+
+- Conduct additional KYC/AML checks for high-value transactions
+- File Suspicious Activity Reports (SARs)
+- Maintain transaction records for 5+ years
+- Obtain a money transmitter license
+
+Consult a compliance attorney for advice specific to your business.
+
+## Covered Sanctions Lists
+
+The Chainalysis oracle aggregates:
+
+- **OFAC SDN** — US Office of Foreign Assets Control Specially Designated Nationals
+- **OFAC Consolidated** — All OFAC programs
+- **EU Sanctions** — European Union restrictive measures
+- **UK OFSI** — Office of Financial Sanctions Implementation
+- **UN Security Council** — UN-mandated sanctions
+
+## Testing
+
+In development (localhost), sanctions screening uses the same oracle as production. To test the blocked flow, use a known sanctioned address from the Chainalysis public test set — or mock the `isAddressSanctioned` function in your test suite:
+
+```typescript
+// vitest mock example
+vi.mock('@/lib/sanctions', () => ({
+  isAddressSanctioned: vi.fn().mockResolvedValue(true),
+}));
+```

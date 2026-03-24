@@ -1,0 +1,120 @@
+# Settlement Verification
+
+This page explains how Coal verifies an on-chain ERC-20 payment after a customer submits a transaction hash. Historical examples use MNEE, but the same flow applies to whichever settlement token the merchant has configured.
+
+## The Verification Pipeline
+
+```
+Customer signs tx in wallet
+        ↓
+POST /api/pay/confirm  { sessionId, txHash }
+        ↓
+Session status: "pending" → "verifying"
+        ↓
+Cron job runs every 60 seconds
+        ↓
+Query Base chain for txHash
+        ↓
+Checks pass?
+  YES → status: "confirmed", webhook fired
+  NO  → status: "failed",   webhook fired
+```
+
+## What Coal Verifies
+
+For a payment to be confirmed, all of the following must be true:
+
+| Check | Description |
+|---|---|
+| **Transaction exists** | The `txHash` exists on Base mainnet |
+| **Not reverted** | The transaction status is success (not reverted/failed) |
+| **Transfer event** | The tx emits an ERC-20 `Transfer` event for the configured settlement token contract |
+| **Correct recipient** | The transfer `to` address matches the merchant's `payoutAddress` |
+| **Correct amount** | The transferred amount matches the session `amount` within the configured token decimals |
+
+If any check fails, the session transitions to `failed` with a reason code stored internally.
+
+## Failure Reasons
+
+| Code | Meaning |
+|---|---|
+| `tx_reverted` | Transaction was mined but execution failed |
+| `no_transfer_event` | No ERC-20 Transfer event found for the configured settlement token |
+| `recipient_mismatch` | Transfer went to a different address than the merchant's payout address |
+| `amount_mismatch` | Amount transferred differs from session amount by more than the configured tolerance |
+| `tx_not_found` | Transaction hash not found after 10 verification attempts |
+
+## Timing
+
+| Stage | Typical Duration |
+|---|---|
+| Base block time | ~2 seconds |
+| Cron run interval | 60 seconds |
+| Total (best case) | 1–2 minutes after tx submission |
+| Timeout | 24 hours (session expiry) |
+
+<Callout variant="tip">
+  Don't poll `/api/pay/status` every second. Poll every 5–10 seconds during the first 2 minutes, then fall back to relying on webhooks for the confirmation event.
+</Callout>
+
+## Polling the Status
+
+```typescript
+async function pollUntilConfirmed(sessionId: string, maxAttempts = 24) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const res = await fetch(`/api/pay/status/${sessionId}`);
+    const { data } = await res.json();
+
+    if (data.status === 'confirmed') return data;
+    if (data.status === 'failed')    throw new Error(`Payment failed`);
+    if (data.status === 'expired')   throw new Error(`Session expired`);
+
+    // Exponential backoff: 5s, 5s, 10s, 10s, 20s, ...
+    const delay = i < 2 ? 5000 : i < 4 ? 10000 : 20000;
+    await new Promise(r => setTimeout(r, delay));
+  }
+  throw new Error('Timed out waiting for confirmation');
+}
+```
+
+## Status Response
+
+```json
+GET /api/pay/status/clxxx
+
+{
+  "data": {
+    "status": "confirmed",
+    "txHash": "0xabc123...",
+    "amount": "49.99",
+  "currency": "USDC",
+    "confirmedAt": "2026-03-22T12:01:45.000Z"
+  }
+}
+```
+
+## Block Explorer
+
+Confirmed transactions can be verified on Base:
+
+```
+https://basescan.org/tx/0xYOUR_TX_HASH
+```
+
+The transaction will show an ERC-20 token transfer for the configured settlement token contract to the merchant's payout address.
+
+## Cron Job Architecture
+
+Coal runs a cron job every minute (`*/1 * * * *`) that:
+
+1. Fetches all sessions in `verifying` status
+2. For each, queries the Base RPC for the `pendingTxHash`
+3. Decodes the transaction receipt and checks Transfer events
+4. Updates the session status and fires the appropriate webhook
+
+In production this runs on Vercel Cron. In development, you can trigger it manually:
+
+```bash
+curl -X POST http://localhost:3001/api/cron/verify-payments \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```

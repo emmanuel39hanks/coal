@@ -1,0 +1,287 @@
+
+# React SDK
+
+The `@coal/react` package provides a `<CoalWidget>` component and a `useCoalCheckout` hook for integrating Coal payments into React applications. Full TypeScript support is included.
+
+---
+
+## Installation
+
+```bash
+npm install @coal/react
+# or
+yarn add @coal/react
+# or
+pnpm add @coal/react
+```
+
+**Peer dependencies:** React 18+ and React DOM 18+ are required.
+
+---
+
+## `<CoalWidget>` Component
+
+Renders the Coal checkout iframe inline wherever you place it in your React tree.
+
+### Props
+
+| Prop        | Type                               | Required | Default                   | Description                                                      |
+|:------------|:-----------------------------------|:---------|:--------------------------|:-----------------------------------------------------------------|
+| `sessionId` | `string`                           | **Yes**  | —                         | Session ID returned by your checkout session endpoint.           |
+| `baseUrl`   | `string`                           | No       | `'https://usecoal.xyz'`   | Override the Coal server URL (useful for local testing).         |
+| `height`    | `number \| string`                 | No       | `600`                     | iframe height in pixels (number) or any CSS string.              |
+| `theme`     | `'light' \| 'dark'`                | No       | —                         | Color theme forwarded to the embed page.                         |
+| `onReady`   | `() => void`                       | No       | —                         | Called when the iframe is loaded and ready for user interaction. |
+| `onSuccess` | `(data: PaymentSuccessData) => void` | No     | —                         | Called when payment is confirmed.                                |
+| `onError`   | `(error: PaymentErrorData) => void` | No      | —                         | Called when a payment or session error occurs.                   |
+| `onCancel`  | `() => void`                       | No       | —                         | Called when the user dismisses the widget without paying.        |
+| `className` | `string`                           | No       | —                         | CSS class names applied to the wrapper `<div>`.                  |
+| `style`     | `React.CSSProperties`              | No       | —                         | Inline styles applied to the wrapper `<div>`.                    |
+
+### Basic Usage
+
+```tsx
+import { CoalWidget } from '@coal/react';
+
+export default function CheckoutPage({ sessionId }: { sessionId: string }) {
+  return (
+    <CoalWidget
+      sessionId={sessionId}
+      height={600}
+      onReady={() => console.log('Widget ready')}
+      onSuccess={(data) => {
+        console.log('Confirmed:', data.txHash);
+        window.location.href = `/success?session_id=${data.sessionId}`;
+      }}
+      onError={(err) => {
+        console.error('Error:', err.message);
+      }}
+      onCancel={() => {
+        console.log('User cancelled');
+      }}
+    />
+  );
+}
+```
+
+---
+
+## `useCoalCheckout` Hook
+
+A lower-level hook for programmatic mount/unmount control and status tracking. Use this when you want to dynamically attach the checkout to a container ref (e.g., inside a modal).
+
+### Signature
+
+```typescript
+function useCoalCheckout(options: UseCoalCheckoutOptions): UseCoalCheckoutReturn
+```
+
+### `UseCoalCheckoutOptions`
+
+| Option      | Type     | Description                                                         |
+|:------------|:---------|:--------------------------------------------------------------------|
+| `sessionId` | `string` | Optional initial session ID. Required before calling `mount()`.     |
+| `baseUrl`   | `string` | Override the Coal server URL. Defaults to `'https://usecoal.xyz'`.  |
+
+### `UseCoalCheckoutReturn`
+
+| Property      | Type                                                    | Description                                              |
+|:--------------|:--------------------------------------------------------|:---------------------------------------------------------|
+| `status`      | `'idle' \| 'ready' \| 'success' \| 'error' \| 'cancel'` | Current widget status.                                  |
+| `paymentData` | `PaymentSuccessData \| null`                            | Set to payment data on success, otherwise `null`.        |
+| `mount`       | `(containerRef: React.RefObject<HTMLDivElement>) => void` | Injects the iframe into the given container ref.       |
+| `unmount`     | `() => void`                                            | Removes the iframe and resets status to `'idle'`.        |
+
+### Example
+
+```tsx
+'use client';
+
+import { useRef, useEffect } from 'react';
+import { useCoalCheckout } from '@coal/react';
+
+export default function CheckoutModal({ sessionId }: { sessionId: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { status, paymentData, mount, unmount } = useCoalCheckout({ sessionId });
+
+  useEffect(() => {
+    mount(containerRef);
+    return () => unmount();
+  }, [sessionId]);
+
+  return (
+    <div>
+      {status === 'success' && (
+        <p>Payment confirmed! TX: {paymentData?.txHash}</p>
+      )}
+      <div ref={containerRef} style={{ width: '100%' }} />
+    </div>
+  );
+}
+```
+
+---
+
+## TypeScript Types
+
+All types are exported from `@coal/react`:
+
+```typescript
+import type {
+  CoalWidgetProps,
+  UseCoalCheckoutOptions,
+  UseCoalCheckoutReturn,
+  PaymentSuccessData,
+  PaymentErrorData,
+} from '@coal/react';
+
+// PaymentSuccessData shape
+interface PaymentSuccessData {
+  sessionId: string;
+  txHash: string | null;
+}
+
+// PaymentErrorData shape
+interface PaymentErrorData {
+  message: string;
+}
+```
+
+---
+
+## Next.js App Router Example
+
+Components that use Coal hooks must be client components. Mark them with `'use client'`.
+
+```tsx
+// app/checkout/CheckoutClient.tsx
+'use client';
+
+import { CoalWidget } from '@coal/react';
+import { useRouter } from 'next/navigation';
+
+interface Props {
+  sessionId: string;
+}
+
+export default function CheckoutClient({ sessionId }: Props) {
+  const router = useRouter();
+
+  return (
+    <div className="w-full max-w-md mx-auto">
+      <CoalWidget
+        sessionId={sessionId}
+        onSuccess={(data) => {
+          router.push(`/success?session_id=${data.sessionId}`);
+        }}
+        onError={(err) => {
+          router.push(`/checkout/error?message=${encodeURIComponent(err.message)}`);
+        }}
+        onCancel={() => {
+          router.back();
+        }}
+      />
+    </div>
+  );
+}
+```
+
+```tsx
+// app/checkout/page.tsx  ← Server Component: fetches sessionId safely
+import CheckoutClient from './CheckoutClient';
+
+async function getSession(slug: string) {
+  const res = await fetch('https://api.usecoal.xyz/api/checkout/init', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug }),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error('Failed to create session');
+  const { data } = await res.json();
+  return data;
+}
+
+export default async function CheckoutPage({
+  searchParams,
+}: {
+  searchParams: { slug?: string };
+}) {
+  const slug = searchParams.slug ?? 'default-product';
+  const session = await getSession(slug);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center">
+      <CheckoutClient sessionId={session.sessionId} />
+    </main>
+  );
+}
+```
+
+---
+
+## Events
+
+`<CoalWidget>` and `useCoalCheckout` both listen for `postMessage` events from the Coal iframe. The underlying event types are:
+
+| iframe `type`   | React callback  | When it fires                           |
+|:----------------|:----------------|:----------------------------------------|
+| `coal:ready`    | `onReady`       | Iframe loaded, user can begin payment.  |
+| `coal:success`  | `onSuccess`     | Payment confirmed.                      |
+| `coal:error`    | `onError`       | Session or payment error.               |
+| `coal:cancel`   | `onCancel`      | User dismissed the widget.              |
+
+See the [Events Reference](/docs/sdk/events) for full payload shapes and direct `window.addEventListener` usage.
+
+---
+
+## Server-Side Session Creation
+
+Always create sessions on your server. Keep any merchant API keys server-side; the widget only needs the returned session ID.
+
+```typescript
+// lib/coal.ts
+export async function createCoalSession(slug: string) {
+  const res = await fetch('https://api.usecoal.xyz/api/checkout/init', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(`Coal session error: ${body.error ?? res.status}`);
+  }
+
+  const { data } = await res.json();
+  return data as {
+    sessionId: string;
+    amount: number;
+    currency: string;
+    description: string;
+    expiresAt: string;
+  };
+}
+```
+
+If you want the hosted checkout to collect payer details first, configure that when your server creates the session:
+
+```typescript
+await fetch('https://api.usecoal.xyz/api/checkouts', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': process.env.COAL_API_KEY!,
+  },
+  body: JSON.stringify({
+    amount: 49.99,
+    productName: 'Pro Plan',
+    payerInfo: {
+      required: true,
+      fields: ['fullName', 'email'],
+    },
+  }),
+});
+```
+
+The React widget itself still mounts by `sessionId`; payer-info collection is configured on the session, not on the iframe component.

@@ -1,0 +1,253 @@
+
+# Revenue Splits
+
+Revenue Splits let you automatically distribute a payment to multiple wallet addresses in exact proportions — all on-chain, at settlement time. No manual transfers, no reconciliation spreadsheets.
+
+Coal calculates each recipient's share using BigInt arithmetic (no floating-point rounding errors) and sends each portion in the same settlement transaction.
+
+> Splits are useful anywhere revenue needs to be shared: creator + platform royalties, affiliate commissions, DAO treasury contributions, multi-founder splits, and more.
+
+> Console split configuration uses Privy Bearer auth. Public checkout creation still uses `x-api-key` on `/api/checkouts`.
+
+---
+
+## How It Works
+
+When a checkout session with a split config is confirmed:
+
+1. Coal receives the full payment from the customer.
+2. The split config is looked up.
+3. Each recipient's share is calculated: `floor(totalAmount * percent / 100)` using integer arithmetic.
+4. Rounding dust (the difference from summing all shares) is assigned to the first recipient.
+5. A single on-chain transaction fans out to all recipient addresses simultaneously.
+
+---
+
+## The Recipient Object
+
+```typescript
+interface SplitRecipient {
+  address: string;  // EVM wallet address
+  percent: number;  // Integer 1–99; all percents must sum to exactly 100
+  label?: string;   // Optional human-readable label (stored for your records)
+}
+```
+
+**Validation rules:**
+- Percents must be positive integers (no decimals).
+- All percents must sum to **exactly 100**.
+- Maximum **10 recipients** per split config.
+- Each `address` must be a valid EVM address (checksummed or lowercase).
+
+---
+
+## Creating a Split Config
+
+**POST** `/api/console/splits`
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/splits \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <privy_access_token>" \
+  -d '{
+    "name": "70/30 Creator Split",
+    "recipients": [
+      { "address": "0xCreator1234567890abcdef1234567890abcdef12", "percent": 70, "label": "Creator" },
+      { "address": "0xPlatform1234567890abcdef1234567890abcdef", "percent": 30, "label": "Platform" }
+    ]
+  }'
+```
+
+#### Response
+
+```json
+{
+  "id": "spl_clx9abc123def456",
+  "name": "70/30 Creator Split",
+  "recipients": [
+    { "address": "0xCreator1234567890abcdef1234567890abcdef12", "percent": 70, "label": "Creator" },
+    { "address": "0xPlatform1234567890abcdef1234567890abcdef", "percent": 30, "label": "Platform" }
+  ],
+  "createdAt": "2026-03-22T12:00:00.000Z"
+}
+```
+
+---
+
+## CRUD Operations
+
+### List all split configs
+
+```bash
+curl https://api.usecoal.xyz/api/console/splits \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+### Get a single split config
+
+```bash
+curl https://api.usecoal.xyz/api/console/splits/spl_clx9abc123def456 \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+### Update a split config
+
+```bash
+curl -X PUT https://api.usecoal.xyz/api/console/splits/spl_clx9abc123def456 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <privy_access_token>" \
+  -d '{
+    "name": "80/20 Creator Split",
+    "recipients": [
+      { "address": "0xCreator1234567890abcdef1234567890abcdef12", "percent": 80, "label": "Creator" },
+      { "address": "0xPlatform1234567890abcdef1234567890abcdef", "percent": 20, "label": "Platform" }
+    ]
+  }'
+```
+
+### Delete a split config
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/splits/spl_clx9abc123def456 \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+> Deleting a split config does not affect past payments. Sessions already confirmed with this split are unaffected.
+
+---
+
+## Attaching a Split to a Checkout Session
+
+Pass the `splits` field when creating a checkout session. You can reference a saved split config by ID, or define recipients inline for a one-off split.
+
+### By saved split ID
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/checkouts \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: coal_live_..." \
+  -d '{
+    "amount": 100.00,
+    "description": "NFT Mint — Issue #42",
+    "redirectUrl": "https://yoursite.com/success",
+    "splits": {
+      "configId": "spl_clx9abc123def456"
+    }
+  }'
+```
+
+### Inline (one-off)
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/checkouts \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: coal_live_..." \
+  -d '{
+    "amount": 50.00,
+    "description": "Affiliate Sale",
+    "redirectUrl": "https://yoursite.com/success",
+    "splits": {
+      "recipients": [
+        { "address": "0xMerchant...", "percent": 90, "label": "Merchant" },
+        { "address": "0xAffiliate...", "percent": 10, "label": "Affiliate" }
+      ]
+    }
+  }'
+```
+
+---
+
+## Amount Calculation
+
+Coal uses BigInt arithmetic throughout to avoid floating-point precision issues common with stablecoin amounts.
+
+```typescript
+// Internal implementation (TypeScript pseudocode)
+function calculateShares(
+  totalAmountRaw: bigint,   // e.g. 100_000_000n for 100.00 units at 6 decimals
+  recipients: { percent: number }[]
+): bigint[] {
+  const shares = recipients.map(r =>
+    (totalAmountRaw * BigInt(r.percent)) / 100n
+  );
+
+  // Assign rounding dust to the first recipient
+  const distributed = shares.reduce((sum, s) => sum + s, 0n);
+  const dust = totalAmountRaw - distributed;
+  shares[0] += dust;
+
+  return shares;
+}
+
+// Example: 100 units split 70/30
+// totalAmountRaw = 100_000_000n
+// shares = [70_000_000n, 30_000_000n]
+// distributed = 100_000_000n, dust = 0n ✓
+
+// Example: 99.99 units split 70/30
+// totalAmountRaw = 99_990_000n
+// floor(99_990_000 * 70 / 100) = 69_993_000n
+// floor(99_990_000 * 30 / 100) = 29_997_000n
+// distributed = 99_990_000n, dust = 0n ✓
+```
+
+Payments always fully clear — no settlement-token value is left stranded due to rounding.
+
+---
+
+## Webhook Payload with Splits
+
+When a session with a split confirms, the `checkout.confirmed` webhook includes a `splits` array showing the exact amount each recipient received:
+
+```json
+{
+  "event": "checkout.confirmed",
+  "id": "evt_clx7k2p3q0000abc12345",
+  "timestamp": "2026-03-22T12:00:00.000Z",
+  "data": {
+    "sessionId": "clx7k2p3q0000abc12345",
+    "merchantId": "clx1mer0h0000xyz98765",
+    "amount": "100.00",
+    "currency": "USDC",
+    "status": "confirmed",
+    "txHash": "0xabc123...",
+    "splits": [
+      { "address": "0xCreator...", "label": "Creator", "amount": "70.00" },
+      { "address": "0xPlatform...", "label": "Platform", "amount": "30.00" }
+    ],
+    "metadata": {}
+  }
+}
+```
+
+---
+
+## Common Split Configurations
+
+### Creator + Platform
+
+```json
+[
+  { "address": "0xCreator...", "percent": 80, "label": "Creator" },
+  { "address": "0xPlatform...", "percent": 20, "label": "Platform" }
+]
+```
+
+### Three-way affiliate
+
+```json
+[
+  { "address": "0xMerchant...", "percent": 85, "label": "Merchant" },
+  { "address": "0xAffiliate...", "percent": 10, "label": "Affiliate" },
+  { "address": "0xTreasury...", "percent": 5, "label": "DAO Treasury" }
+]
+```
+
+### Equal co-founder split
+
+```json
+[
+  { "address": "0xFounderA...", "percent": 50, "label": "Founder A" },
+  { "address": "0xFounderB...", "percent": 50, "label": "Founder B" }
+]
+```

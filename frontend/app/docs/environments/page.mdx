@@ -1,0 +1,167 @@
+
+# Environments
+
+Coal runs two environments: **development** (local) and **production**. The backend is a Next.js API application; the frontend is a separate Next.js application. Both must be running locally for full end-to-end development.
+
+---
+
+## Environment Overview
+
+| Environment | Frontend URL            | Backend (API) URL           |
+|:------------|:------------------------|:----------------------------|
+| Development | `http://localhost:3000` | `http://localhost:3001`     |
+| Production  | `https://usecoal.xyz`   | `https://api.usecoal.xyz`   |
+
+### Base URL in Code
+
+```typescript
+// Use the environment variable — never hardcode URLs
+const COAL_API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+// Example request
+const res = await fetch(`${COAL_API_URL}/api/checkout/init`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ slug: 'my-product' }),
+});
+```
+
+---
+
+## Local Development Setup
+
+### Prerequisites
+
+- Node.js 20+
+- A PostgreSQL database (we use [Neon](https://neon.tech) — the free tier is sufficient)
+- Optional: an [Upstash Redis](https://upstash.com) instance for rate limiting (the app runs fine without it using an in-memory fallback)
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-org/coal.git
+cd coal
+```
+
+### 2. Install Dependencies
+
+```bash
+# Install backend dependencies
+cd backend && npm install
+
+# Install frontend dependencies
+cd ../frontend && npm install
+```
+
+### 3. Configure Environment Variables
+
+Copy the example files and fill in your values:
+
+```bash
+cp backend/.env.example backend/.env.local
+cp frontend/.env.example frontend/.env.local
+```
+
+Then edit each file — see the variable reference tables below.
+
+### 4. Push the Database Schema
+
+```bash
+cd backend
+npx prisma db push
+```
+
+This creates all tables in your PostgreSQL database. No migration files are generated — `db push` is used for rapid development iteration.
+
+### 5. Start Both Servers
+
+```bash
+# Terminal 1 — backend API on port 3001
+cd backend && npm run dev
+
+# Terminal 2 — frontend on port 3000
+cd frontend && npm run dev
+```
+
+Open `http://localhost:3000` to see the app.
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env.local`)
+
+| Variable | Description | Example |
+|:---------|:------------|:--------|
+| `DATABASE_URL` | Neon PostgreSQL connection string | `postgresql://user:pass@host/db?sslmode=require` |
+| `ALCHEMY_API_KEY` | Alchemy API key for Base RPC access | `abc123xyz...` |
+| `NEXT_PUBLIC_API_URL` | Public URL of this backend | `http://localhost:3001` |
+| `NEXT_PUBLIC_APP_URL` | Public URL of the frontend | `http://localhost:3000` |
+| `NEXT_PUBLIC_FRONTEND_URL` | Alias for frontend URL (used in emails) | `http://localhost:3000` |
+| `CRON_SECRET` | Secret for authenticating cron job calls | Any random string |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis endpoint for rate limiting | `https://your-db.upstash.io` |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis auth token | `AXxx...` |
+| `RESEND_API_KEY` | Resend API key for transactional email | `re_abc123...` |
+| `UPLOADTHING_SECRET` | UploadThing secret for file uploads | `sk_live_...` |
+| `UPLOADTHING_TOKEN` | UploadThing token | `eyJ...` |
+| `PRIVY_APP_ID` | Privy application ID | `clxxxxxxxxxxxxxxx` |
+| `PRIVY_APP_SECRET` | Privy application secret | `your-privy-secret` |
+| `CHAIN_ENV` | Chain selector: `testnet` = Base Sepolia, unset = Base mainnet | `testnet` |
+| `SETTLEMENT_TOKEN_ADDRESS` | Optional custom settlement token address on Base | `0xYourTokenAddress` |
+| `SETTLEMENT_TOKEN_DECIMALS` | Settlement token decimal places | `6` |
+| `SETTLEMENT_TOKEN_SYMBOL` | Token symbol shown in UI and receipts | `USDC` |
+| `SETTLEMENT_TOKEN_NAME` | Human-readable token name | `USDC` |
+| `MNEE_BASE_ADDRESS` | Legacy alias for `SETTLEMENT_TOKEN_ADDRESS` | `0xYourTokenAddress` |
+| `MNEE_BASE_DECIMALS` | Legacy alias for `SETTLEMENT_TOKEN_DECIMALS` | `6` |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | `xxx.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | `GOCSPX-...` |
+
+### Frontend (`frontend/.env.local`)
+
+| Variable | Description | Example |
+|:---------|:------------|:--------|
+| `NEXT_PUBLIC_API_URL` | Backend API base URL | `http://localhost:3001` |
+| `NEXT_PUBLIC_APP_URL` | Frontend base URL | `http://localhost:3000` |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app ID (public — safe to expose) | `clxxxxxxxxxxxxxxx` |
+| `NEXT_PUBLIC_CHAIN_ENV` | Chain environment for frontend wallet | `testnet` |
+| `NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS` | Public settlement token contract address | `0xYourTokenAddress` |
+| `NEXT_PUBLIC_SETTLEMENT_TOKEN_DECIMALS` | Settlement token decimals for display formatting | `6` |
+| `NEXT_PUBLIC_SETTLEMENT_TOKEN_SYMBOL` | Symbol displayed in the checkout UI | `USDC` |
+| `NEXT_PUBLIC_SETTLEMENT_TOKEN_NAME` | Full token name displayed in the checkout UI | `USDC` |
+| `NEXT_PUBLIC_MNEE_BASE_ADDRESS` | Legacy alias for `NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS` | `0xYourTokenAddress` |
+| `NEXT_PUBLIC_MNEE_BASE_DECIMALS` | Legacy alias for `NEXT_PUBLIC_SETTLEMENT_TOKEN_DECIMALS` | `6` |
+| `NEXT_PUBLIC_MOONPAY_API_KEY` | MoonPay publishable key for fiat onramp | `pk_test_...` |
+| `NEXT_PUBLIC_MOONPAY_ENV` | MoonPay mode | `sandbox` or `production` |
+| `UPLOADTHING_SECRET` | UploadThing secret (server-side routes) | `sk_live_...` |
+| `UPLOADTHING_TOKEN` | UploadThing token | `eyJ...` |
+
+---
+
+## Chain Configuration
+
+Coal's backend verifies payments on the Base blockchain (an Ethereum L2). Two networks are supported:
+
+| `CHAIN_ENV` value | Network        | Chain ID | Block Explorer                     |
+|:------------------|:---------------|:---------|:-----------------------------------|
+| `testnet`         | Base Sepolia   | 84532    | https://sepolia.basescan.org       |
+| *(unset)*         | Base Mainnet   | 8453     | https://basescan.org               |
+
+During development, set `CHAIN_ENV=testnet` in both your backend and frontend `.env.local` files. This routes all on-chain verification to Base Sepolia so you can test with a non-production settlement token without spending real funds.
+
+**Important:** Your settlement token contract address can differ between mainnet and testnet. Always set `SETTLEMENT_TOKEN_ADDRESS` and `NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS` to the correct contract for your current `CHAIN_ENV`. Legacy `MNEE_*` names still work if you already use them, but new integrations should prefer the settlement-token variables.
+
+---
+
+## Production Deployment
+
+Coal is designed to deploy on [Vercel](https://vercel.com). Both the backend and frontend are standard Next.js applications and can be deployed independently.
+
+Set all environment variables in **Vercel → Project → Settings → Environment Variables**. Never commit `.env.local` or any file containing secrets to version control.
+
+For the cron job (`/api/cron/verify-payments`), configure a Vercel Cron or external scheduler to POST to that endpoint every minute with:
+
+```
+Authorization: Bearer <your CRON_SECRET>
+```
+
+The cron job is what transitions sessions from `verifying` to `confirmed` — if it stops running, payments will remain in `verifying` indefinitely.

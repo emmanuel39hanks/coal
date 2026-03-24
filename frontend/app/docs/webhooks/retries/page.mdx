@@ -1,0 +1,198 @@
+
+# Retry Logic & Idempotency
+
+When Coal delivers a webhook and your endpoint does not respond with a `2xx` status within 30 seconds, the delivery is marked as **failed** and Coal schedules a retry. This page explains the full retry schedule, delivery status lifecycle, and how to make your handler idempotent so that re-deliveries never cause duplicate side effects.
+
+> Retry inspection and manual re-delivery are console actions. Use a Privy Bearer token for `/api/console/webhooks/*`; do not use a merchant API key here.
+
+---
+
+## Retry Schedule
+
+Coal retries failed deliveries up to **5 times** using exponential backoff:
+
+| Attempt | Delay after previous failure |
+|:-------:|:-----------------------------|
+| 1 (initial) | Immediate |
+| 2 | 1 minute |
+| 3 | 5 minutes |
+| 4 | 30 minutes |
+| 5 | 2 hours |
+| 6 | 8 hours |
+
+After the 6th failed attempt, the delivery is marked `exhausted` and no further retries are scheduled.
+
+> The total window from initial delivery to final retry is approximately **10 hours 36 minutes**. Build your recovery path accordingly.
+
+---
+
+## Delivery Status Lifecycle
+
+```
+         ┌──────────┐
+         │ pending  │  Coal is about to send the first request
+         └────┬─────┘
+              │ 2xx within 30s
+         ┌────▼─────┐
+         │delivered │  Terminal success state
+         └──────────┘
+
+              │ non-2xx / timeout
+         ┌────▼─────┐
+         │  failed  │  Retry scheduled
+         └────┬─────┘
+              │ more failures
+         ┌────▼──────┐
+         │ exhausted │  Terminal failure — no more retries
+         └───────────┘
+```
+
+A delivery moves from `failed` back to `pending` while a retry is queued, then transitions to `delivered` or back to `failed` after the retry attempt resolves.
+
+---
+
+## Endpoint Requirements
+
+Your webhook endpoint must:
+
+- Respond with a **2xx status code** (200, 201, 204 all work).
+- Respond within **30 seconds**.
+- Return immediately and delegate heavy processing to a background queue or worker.
+
+```typescript
+// Good — acknowledge first, process async
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  // ... verify signature ...
+
+  const event = JSON.parse(rawBody);
+
+  // Enqueue for background processing
+  await queue.add('coal-webhook', event);
+
+  // Return 200 immediately
+  return NextResponse.json({ received: true });
+}
+```
+
+If your handler does all processing synchronously and an external dependency (database, email service) is slow, you risk hitting the 30-second limit and triggering unnecessary retries.
+
+---
+
+## Idempotency
+
+Because the same event can be delivered multiple times, your handler **must be idempotent**. The same business logic must not run twice for the same session.
+
+### The right key: `data.sessionId`
+
+Use `data.sessionId` as your idempotency key — not the top-level `id` (which is the event envelope ID and may differ across retries).
+
+### Database deduplication (recommended)
+
+```typescript
+// Using Prisma + PostgreSQL
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  // ... signature verification omitted for brevity ...
+
+  const event = JSON.parse(rawBody) as CoalWebhookEvent;
+
+  if (event.event !== 'checkout.confirmed') {
+    return NextResponse.json({ received: true });
+  }
+
+  const { sessionId } = event.data;
+
+  // Atomic upsert — idempotent by design
+  const result = await prisma.processedWebhook.upsert({
+    where: { sessionId },
+    update: {},  // already exists — do nothing
+    create: {
+      sessionId,
+      event: event.event,
+      processedAt: new Date(),
+    },
+  });
+
+  // If `processedAt` is more than a few seconds old, it was a duplicate
+  const isNewRecord =
+    Date.now() - result.processedAt.getTime() < 5_000;
+
+  if (isNewRecord) {
+    await fulfillOrder(event.data);
+  }
+
+  return NextResponse.json({ received: true });
+}
+```
+
+### Redis deduplication (lightweight)
+
+```typescript
+import { redis } from '@/lib/redis';
+
+const key = `coal:processed:${event.data.sessionId}`;
+
+// NX = only set if not exists; EX = expire after 48h
+const acquired = await redis.set(key, '1', { NX: true, EX: 172800 });
+
+if (!acquired) {
+  // Duplicate delivery — skip processing
+  return NextResponse.json({ received: true });
+}
+
+await fulfillOrder(event.data);
+```
+
+---
+
+## Recovering Missed Events
+
+If your endpoint was down during a retry window and all attempts were exhausted, you can retrieve failed deliveries via the Console API and replay them:
+
+```bash
+# List failed webhook deliveries
+curl https://api.usecoal.xyz/api/console/webhooks?status=failed \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+Response:
+
+```json
+{
+  "data": [
+    {
+      "id": "evt_clx7k2p3q0000abc12345",
+      "event": "checkout.confirmed",
+      "status": "exhausted",
+      "sessionId": "clx7k2p3q0000abc12345",
+      "attempts": 6,
+      "lastAttemptAt": "2026-03-22T22:36:00.000Z",
+      "nextRetryAt": null
+    }
+  ],
+  "total": 1
+}
+```
+
+You can then manually re-trigger delivery for a specific event:
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/webhooks/evt_clx7k2p3q0000abc12345/retry \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+> Because your handler is idempotent, replaying already-processed events is safe — they will be silently acknowledged.
+
+---
+
+## Testing Retries Locally
+
+To simulate retry behavior during development:
+
+1. Start your local server.
+2. Temporarily return a `500` from your handler.
+3. Use the Console → **Webhook Logs** panel to observe the retry schedule.
+4. Fix your handler and watch the next retry succeed.
+
+Alternatively, use the **Send test event** button in Console → Settings → Webhook URL to trigger a synthetic `checkout.confirmed` against your endpoint.

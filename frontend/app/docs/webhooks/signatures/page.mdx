@@ -1,0 +1,244 @@
+
+# Signature Verification
+
+Every webhook request that Coal sends includes an `X-Coal-Signature` header. Verifying this header guarantees that the request genuinely came from Coal and that the body has not been tampered with in transit.
+
+> **Always verify signatures in production.** An unverified webhook endpoint can be triggered by any party who knows your URL, enabling fraudulent fulfillment.
+
+---
+
+## The Signature Header
+
+```
+X-Coal-Signature: sha256=3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c
+```
+
+The value is always `sha256=` followed by a lowercase hexadecimal HMAC-SHA256 digest of the **raw request body bytes**.
+
+---
+
+## Your Webhook Secret
+
+Your webhook secret is separate from your API key. Find it in the [Developer Console](/console):
+
+**Console → Settings → Webhook Secret**
+
+Store it as an environment variable — never hardcode it:
+
+```bash
+# .env.local
+COAL_WEBHOOK_SECRET=whsec_live_...
+```
+
+---
+
+## Verification Algorithm
+
+1. Read the **raw request body** as bytes — do this before any JSON parsing.
+2. Compute `HMAC-SHA256(rawBody, webhookSecret)`.
+3. Hex-encode the digest.
+4. Strip the `sha256=` prefix from the header value.
+5. Compare using a **timing-safe equality** function.
+6. If they match, the webhook is authentic.
+
+The signature is computed over raw body bytes. Parsing the JSON first and re-serializing it will produce a different byte sequence (whitespace, key ordering) and cause verification to fail.
+
+---
+
+## Code Examples
+
+### Node.js
+
+```typescript
+import crypto from 'crypto';
+
+function verifyCoalSignature(
+  rawBody: string | Buffer,
+  signatureHeader: string,
+  secret: string
+): boolean {
+  const providedSig = signatureHeader.replace(/^sha256=/, '');
+
+  const expectedSig = crypto
+    .createHmac('sha256', secret)
+    .update(rawBody)
+    .digest('hex');
+
+  // Timing-safe comparison prevents timing attacks
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedSig, 'hex'),
+      Buffer.from(providedSig, 'hex')
+    );
+  } catch {
+    // Buffer lengths differ — signature is invalid
+    return false;
+  }
+}
+```
+
+### Next.js App Router route handler
+
+```typescript
+// app/api/webhooks/coal/route.ts
+import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+
+export async function POST(request: Request) {
+  // Read raw bytes BEFORE any JSON.parse()
+  const rawBody = await request.text();
+  const sigHeader = request.headers.get('x-coal-signature') ?? '';
+
+  const secret = process.env.COAL_WEBHOOK_SECRET;
+  if (!secret) {
+    throw new Error('COAL_WEBHOOK_SECRET is not configured');
+  }
+
+  const isValid = verifyCoalSignature(rawBody, sigHeader, secret);
+
+  if (!isValid) {
+    console.error('[webhook] Signature mismatch — returning 400');
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+  }
+
+  const event = JSON.parse(rawBody);
+  // ... handle event
+  return NextResponse.json({ received: true });
+}
+
+function verifyCoalSignature(raw: string, header: string, secret: string): boolean {
+  if (!header) return false;
+  const provided = header.replace(/^sha256=/, '');
+  const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expected, 'hex'),
+      Buffer.from(provided, 'hex')
+    );
+  } catch {
+    return false;
+  }
+}
+```
+
+### Python
+
+```python
+import hashlib
+import hmac
+import os
+
+def verify_coal_signature(raw_body: bytes, signature_header: str) -> bool:
+    secret = os.environ["COAL_WEBHOOK_SECRET"].encode()
+    provided_sig = signature_header.removeprefix("sha256=")
+
+    expected_sig = hmac.new(secret, raw_body, hashlib.sha256).hexdigest()
+
+    # hmac.compare_digest is timing-safe
+    return hmac.compare_digest(expected_sig, provided_sig)
+
+
+# Flask example
+from flask import Flask, request, abort, jsonify
+
+app = Flask(__name__)
+
+@app.route("/webhooks/coal", methods=["POST"])
+def coal_webhook():
+    raw_body = request.get_data()  # raw bytes, before any parsing
+    sig_header = request.headers.get("X-Coal-Signature", "")
+
+    if not verify_coal_signature(raw_body, sig_header):
+        abort(400, description="Invalid signature")
+
+    event = request.get_json()
+    print(f"Received event: {event['event']}")
+    return jsonify({"received": True})
+```
+
+### Go
+
+```go
+package main
+
+import (
+    "crypto/hmac"
+    "crypto/sha256"
+    "encoding/hex"
+    "io"
+    "net/http"
+    "os"
+    "strings"
+)
+
+func verifyCoalSignature(rawBody []byte, signatureHeader, secret string) bool {
+    provided := strings.TrimPrefix(signatureHeader, "sha256=")
+
+    mac := hmac.New(sha256.New, []byte(secret))
+    mac.Write(rawBody)
+    expected := hex.EncodeToString(mac.Sum(nil))
+
+    // hmac.Equal is timing-safe
+    expectedBytes, _ := hex.DecodeString(expected)
+    providedBytes, err := hex.DecodeString(provided)
+    if err != nil {
+        return false
+    }
+    return hmac.Equal(expectedBytes, providedBytes)
+}
+
+func coalWebhookHandler(w http.ResponseWriter, r *http.Request) {
+    // Read raw body BEFORE any JSON decoding
+    rawBody, err := io.ReadAll(r.Body)
+    if err != nil {
+        http.Error(w, "cannot read body", http.StatusBadRequest)
+        return
+    }
+
+    sigHeader := r.Header.Get("X-Coal-Signature")
+    secret := os.Getenv("COAL_WEBHOOK_SECRET")
+
+    if !verifyCoalSignature(rawBody, sigHeader, secret) {
+        http.Error(w, "invalid signature", http.StatusBadRequest)
+        return
+    }
+
+    // Proceed with event handling ...
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"received":true}`))
+}
+```
+
+---
+
+## Common Mistakes
+
+| Mistake | Result | Fix |
+|:--------|:-------|:----|
+| Parsing JSON before computing HMAC | Signature always fails | Read raw bytes first, parse after verification |
+| Using `==` for string comparison | Timing attack vulnerability | Use `crypto.timingSafeEqual` / `hmac.compare_digest` |
+| Forgetting to strip `sha256=` prefix | Comparison always fails | Strip prefix before comparison |
+| Wrong secret (API key vs webhook secret) | Signature always fails | Use the **Webhook Secret** from Console → Settings |
+| Verifying in development without real secret | False negatives in testing | Set `COAL_WEBHOOK_SECRET` in your `.env.local` |
+
+---
+
+## What to Do on Failure
+
+If verification fails, your endpoint should:
+
+1. Return **HTTP 400** (not 200 — do not silently acknowledge forged requests).
+2. Log the full incoming header and a truncated body for debugging.
+3. Trigger an alert if you see repeated failures from unexpected IPs.
+
+```typescript
+if (!isValid) {
+  console.error({
+    msg: 'Coal webhook signature verification failed',
+    sigHeader,
+    ip: request.headers.get('x-forwarded-for'),
+    bodyPreview: rawBody.slice(0, 120),
+  });
+  return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+}
+```
