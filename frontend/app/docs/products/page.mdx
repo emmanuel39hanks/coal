@@ -1,0 +1,238 @@
+
+# Products
+
+Products are the catalog items that back your payment links. Each product has a fixed price, optional image, and optional SKU for inventory tracking. When you attach a product to a Payment Link, Coal automatically pulls in the name, image, and price on the checkout page.
+
+> **Products are optional.** If you want buyers to enter a custom amount, create a flexible Payment Link with no product attached. See [Payment Links](/docs/payment-links).
+
+---
+
+## Product Object
+
+```json
+{
+  "id": "clz9prod123",
+  "name": "Pro Plan",
+  "description": "Unlimited projects and priority support.",
+  "price": "49.00",
+  "image": "https://cdn.example.com/pro-plan.png",
+  "sku": "PLAN-PRO-MONTHLY",
+  "active": true,
+  "sales": 142,
+  "createdAt": "2026-03-01T09:00:00.000Z",
+  "updatedAt": "2026-03-20T14:30:00.000Z"
+}
+```
+
+### Field reference
+
+| Field         | Type      | Description                                                              |
+|:--------------|:----------|:-------------------------------------------------------------------------|
+| `id`          | `string`  | Unique identifier (CUID).                                                |
+| `name`        | `string`  | Product display name shown on the checkout page.                         |
+| `description` | `string?` | Optional description shown below the name.                               |
+| `price`       | `string`  | Fixed price as a decimal string in the merchant's settlement currency.    |
+| `image`       | `string?` | URL of the product image. Displayed as a square thumbnail at checkout.   |
+| `sku`         | `string?` | Your internal SKU. Not shown to buyers; useful for inventory webhooks.   |
+| `active`      | `boolean` | `false` means the product is archived and cannot be linked to new links. |
+| `sales`       | `number`  | Count of confirmed checkout sessions for this product.                   |
+| `createdAt`   | `string`  | ISO 8601 timestamp.                                                      |
+| `updatedAt`   | `string`  | ISO 8601 timestamp of last modification.                                 |
+
+---
+
+## Creating a Product
+
+### Via the Console
+
+1. Go to **Console → Products → New Product**.
+2. Enter a name and price.
+3. Optionally add a description, upload an image, and set a SKU.
+4. Click **Create Product**. It appears in your catalog immediately.
+
+### Via the API
+
+**`POST /api/console/products`**
+
+This is a console-managed surface. The public merchant API uses `x-api-key`; `/api/console/*` routes use Privy Bearer tokens and are dashboard-only.
+
+```
+Authorization: Bearer <Privy JWT>
+Content-Type: application/json
+```
+
+#### Request body
+
+| Field         | Type     | Required | Description                           |
+|:--------------|:---------|:---------|:--------------------------------------|
+| `name`        | `string` | **Yes**  | Display name.                         |
+| `price`       | `number` | **Yes**  | Price in the merchant's settlement currency. |
+| `description` | `string` | No       | Short description.                    |
+| `image`       | `string` | No       | Publicly accessible image URL.        |
+| `sku`         | `string` | No       | Your internal SKU or inventory code.  |
+
+#### cURL
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/products \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -d '{
+    "name": "Pro Plan",
+    "description": "Unlimited projects and priority support.",
+    "price": 49,
+    "image": "https://cdn.example.com/pro-plan.png",
+    "sku": "PLAN-PRO-MONTHLY"
+  }'
+```
+
+Returns `201 Created` with the full product object.
+
+#### Node.js
+
+```typescript
+const res = await fetch('https://api.usecoal.xyz/api/console/products', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer <Privy JWT>',
+  },
+  body: JSON.stringify({
+    name: 'Pro Plan',
+    description: 'Unlimited projects and priority support.',
+    price: 49,
+    image: 'https://cdn.example.com/pro-plan.png',
+    sku: 'PLAN-PRO-MONTHLY',
+  }),
+});
+
+const product = await res.json();
+console.log(product.id); // clz9prod123
+```
+
+---
+
+## Listing Products
+
+**`GET /api/console/products`**
+
+Returns all active products for your account, sorted newest first. Each product includes a `sales` count of confirmed payments.
+
+```bash
+curl https://api.usecoal.xyz/api/console/products \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+```json
+{
+  "products": [
+    {
+      "id": "clz9prod123",
+      "name": "Pro Plan",
+      "description": "Unlimited projects and priority support.",
+      "price": "49.00",
+      "image": "https://cdn.example.com/pro-plan.png",
+      "sales": 142
+    },
+    {
+      "id": "clz9prod456",
+      "name": "Starter Pack",
+      "description": null,
+      "price": "9.00",
+      "image": null,
+      "sales": 38
+    }
+  ]
+}
+```
+
+---
+
+## Updating a Product
+
+**`PUT /api/console/products/:id`**
+
+All fields are optional — only send what you want to change.
+
+```bash
+curl -X PUT https://api.usecoal.xyz/api/console/products/clz9prod123 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -d '{ "price": 59, "description": "Now includes AI features." }'
+```
+
+> **Price changes are not retroactive.** Existing confirmed sessions keep the amount they were created with. Only new sessions created after the price change will use the updated price.
+
+---
+
+## Deleting a Product
+
+**`DELETE /api/console/products/:id`**
+
+Products are soft-deleted — `active` is set to `false`. The product disappears from your catalog, and any Payment Links that reference it stop resolving.
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/products/clz9prod123 \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+---
+
+## Product Examples
+
+### Digital product
+
+```json
+{
+  "name": "eBook: Crypto Payments Explained",
+  "description": "A 60-page guide to building on Coal.",
+  "price": 15,
+  "image": "https://cdn.example.com/ebook-cover.png",
+  "sku": "EBOOK-CRYPTO-V1"
+}
+```
+
+After purchase, use a webhook (`checkout.session.completed`) to send the buyer a download link.
+
+### Physical product
+
+```json
+{
+  "name": "Coal Merch Hoodie — Black L",
+  "description": "100% organic cotton. Ships in 3–5 business days.",
+  "price": 65,
+  "image": "https://cdn.example.com/hoodie-black-l.jpg",
+  "sku": "MERCH-HOODIE-BLK-L"
+}
+```
+
+Use the `sku` field to match the confirmed payment to your inventory management system.
+
+### Subscription (recurring billing pattern)
+
+Coal now supports recurring products natively:
+
+1. Create a product with `billingType: "subscription"`.
+2. Set `billingInterval` and `billingIntervalCount`, for example:
+
+```json
+{
+  "name": "Pro Plan",
+  "price": 49,
+  "billingType": "subscription",
+  "billingInterval": "month",
+  "billingIntervalCount": 1
+}
+```
+
+On the first paid cycle, Coal stores the buyer's billing mandate and creates the subscription record. Future renewal checkout sessions are generated automatically on the configured cadence, and merchants can manage the billing state from the dashboard.
+
+---
+
+## Best Practices
+
+**Use SKUs for inventory sync.** The `sku` field is echoed back in webhook payloads. If your warehouse or fulfillment system uses SKUs, set the product SKU to match so you can look up the order automatically on confirmation.
+
+**Use images for branding.** Products with a high-quality image convert better. Host images on a CDN (see [Managing Products](/docs/products/manage)) and use HTTPS URLs. Coal does not resize images — aim for square images at 400×400 px or larger.
+
+**Do not delete products with active links.** Deleting a product deactivates any Payment Links that reference it. Archive it only when you are certain no buyer will visit those links.

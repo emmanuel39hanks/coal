@@ -1,0 +1,286 @@
+
+# Checkout Sessions
+
+A Checkout Session is a server-side payment intent you create programmatically. It represents a single, time-bounded payment request tied to a specific amount and merchant. Sessions power both the hosted Coal checkout page and the embeddable widget.
+
+> **Payment Links vs Checkout Sessions:** Payment Links are persistent, reusable URLs you share with anyone. Checkout Sessions are one-time, ephemeral objects created when a specific buyer is ready to pay. Use sessions when your server controls the checkout flow or when you need a one-off checkout URL.
+
+---
+
+## Session Lifecycle
+
+```
+pending → verifying → confirmed
+                   ↘ failed
+         (auto)    → expired
+```
+
+| Status      | Meaning                                                                            |
+|:------------|:-----------------------------------------------------------------------------------|
+| `pending`   | Session created, waiting for the buyer to submit a transaction hash.               |
+| `verifying` | Buyer has submitted a `txHash`. Coal is confirming the transaction on-chain.       |
+| `confirmed` | Payment verified. Funds are on their way to your payout address.                   |
+| `failed`    | On-chain verification rejected the transaction (wrong amount, wrong recipient).    |
+| `expired`   | Session was not completed within 24 hours and is no longer usable.                 |
+
+---
+
+## 1. Create a Session
+
+**`POST /api/checkout/init`**
+
+This endpoint is public. It resolves a payment link slug, validates the amount, and creates a new session for hosted checkout.
+
+### Request body
+
+| Field    | Type     | Required | Description                                                         |
+|:---------|:---------|:---------|:--------------------------------------------------------------------|
+| `slug`   | `string` | **Yes**  | The slug of an active payment link.                                 |
+| `amount` | `number` | No       | Required only for flexible (no-product) links. Ignored otherwise.   |
+
+### cURL
+
+```bash
+# Product-linked link (amount is fixed, do not send amount)
+curl -X POST https://api.usecoal.xyz/api/checkout/init \
+  -H "Content-Type: application/json" \
+  -d '{ "slug": "pro-plan" }'
+
+# Flexible link (buyer-specified amount)
+curl -X POST https://api.usecoal.xyz/api/checkout/init \
+  -H "Content-Type: application/json" \
+  -d '{ "slug": "donate", "amount": 10 }'
+```
+
+### Response
+
+```json
+{
+  "sessionId": "clz9session123",
+  "amount": 49.00,
+  "currency": "USDC",
+  "description": "Pro Plan",
+  "merchant": {
+    "name": "Acme Corp",
+    "payoutAddress": "1AcmePayoutAddress..."
+  },
+  "expiresAt": "2026-03-23T10:00:00.000Z"
+}
+```
+
+---
+
+## 2. Confirm Payment
+
+**`POST /api/pay/confirm`**
+
+After the buyer's wallet has broadcast the settlement-token transfer, your client sends the transaction hash to Coal. This moves the session from `pending` to `verifying` and triggers on-chain verification.
+
+### Request body
+
+| Field       | Type     | Required | Description                                    |
+|:------------|:---------|:---------|:-----------------------------------------------|
+| `sessionId` | `string` | **Yes**  | The session ID returned from `/api/checkout/init`. |
+| `txHash`    | `string` | **Yes**  | The transaction hash from the wallet.          |
+
+### cURL
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/pay/confirm \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "clz9session123",
+    "txHash": "a1b2c3d4e5f6..."
+  }'
+```
+
+### Response
+
+```json
+{
+  "status": "verifying",
+  "sessionId": "clz9session123"
+}
+```
+
+This call is idempotent — submitting the same `sessionId` + `txHash` pair again returns the current status safely.
+
+---
+
+## 3. Poll Session Status
+
+**`GET /api/pay/status/:sessionId`**
+
+Poll this endpoint until the status is `confirmed`, `failed`, or `expired`. Coal recommends polling every 2 seconds with a maximum of 60 attempts (2 minutes timeout on the client).
+
+### cURL
+
+```bash
+curl https://api.usecoal.xyz/api/pay/status/clz9session123
+```
+
+### Response (verifying)
+
+```json
+{
+  "status": "verifying",
+  "txHash": "a1b2c3d4e5f6..."
+}
+```
+
+### Response (confirmed)
+
+```json
+{
+  "status": "confirmed",
+  "txHash": "a1b2c3d4e5f6...",
+  "redirectUrl": "https://yoursite.com/success"
+}
+```
+
+When `status` is `confirmed` and a `redirectUrl` is present, redirect the user to that URL.
+
+---
+
+## Session Expiry
+
+Sessions expire **24 hours** after creation. If a buyer attempts to pay an expired session, `/api/pay/confirm` returns a `410 Gone` response. The session status is also automatically set to `expired` the next time `/api/pay/status/:sessionId` is polled.
+
+Always display the `expiresAt` timestamp to the buyer so they know how long they have.
+
+---
+
+## Error Codes
+
+| Code                          | HTTP | Description                                                       |
+|:------------------------------|:-----|:------------------------------------------------------------------|
+| `SESSION_NOT_FOUND`           | 404  | No session exists with the given ID.                              |
+| `SESSION_EXPIRED`             | 410  | Session has passed its `expiresAt` timestamp.                     |
+| `SESSION_ALREADY_CONFIRMED`   | 409  | Session is not in `pending` status; payment already processed.    |
+| `TXHASH_ALREADY_USED`         | 409  | The transaction hash was already used in a confirmed payment.     |
+| `TXHASH_IN_ANOTHER_SESSION`   | 409  | The hash is already pending in a different session.               |
+| `VALIDATION_ERROR`            | 400  | Missing or invalid request body fields.                           |
+
+---
+
+## Node.js Server-Side Example (Next.js App Router)
+
+Create the session server-side so your business logic stays off the client.
+
+```typescript
+// app/actions.ts
+'use server';
+
+export async function createCheckoutSession(slug: string, amount?: number) {
+  const res = await fetch(`${process.env.COAL_API_URL}/api/checkout/init`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug, amount }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err?.error?.code ?? 'Failed to create session');
+  }
+
+  const { data } = await res.json();
+  return data as {
+    sessionId: string;
+    amount: number;
+    currency: string;
+    description: string;
+    merchant: { name: string; payoutAddress: string };
+    expiresAt: string;
+  };
+}
+```
+
+Call this server action from a React Server Component or a form action, then pass `sessionId` down to the client component that renders the checkout UI.
+
+---
+
+## React Client-Side Flow Example
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLLS = 60;
+
+interface CheckoutProps {
+  sessionId: string;
+  payoutAddress: string;
+  amount: number;
+}
+
+export function CheckoutFlow({ sessionId, payoutAddress, amount }: CheckoutProps) {
+  const [status, setStatus] = useState<string>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePay() {
+    setStatus('sending');
+    try {
+      // 1. Send the configured settlement token via the user's wallet
+      // Replace with your actual wallet SDK call
+      const txHash = await sendSettlementTransfer({
+        to: payoutAddress,
+        amount,
+      });
+
+      // 2. Confirm the payment with Coal
+      setStatus('confirming');
+      const confirmRes = await fetch('/api/pay/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, txHash }),
+      });
+
+      if (!confirmRes.ok) {
+        const err = await confirmRes.json();
+        throw new Error(err?.error?.code ?? 'Confirmation failed');
+      }
+
+      // 3. Poll for final status
+      setStatus('verifying');
+      let polls = 0;
+      const interval = setInterval(async () => {
+        polls++;
+        if (polls > MAX_POLLS) {
+          clearInterval(interval);
+          setStatus('timeout');
+          return;
+        }
+
+        const statusRes = await fetch(`/api/pay/status/${sessionId}`);
+        const data = await statusRes.json();
+
+        if (data.status === 'confirmed') {
+          clearInterval(interval);
+          setStatus('confirmed');
+          if (data.redirectUrl) window.location.href = data.redirectUrl;
+        } else if (data.status === 'failed' || data.status === 'expired') {
+          clearInterval(interval);
+          setStatus(data.status);
+          setError(`Payment ${data.status}.`);
+        }
+      }, POLL_INTERVAL_MS);
+
+    } catch (err: unknown) {
+      setStatus('error');
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    }
+  }
+
+  return (
+    <div>
+      <p>Status: {status}</p>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <button onClick={handlePay} disabled={status !== 'idle'}>
+        Pay {amount} tokens
+      </button>
+    </div>
+  );
+}
+```

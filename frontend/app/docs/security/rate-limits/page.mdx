@@ -1,0 +1,168 @@
+
+# Rate Limits
+
+Coal enforces rate limits on all API endpoints to protect the platform against abuse and ensure fair access for all merchants. This page explains the limits in effect, how to read rate limit headers, and how to handle `429` responses gracefully.
+
+---
+
+## Limits by Endpoint
+
+| Category             | Endpoint pattern                         | Limit          | Window        |
+|:---------------------|:-----------------------------------------|:---------------|:--------------|
+| **Authentication**   | `POST /api/auth/*`                       | 5 requests     | 1 minute      |
+| **Checkout init**    | `POST /api/checkouts`                    | 10 requests    | 1 minute      |
+| **Pay confirm**      | `POST /api/pay/confirm`                  | 10 requests    | 1 minute      |
+| **Pay status**       | `GET /api/pay/status/:id`                | 30 requests    | 1 minute      |
+| **Console (Privy)**  | `GET/POST/PUT/DELETE /api/console/*`     | 60 requests    | 1 minute      |
+| **Paywall verify**   | `GET /api/paywalls/:id/verify`           | 30 requests    | 1 minute      |
+| **Paywall pay**      | `POST /api/paywalls/:id/pay`             | 10 requests    | 1 minute      |
+| **Public (all)**     | All unauthenticated endpoints            | 30 requests    | 1 minute      |
+
+Limits are applied per IP address for unauthenticated routes, per merchant API key for public merchant routes, and per console user/session for Privy-authenticated console routes.
+
+---
+
+## Rate Limit Headers
+
+Every API response includes rate limit headers so you can monitor your usage before hitting a limit:
+
+| Header                  | Description                                                                 |
+|:------------------------|:----------------------------------------------------------------------------|
+| `X-RateLimit-Limit`     | The total number of requests allowed in the current window.                 |
+| `X-RateLimit-Remaining` | The number of requests remaining in the current window.                     |
+| `X-RateLimit-Reset`     | Unix timestamp (seconds) of when the current window resets.                 |
+
+**Example response headers:**
+
+```
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 47
+X-RateLimit-Reset: 1742641260
+```
+
+When `X-RateLimit-Remaining` reaches `0`, the next request in the same window will be rate limited.
+
+---
+
+## What Happens When You Are Rate Limited
+
+When you exceed a rate limit, the API returns:
+
+```
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 38
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1742641260
+```
+
+```json
+{
+  "error": "RATE_LIMITED",
+  "message": "Too many requests. Please wait 38 seconds before retrying.",
+  "retryAfter": 38
+}
+```
+
+The `Retry-After` header contains the number of **seconds** to wait before your next request will succeed. The `X-RateLimit-Reset` header contains the absolute Unix timestamp when your window resets.
+
+---
+
+## Sliding Window Algorithm
+
+In production, Coal uses **Upstash Redis sliding window rate limiting** via the `@upstash/ratelimit` library. The sliding window algorithm is more forgiving than a fixed window — instead of allowing a full burst at the exact moment a window resets, it smooths the allowance across time.
+
+In development and local environments, an **in-memory fallback** is used when `UPSTASH_REDIS_REST_URL` is not set. The in-memory store is not shared across processes, so you may observe different behavior in clustered environments compared to production.
+
+---
+
+## Handling 429 in Your Code
+
+### Basic Retry with Exponential Backoff
+
+```typescript
+async function callCoalApi<T>(
+  url: string,
+  init: RequestInit,
+  maxRetries = 3
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, init);
+
+    if (res.status !== 429) {
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(`Coal API error ${res.status}: ${body.error ?? 'Unknown'}`);
+      }
+      return res.json();
+    }
+
+    // Rate limited — read the Retry-After header
+    const retryAfter = parseInt(res.headers.get('Retry-After') ?? '5', 10);
+    const waitMs = retryAfter * 1000;
+
+    if (attempt < maxRetries) {
+      console.warn(`Rate limited. Retrying in ${retryAfter}s (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    } else {
+      throw new Error(`Rate limit exceeded after ${maxRetries} retries. Wait ${retryAfter}s.`);
+    }
+  }
+
+  // TypeScript narrowing: this line is unreachable
+  throw new Error('Unexpected state');
+}
+
+// Usage
+const data = await callCoalApi<{ data: { sessionId: string } }>(
+  'https://api.usecoal.xyz/api/checkouts',
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.COAL_API_KEY!,
+    },
+    body: JSON.stringify({ slug: 'premium-membership' }),
+  }
+);
+```
+
+### Proactive Rate Limit Monitoring
+
+Monitor headers before hitting the limit:
+
+```typescript
+async function checkoutWithRateLimitGuard(slug: string) {
+  const res = await fetch('https://api.usecoal.xyz/api/checkouts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.COAL_API_KEY!,
+    },
+    body: JSON.stringify({ slug }),
+  });
+
+  // Log remaining quota for observability
+  const remaining = res.headers.get('X-RateLimit-Remaining');
+  const resetAt = res.headers.get('X-RateLimit-Reset');
+
+  if (remaining !== null && parseInt(remaining) < 5) {
+    console.warn(
+      `Low rate limit budget: ${remaining} requests remaining. Resets at ${new Date(parseInt(resetAt!) * 1000).toISOString()}`
+    );
+  }
+
+  if (!res.ok) throw new Error(`Checkout failed: ${res.status}`);
+  return res.json();
+}
+```
+
+---
+
+## Best Practices to Stay Within Limits
+
+- **Cache checkout sessions** — don't re-initialize a new session on every page load if the user hasn't interacted yet. Create sessions on demand (e.g. when the user clicks "Buy").
+- **Poll status efficiently** — when checking `GET /api/pay/status/:id`, use exponential backoff starting at 2 seconds, not 100ms. The cron job runs every minute, so polling faster than every 2–5 seconds is wasted.
+- **Use webhooks over polling** — for production fulfillment logic, receive `checkout.session.completed` via webhook instead of polling the status endpoint.
+- **Batch Console reads** — use the `limit` and `offset` query parameters to paginate large result sets rather than making many small requests.

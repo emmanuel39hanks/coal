@@ -1,0 +1,344 @@
+
+# Paywalls API (x402)
+
+Paywalls let you gate a URL or API resource behind a payment using the [x402 payment protocol](https://x402.org). A user proves they have paid by presenting a verified payment record, granting them access to the protected resource.
+
+> This page documents the console-managed paywall configuration surface. Public merchant API actions still use `x-api-key` on checkout/session routes; `/api/console/*` is Privy-authenticated.
+
+**Base URL:** `https://api.usecoal.xyz`
+
+---
+
+## Create a Paywall
+
+**`POST /api/console/paywalls`**
+
+Creates a new paywall that gates access to a specific URL or resource.
+
+### Authentication
+
+| Header | Required | Description |
+|:--|:--|:--|
+| `Authorization` | **Yes** | `Bearer <privy_access_token>` from an authenticated console session |
+
+### Request Body
+
+| Field          | Type      | Required | Description                                                                    |
+|:---------------|:----------|:---------|:-------------------------------------------------------------------------------|
+| `name`         | `string`  | **Yes**  | Human-readable name shown in the Console and payment prompt. |
+| `price`        | `number`  | **Yes**  | Price to unlock access. |
+| `currency`     | `string`  | No       | Settlement currency. Defaults to the configured settlement token (`USDC` unless overridden). |
+| `description`  | `string`  | No       | Description shown to the user on the payment prompt. |
+| `contentType`  | `string`  | No       | Content type such as `api`, `content`, or `download`. |
+| `contentData`  | `object`  | No       | Optional JSON payload used by the protected resource. |
+| `contentUrl`   | `string`  | No       | Optional URL for the protected resource. |
+| `pricingModel` | `string`  | No       | Pricing model such as `one_time` or `per_call`. |
+
+### Response
+
+```
+201 Created
+```
+
+| Field       | Type     | Description                                                    |
+|:------------|:---------|:---------------------------------------------------------------|
+| `id`        | `string` | The paywall's unique ID (starts with `pw_`).                   |
+| `name`      | `string` | The paywall name.                                              |
+| `price`     | `string` | The required payment amount. |
+| `currency`  | `string` | Settlement currency. |
+| `contentType` | `string` | Protected resource type. |
+| `pricingModel` | `string` | Access model for the paywall. |
+| `createdAt` | `string` | ISO 8601 creation timestamp.                                   |
+
+### cURL Example
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/paywalls \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <privy_access_token>" \
+  -d '{
+    "name": "Research Report — Q1 2026",
+    "price": 5.00,
+    "currency": "USDC",
+    "contentType": "download",
+    "contentUrl": "https://yoursite.com/reports/q1-2026.pdf",
+    "description": "Pay once to download the Q1 2026 market research report.",
+    "pricingModel": "one_time"
+  }'
+```
+
+### Response Example
+
+```json
+{
+  "id": "pw_cm9x4k2j00003lb08n5qz7v1r",
+  "merchantId": "usr_cm9x1merch",
+  "name": "Research Report — Q1 2026",
+  "price": "5.00",
+  "currency": "USDC",
+  "contentType": "download",
+  "contentUrl": "https://yoursite.com/reports/q1-2026.pdf",
+  "description": "Pay once to download the Q1 2026 market research report.",
+  "pricingModel": "one_time",
+  "active": true,
+  "createdAt": "2026-03-22T10:00:00.000Z"
+}
+```
+
+---
+
+## List Paywalls
+
+**`GET /api/console/paywalls`**
+
+Returns all paywalls for the authenticated merchant.
+
+### Authentication
+
+| Header | Required | Description |
+|:--|:--|:--|
+| `Authorization` | **Yes** | `Bearer <privy_access_token>` from an authenticated console session |
+
+### cURL Example
+
+```bash
+curl https://api.usecoal.xyz/api/console/paywalls \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+### Response Example
+
+```json
+{
+  "paywalls": [
+    {
+      "id": "pw_cm9x4k2j00003lb08n5qz7v1r",
+      "name": "Research Report — Q1 2026",
+      "price": "5.00",
+      "currency": "USDC",
+      "contentType": "download",
+      "pricingModel": "one_time",
+      "active": true,
+      "createdAt": "2026-03-22T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+## Update a Paywall
+
+**`PUT /api/console/paywalls/:id`**
+
+Updates an existing paywall. Only the fields you provide are changed.
+
+### Authentication
+
+| Header | Required | Description |
+|:--|:--|:--|
+| `Authorization` | **Yes** | `Bearer <privy_access_token>` from an authenticated console session |
+
+### Path Parameters
+
+| Parameter | Type     | Description               |
+|:----------|:---------|:--------------------------|
+| `id`      | `string` | The paywall ID (`pw_…`).  |
+
+### Request Body
+
+Any subset of the create fields: `name`, `price`, `description`, `contentData`, `contentUrl`, `active`, or `pricingModel`.
+
+### cURL Example
+
+```bash
+curl -X PUT https://api.usecoal.xyz/api/console/paywalls/pw_cm9x4k2j00003lb08n5qz7v1r \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <privy_access_token>" \
+  -d '{
+    "price": 7.50,
+    "pricingModel": "per_call"
+  }'
+```
+
+### Response Example
+
+```json
+{
+  "id": "pw_cm9x4k2j00003lb08n5qz7v1r",
+  "name": "Research Report — Q1 2026",
+  "price": "7.50",
+  "pricingModel": "per_call",
+  "updatedAt": "2026-03-22T11:00:00.000Z"
+}
+```
+
+---
+
+## Delete a Paywall
+
+**`DELETE /api/console/paywalls/:id`**
+
+Soft-deletes a paywall by marking it inactive. Existing valid access grants are not revoked.
+
+### Authentication
+
+| Header | Required | Description |
+|:--|:--|:--|
+| `Authorization` | **Yes** | `Bearer <privy_access_token>` from an authenticated console session |
+
+### cURL Example
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/paywalls/pw_cm9x4k2j00003lb08n5qz7v1r \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+### Response Example
+
+```json
+{
+  "deleted": true,
+  "id": "pw_cm9x4k2j00003lb08n5qz7v1r"
+}
+```
+
+---
+
+## Verify Access (Public)
+
+**`GET /api/paywalls/:id/verify?address=0x…`**
+
+Checks whether a given wallet address has a valid (unexpired) access grant for this paywall. This endpoint is **public** - no API key required.
+
+### Query Parameters
+
+| Parameter | Type     | Required | Description                               |
+|:----------|:---------|:---------|:------------------------------------------|
+| `address` | `string` | **Yes**  | The EVM wallet address to check access for.|
+
+### Response — Access Granted
+
+```
+200 OK
+```
+
+```json
+{
+  "hasAccess": true,
+  "expiresAt": "2026-03-22T23:00:00.000Z",
+  "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b"
+}
+```
+
+### Response — No Access
+
+```
+200 OK
+```
+
+```json
+{
+  "hasAccess": false
+}
+```
+
+### cURL Example
+
+```bash
+curl "https://api.usecoal.xyz/api/paywalls/pw_cm9x4k2j00003lb08n5qz7v1r/verify?address=0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+```
+
+---
+
+## Record a Payment (Public)
+
+**`POST /api/paywalls/:id/pay`**
+
+Submits a transaction hash to prove payment and create an access grant for the wallet address. This endpoint is **public** - no API key required. It is called by your frontend (or the Coal widget) after the user sends the on-chain transfer.
+
+### Request Body
+
+| Field     | Type     | Required | Description                                             |
+|:----------|:---------|:---------|:--------------------------------------------------------|
+| `txHash`  | `string` | **Yes**  | The settlement-token transfer transaction hash on Base. |
+| `address` | `string` | **Yes**  | The buyer's EVM wallet address.                         |
+
+### Response
+
+```
+200 OK
+```
+
+```json
+{
+  "status": "verifying",
+  "paywallId": "pw_cm9x4k2j00003lb08n5qz7v1r",
+  "address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+  "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b",
+  "message": "Payment received. Access will be granted once the transaction is confirmed on Base."
+}
+```
+
+After submission, Coal's cron job verifies the transaction within ~1–2 minutes. Poll `GET /api/paywalls/:id/verify?address=0x…` to check when access is granted.
+
+### cURL Example
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/paywalls/pw_cm9x4k2j00003lb08n5qz7v1r/pay \
+  -H "Content-Type: application/json" \
+  -d '{
+    "txHash": "0x3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b",
+    "address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+  }'
+```
+
+### Error Responses
+
+| Status | Code                    | Description                                                 |
+|:-------|:------------------------|:------------------------------------------------------------|
+| `400`  | `INVALID_TX_HASH`       | The `txHash` is not a valid Ethereum transaction hash.      |
+| `403`  | `SANCTIONS_MATCH`       | The `address` is on the Chainalysis sanctions list.         |
+| `404`  | `PAYWALL_NOT_FOUND`     | No paywall found with the given ID.                         |
+| `409`  | `ALREADY_VERIFIED`      | This txHash has already been used to grant access.          |
+| `429`  | `RATE_LIMITED`          | Too many requests. See [Rate Limits](/docs/security/rate-limits). |
+
+---
+
+## Node.js: Middleware Example
+
+Use Coal's verify endpoint as middleware to gate access to API routes:
+
+```typescript
+// middleware/requireCoalAccess.ts
+import { NextRequest, NextResponse } from 'next/server';
+
+const PAYWALL_ID = process.env.PAYWALL_ID!;
+const COAL_API = 'https://api.usecoal.xyz';
+
+export async function requireCoalAccess(
+  req: NextRequest,
+  handler: (req: NextRequest) => Promise<NextResponse>
+) {
+  const address = req.headers.get('x-wallet-address');
+
+  if (!address) {
+    return NextResponse.json({ error: 'Wallet address required' }, { status: 401 });
+  }
+
+  const verifyRes = await fetch(
+    `${COAL_API}/api/paywalls/${PAYWALL_ID}/verify?address=${address}`,
+    { next: { revalidate: 0 } }
+  );
+  const { hasAccess } = await verifyRes.json();
+
+  if (!hasAccess) {
+    return NextResponse.json(
+      { error: 'Payment required', paywallId: PAYWALL_ID },
+      { status: 402 }
+    );
+  }
+
+  return handler(req);
+}
+```

@@ -1,0 +1,203 @@
+# Embedded Widget
+
+> Preview status: the widget embed is functional, but it is still treated as a preview surface in the product docs. Prefer the hosted checkout or the current console flows when you need the most stable integration path.
+
+The Coal widget is an iframe-based checkout you can drop into any web page. It keeps signing and payment handling inside the embedded frame so your app never touches private keys or raw blockchain calls.
+
+## How it works
+
+1. Your server creates a checkout session with `POST /api/checkouts` and returns the `sessionId` to the browser.
+2. Your frontend mounts the widget with that `sessionId`.
+3. The widget renders inside a secure iframe from `https://usecoal.xyz`.
+4. On completion, the widget fires a callback or `postMessage` event so your page can react.
+
+If the session was created with a `payerInfo` config, the hosted checkout will show those fields before the buyer can continue.
+
+Sessions are single-use. Never reuse a `sessionId` across buyers.
+
+---
+
+## Embed Option 1 - JavaScript
+
+```html
+<div id="coal-checkout"></div>
+<script src="https://usecoal.xyz/coal-widget.js"></script>
+<script>
+  CoalCheckout.mount('#coal-checkout', {
+    sessionId: 'YOUR_SESSION_ID',
+    baseUrl: 'https://usecoal.xyz',
+    theme: 'light',
+    onReady: function () {
+      console.log('Widget ready');
+    },
+    onSuccess: function (data) {
+      console.log('Payment confirmed:', data.txHash);
+      window.location.href = '/thank-you';
+    },
+    onError: function (err) {
+      console.error('Payment error:', err.message);
+    },
+    onCancel: function () {
+      console.log('Buyer closed the widget');
+    },
+  });
+</script>
+```
+
+Replace `YOUR_SESSION_ID` with the `sessionId` returned from your server after calling `POST /api/checkouts`.
+
+---
+
+## Embed Option 2 - React
+
+```bash
+npm install @coal/react
+```
+
+```tsx
+import { CoalWidget } from '@coal/react';
+
+export function CheckoutPage({ sessionId }: { sessionId: string }) {
+  return (
+    <div className="checkout-container">
+      <CoalWidget
+        sessionId={sessionId}
+        theme="light"
+        primaryColor="#f97316"
+        onSuccess={(data) => {
+          console.log('Paid!', data.txHash);
+        }}
+        onError={(err) => {
+          console.error('Failed:', err.message);
+        }}
+        onCancel={() => console.log('closed')}
+      />
+    </div>
+  );
+}
+```
+
+The React package exports `<CoalWidget>` and `useCoalCheckout` for app-integrated flows.
+
+---
+
+## Props Reference
+
+| Prop | Type | Required | Default | Description |
+|:--|:--|:--|:--|:--|
+| `sessionId` | `string` | **Yes** | - | The session ID from `POST /api/checkouts`. |
+| `baseUrl` | `string` | No | `https://usecoal.xyz` | Host that serves the embed iframe. |
+| `theme` | `'light' \| 'dark'` | No | `'light'` | Widget color scheme. |
+| `onReady` | `() => void` | No | - | Called when the iframe posts `coal:ready`. |
+| `onSuccess` | `(data: { sessionId: string; txHash: string \| null }) => void` | No | - | Called when payment is confirmed on-chain. |
+| `onError` | `(err: { message: string }) => void` | No | - | Called on payment failure or session expiry. |
+| `onCancel` | `() => void` | No | - | Called when the buyer dismisses the widget. |
+
+---
+
+## postMessage Events
+
+The widget communicates via `window.postMessage` so you can listen from outside React if needed.
+
+```javascript
+window.addEventListener('message', function (event) {
+  if (event.origin !== 'https://usecoal.xyz') return;
+
+  switch (event.data.type) {
+    case 'coal:ready':
+      console.log('Widget ready');
+      break;
+    case 'coal:success':
+      console.log('Success:', event.data.txHash, event.data.sessionId);
+      break;
+    case 'coal:error':
+      console.error('Error:', event.data.message);
+      break;
+    case 'coal:cancel':
+    case 'coal:close':
+      console.log('Buyer cancelled');
+      break;
+  }
+});
+```
+
+| Event type | Payload fields | When fired |
+|:--|:--|:--|
+| `coal:ready` | `sessionId` | Iframe is loaded and ready. |
+| `coal:success` | `sessionId`, `txHash` | On-chain confirmation received. |
+| `coal:error` | `message` | Payment failed or session expired. |
+| `coal:cancel` | `sessionId` | Buyer closed the widget. |
+| `coal:close` | `sessionId` | Alias for cancel. |
+
+Always verify `event.origin === 'https://usecoal.xyz'` before trusting the message.
+
+---
+
+## Full Integration Pattern
+
+Create the session on the server, pass `sessionId` to the client, render the widget.
+
+```typescript
+// app/actions.ts
+'use server';
+
+export async function initiateCheckout() {
+  const res = await fetch(`${process.env.COAL_API_URL}/api/checkouts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.COAL_API_KEY!,
+    },
+    body: JSON.stringify({
+      amount: 49.99,
+      productName: 'Pro Plan',
+      payerInfo: {
+        required: true,
+        fields: ['fullName', 'email'],
+      },
+    }),
+  });
+
+  if (!res.ok) throw new Error('Could not create checkout session');
+  const session = await res.json();
+  return session.id as string;
+}
+```
+
+```tsx
+// app/checkout/page.tsx
+import { initiateCheckout } from '../actions';
+import { WidgetClient } from './WidgetClient';
+
+export default async function CheckoutPage() {
+  const sessionId = await initiateCheckout();
+  return <WidgetClient sessionId={sessionId} />;
+}
+```
+
+```tsx
+// app/checkout/WidgetClient.tsx
+'use client';
+import { CoalWidget } from '@coal/react';
+import { useRouter } from 'next/navigation';
+
+export function WidgetClient({ sessionId }: { sessionId: string }) {
+  const router = useRouter();
+  return (
+    <CoalWidget
+      sessionId={sessionId}
+      onSuccess={() => router.push('/success')}
+      onError={(err) => console.error(`Payment failed: ${err.message}`)}
+    />
+  );
+}
+```
+
+---
+
+## Security Notes
+
+- Sessions are single-use.
+- Sessions expire after 24 hours.
+- Keep your merchant API key server-side when creating sessions.
+- Verify `postMessage` origins before trusting widget events.

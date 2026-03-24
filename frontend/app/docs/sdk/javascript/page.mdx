@@ -1,0 +1,293 @@
+
+# JavaScript Widget SDK
+
+Embed the Coal checkout widget into any web page - no framework or build step required. The JavaScript SDK (`coal-widget.js`) renders a secure iframe that handles the payment flow once your server has created a session. Your page communicates with it via `postMessage` events.
+
+---
+
+## Installation
+
+### CDN (recommended)
+
+Add this script tag anywhere in your HTML before using `CoalCheckout`:
+
+```html
+<script src="https://usecoal.xyz/coal-widget.js" defer></script>
+```
+
+The script exposes `window.CoalCheckout` as a global object. No bundler or npm install needed.
+
+---
+
+## Quick Start
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Checkout</title>
+</head>
+<body>
+  <button id="buy-btn">Buy Now</button>
+  <div id="coal-container" style="display:none; width:100%; max-width:480px;"></div>
+
+  <script src="https://usecoal.xyz/coal-widget.js" defer></script>
+  <script>
+    document.getElementById('buy-btn').addEventListener('click', async () => {
+      // Fetch sessionId from your server
+      const res = await fetch('/api/checkout/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'premium-membership' }),
+      });
+      const { data } = await res.json();
+      const { sessionId } = data;
+
+      const container = document.getElementById('coal-container');
+      container.style.display = 'block';
+
+      CoalCheckout.mount('#coal-container', {
+        sessionId,
+        height: 600,
+        onReady() {
+          console.log('Widget is ready');
+        },
+        onSuccess(data) {
+          console.log('Payment confirmed!', data.txHash);
+          container.style.display = 'none';
+          window.location.href = '/success?session_id=' + data.sessionId;
+        },
+        onError(data) {
+          console.error('Payment error:', data.message);
+          container.style.display = 'none';
+          CoalCheckout.unmount();
+        },
+        onCancel() {
+          container.style.display = 'none';
+          CoalCheckout.unmount();
+        },
+      });
+    });
+  </script>
+</body>
+</html>
+```
+
+---
+
+## API Reference
+
+### `CoalCheckout.mount(container, options)`
+
+Renders the Coal checkout iframe inside a target element.
+
+| Parameter   | Type                  | Required | Description                                                                |
+|:------------|:----------------------|:---------|:---------------------------------------------------------------------------|
+| `container` | `string \| Element`   | **Yes**  | A CSS selector string (e.g. `"#checkout-container"`) or a DOM element.    |
+| `options`   | `CoalMountOptions`    | **Yes**  | Configuration object. See [Options](#options) below.                       |
+
+Returns the `CoalCheckout` instance (chainable).
+
+---
+
+### `CoalCheckout.unmount()`
+
+Removes the iframe from the DOM and cleans up all event listeners.
+
+```javascript
+CoalCheckout.unmount();
+```
+
+---
+
+### `CoalCheckout.on(event, callback)`
+
+Attach an event listener. You can call `.on()` before or after `.mount()`.
+
+```javascript
+CoalCheckout.mount('#coal-widget', { sessionId }).on('success', (data) => {
+  console.log('Paid:', data.txHash);
+});
+```
+
+| Parameter  | Type                                          | Description                         |
+|:-----------|:----------------------------------------------|:------------------------------------|
+| `event`    | `'ready' \| 'success' \| 'error' \| 'cancel'` | Name of the event to listen for.    |
+| `callback` | `Function`                                    | Handler called when event fires.    |
+
+---
+
+### `CoalCheckout.off(event, callback)`
+
+Remove a previously registered listener.
+
+```javascript
+function handleSuccess(data) { /* ... */ }
+CoalCheckout.on('success', handleSuccess);
+// Later:
+CoalCheckout.off('success', handleSuccess);
+```
+
+---
+
+## Options
+
+### `CoalMountOptions`
+
+| Option      | Type                               | Required | Default                   | Description                                              |
+|:------------|:-----------------------------------|:---------|:--------------------------|:---------------------------------------------------------|
+| `sessionId` | `string`                           | **Yes**  | —                         | The session ID returned by your checkout session endpoint. |
+| `baseUrl`   | `string`                           | No       | `'https://usecoal.xyz'`   | Override the Coal server URL (useful for local testing). |
+| `height`    | `number \| string`                 | No       | `600`                     | Height of the iframe in pixels (number) or CSS string.   |
+| `theme`     | `'light' \| 'dark'`                | No       | —                         | Color theme forwarded to the embed page.                 |
+| `onReady`   | `() => void`                       | No       | —                         | Called when the iframe has loaded and is ready.          |
+| `onSuccess` | `(data: SuccessData) => void`      | No       | —                         | Called when payment is confirmed.                        |
+| `onError`   | `(data: ErrorData) => void`        | No       | —                         | Called when an error occurs.                             |
+| `onCancel`  | `() => void`                       | No       | —                         | Called when the user dismisses the widget.               |
+
+---
+
+## Events
+
+The SDK translates `postMessage` events from the Coal iframe into named callbacks and `.on()` listeners.
+
+| Event       | Payload                              | When it fires                                         |
+|:------------|:-------------------------------------|:------------------------------------------------------|
+| `'ready'`   | `{ sessionId? }`                     | Iframe has loaded and the user can begin payment.     |
+| `'success'` | `{ sessionId, txHash }`              | Payment has been confirmed.                           |
+| `'error'`   | `{ message }`                        | A session load or payment error occurred.             |
+| `'cancel'`  | `{ sessionId? }`                     | User dismissed the widget without paying.             |
+
+### Using `.on()` for events
+
+```javascript
+const widget = CoalCheckout.mount('#coal-widget', { sessionId });
+
+widget.on('ready', () => {
+  console.log('Widget ready');
+});
+
+widget.on('success', (data) => {
+  console.log('Paid!', data.sessionId, data.txHash);
+  widget.unmount();
+});
+
+widget.on('error', (data) => {
+  console.error('Error:', data.message);
+  widget.unmount();
+});
+
+widget.on('cancel', () => {
+  console.log('User cancelled');
+  widget.unmount();
+});
+```
+
+---
+
+## Listening Directly via `window.addEventListener`
+
+If you prefer not to use the SDK, you can listen for raw `postMessage` events. The Coal iframe fires events with these `type` strings:
+
+| `type`          | Description                        |
+|:----------------|:-----------------------------------|
+| `coal:ready`    | Widget loaded and ready.           |
+| `coal:success`  | Payment confirmed. Includes `sessionId` and `txHash`. |
+| `coal:error`    | Error. Includes `message`.         |
+| `coal:cancel`   | User dismissed the widget.         |
+
+```javascript
+window.addEventListener('message', function handleCoalEvent(event) {
+  // SECURITY: Only accept messages from the Coal widget origin
+  if (event.origin !== 'https://usecoal.xyz') return;
+
+  const { type, ...data } = event.data;
+
+  switch (type) {
+    case 'coal:ready':
+      console.log('Widget ready');
+      break;
+    case 'coal:success':
+      console.log('Payment confirmed:', data.txHash);
+      window.removeEventListener('message', handleCoalEvent);
+      break;
+    case 'coal:error':
+      console.error('Payment error:', data.message);
+      window.removeEventListener('message', handleCoalEvent);
+      break;
+    case 'coal:cancel':
+      console.log('User cancelled');
+      window.removeEventListener('message', handleCoalEvent);
+      break;
+  }
+});
+```
+
+> Always check `event.origin === 'https://usecoal.xyz'` before trusting message data.
+
+---
+
+## Content Security Policy
+
+If your site uses a `Content-Security-Policy` header, allow Coal's iframe origin:
+
+```
+Content-Security-Policy: frame-src https://usecoal.xyz; script-src https://usecoal.xyz;
+```
+
+If you load `coal-widget.js` via npm/bundler instead of the CDN, the `script-src` directive is not needed:
+
+```
+Content-Security-Policy: frame-src https://usecoal.xyz;
+```
+
+---
+
+## Server-Side Session Creation
+
+Always create sessions on your server. Keep any merchant API keys server-side; the widget only needs the returned session ID.
+
+```typescript
+// pages/api/checkout.ts  (Next.js API route)
+import type { NextApiRequest, NextApiResponse } from 'next';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') return res.status(405).end();
+
+  const response = await fetch('https://api.usecoal.xyz/api/checkout/init', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug: req.body.slug }),
+  });
+
+  if (!response.ok) {
+    return res.status(500).json({ error: 'Failed to initialize checkout' });
+  }
+
+  const { data } = await response.json();
+  return res.json({ sessionId: data.sessionId, amount: data.amount });
+}
+```
+
+If you create hosted checkout sessions with `POST /api/checkouts`, you can ask Coal to collect payer details before payment:
+
+```typescript
+await fetch('https://api.usecoal.xyz/api/checkouts', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': process.env.COAL_API_KEY!,
+  },
+  body: JSON.stringify({
+    amount: 49.99,
+    productName: 'Pro Plan',
+    payerInfo: {
+      required: true,
+      fields: ['fullName', 'email'],
+    },
+  }),
+});
+```
+
+The same `payerInfo` object can be passed to `CoalCheckout.checkout(...)` when using the direct JavaScript helper that creates widget sessions for you.

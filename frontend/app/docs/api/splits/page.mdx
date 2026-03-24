@@ -1,0 +1,333 @@
+
+# Revenue Splits API
+
+Revenue splits let you automatically divide each incoming payment between multiple wallet addresses. When a checkout session is confirmed, Coal applies the split configuration and routes funds to each recipient according to their defined percentage.
+
+Use splits for marketplace payouts, affiliate commissions, co-creator revenue sharing, or distributing fees between a platform and its vendors.
+
+> This page covers the console-managed split configuration surface. Public checkout creation still uses `x-api-key` on `/api/checkouts`; split CRUD under `/api/console/*` is Privy-authenticated.
+
+**Base URL:** `https://api.usecoal.xyz`
+
+---
+
+## Create a Split
+
+**`POST /api/console/splits`**
+
+Creates a new split configuration. Splits can be attached to products or payment links at creation time.
+
+### Authentication
+
+| Header      | Required | Description                       |
+|:------------|:---------|:----------------------------------|
+| `Authorization` | **Yes**  | `Bearer <privy_access_token>` from an authenticated console session |
+
+### Request Body
+
+| Field          | Type                  | Required | Description                                                                           |
+|:---------------|:----------------------|:---------|:--------------------------------------------------------------------------------------|
+| `name`         | `string`              | **Yes**  | A human-readable name for this split (e.g. `"Marketplace Fee Split"`).                |
+| `recipients`   | `SplitRecipient[]`    | **Yes**  | Array of recipients. Must have at least 2 entries. Percentages must sum to exactly 100.|
+| `description`  | `string`              | No       | Optional notes about what this split is for.                                          |
+
+### `SplitRecipient`
+
+| Field      | Type     | Required | Description                                                      |
+|:-----------|:---------|:---------|:-----------------------------------------------------------------|
+| `address`  | `string` | **Yes**  | EVM wallet address of the recipient on Base.                     |
+| `percent`  | `number` | **Yes**  | Percentage of each payment to send here (e.g. `30` for 30%).     |
+| `label`    | `string` | No       | Human-readable label (e.g. `"Platform Fee"`, `"Creator"`).       |
+
+> Percentages must sum to exactly `100`. Coal will reject the request with `400 INVALID_SPLIT` if the sum differs.
+
+### cURL Example
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/splits \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <privy_access_token>" \
+  -d '{
+    "name": "Marketplace Fee Split",
+    "description": "10% platform fee, 90% to creator.",
+    "recipients": [
+      {
+        "address": "0xPlatformWalletAddress000000000000000000",
+        "percent": 10,
+        "label": "Platform Fee"
+      },
+      {
+        "address": "0xCreatorWalletAddress0000000000000000000",
+        "percent": 90,
+        "label": "Creator"
+      }
+    ]
+  }'
+```
+
+### Response Example
+
+```json
+{
+  "id": "spl_cm9x4k2j00003lb08n5qz7v1r",
+  "name": "Marketplace Fee Split",
+  "description": "10% platform fee, 90% to creator.",
+  "recipients": [
+    {
+      "address": "0xPlatformWalletAddress000000000000000000",
+      "percent": 10,
+      "label": "Platform Fee"
+    },
+    {
+      "address": "0xCreatorWalletAddress0000000000000000000",
+      "percent": 90,
+      "label": "Creator"
+    }
+  ],
+  "createdAt": "2026-03-22T10:00:00.000Z"
+}
+```
+
+---
+
+## List Splits
+
+**`GET /api/console/splits`**
+
+Returns all split configurations for the authenticated merchant, sorted by creation date descending.
+
+### Authentication
+
+| Header      | Required | Description                       |
+|:------------|:---------|:----------------------------------|
+| `Authorization` | **Yes**  | `Bearer <privy_access_token>` from an authenticated console session |
+
+### cURL Example
+
+```bash
+curl https://api.usecoal.xyz/api/console/splits \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+### Response Example
+
+```json
+{
+  "data": [
+    {
+      "id": "spl_cm9x4k2j00003lb08n5qz7v1r",
+      "name": "Marketplace Fee Split",
+      "recipients": [
+        { "address": "0xPlatformWalletAddress000000000000000000", "percent": 10, "label": "Platform Fee" },
+        { "address": "0xCreatorWalletAddress0000000000000000000", "percent": 90, "label": "Creator" }
+      ],
+      "createdAt": "2026-03-22T10:00:00.000Z"
+    },
+    {
+      "id": "spl_cm9x1a2b00001lb08m3pz5y0q",
+      "name": "Three-Way Split",
+      "recipients": [
+        { "address": "0xAddress1000000000000000000000000000000000", "percent": 33, "label": "Partner A" },
+        { "address": "0xAddress2000000000000000000000000000000000", "percent": 33, "label": "Partner B" },
+        { "address": "0xAddress3000000000000000000000000000000000", "percent": 34, "label": "Partner C" }
+      ],
+      "createdAt": "2026-03-20T08:30:00.000Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+---
+
+## Update a Split
+
+**`PUT /api/console/splits/:id`**
+
+Updates an existing split. You can change the name, description, or recipients. If you update `recipients`, the new array replaces the old one entirely — you cannot patch individual recipients.
+
+> Changes apply to future payments only. Payments that have already been disbursed are not affected.
+
+### Authentication
+
+| Header      | Required | Description                       |
+|:------------|:---------|:----------------------------------|
+| `Authorization` | **Yes**  | `Bearer <privy_access_token>` from an authenticated console session |
+
+### Path Parameters
+
+| Parameter | Type     | Description                |
+|:----------|:---------|:---------------------------|
+| `id`      | `string` | The split ID (`spl_…`).    |
+
+### Request Body
+
+| Field         | Type               | Description                                                              |
+|:--------------|:-------------------|:-------------------------------------------------------------------------|
+| `name`        | `string`           | New name for the split.                                                  |
+| `description` | `string`           | Updated description.                                                     |
+| `recipients`  | `SplitRecipient[]` | Full replacement recipient list. Percentages must still sum to 100.      |
+
+### cURL Example
+
+```bash
+curl -X PUT https://api.usecoal.xyz/api/console/splits/spl_cm9x4k2j00003lb08n5qz7v1r \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <privy_access_token>" \
+  -d '{
+    "name": "Updated Fee Split",
+    "recipients": [
+      {
+        "address": "0xPlatformWalletAddress000000000000000000",
+        "percent": 15,
+        "label": "Platform Fee"
+      },
+      {
+        "address": "0xCreatorWalletAddress0000000000000000000",
+        "percent": 85,
+        "label": "Creator"
+      }
+    ]
+  }'
+```
+
+### Response Example
+
+```json
+{
+  "id": "spl_cm9x4k2j00003lb08n5qz7v1r",
+  "name": "Updated Fee Split",
+  "recipients": [
+    { "address": "0xPlatformWalletAddress000000000000000000", "percent": 15, "label": "Platform Fee" },
+    { "address": "0xCreatorWalletAddress0000000000000000000", "percent": 85, "label": "Creator" }
+  ],
+  "updatedAt": "2026-03-22T12:00:00.000Z"
+}
+```
+
+---
+
+## Delete a Split
+
+**`DELETE /api/console/splits/:id`**
+
+Permanently deletes a split. Any payment links or products attached to this split will retain the split data on historical payments, but will no longer use split routing for new payments.
+
+### Authentication
+
+| Header      | Required | Description                       |
+|:------------|:---------|:----------------------------------|
+| `Authorization` | **Yes**  | `Bearer <privy_access_token>` from an authenticated console session |
+
+### Path Parameters
+
+| Parameter | Type     | Description             |
+|:----------|:---------|:------------------------|
+| `id`      | `string` | The split ID (`spl_…`). |
+
+### cURL Example
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/splits/spl_cm9x4k2j00003lb08n5qz7v1r \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+### Response Example
+
+```json
+{
+  "deleted": true,
+  "id": "spl_cm9x4k2j00003lb08n5qz7v1r"
+}
+```
+
+### Error Responses
+
+| Status | Code              | Description                                               |
+|:-------|:------------------|:----------------------------------------------------------|
+| `400`  | `INVALID_SPLIT`   | Recipient percentages do not sum to 100.                  |
+| `401`  | `UNAUTHORIZED`    | Missing or invalid Bearer token.                          |
+| `403`  | `FORBIDDEN`       | The split belongs to a different merchant.                |
+| `404`  | `NOT_FOUND`       | No split found with the given ID.                         |
+
+---
+
+## Node.js Example
+
+```typescript
+const COAL_API = 'https://api.usecoal.xyz';
+const consoleToken = '<privy_access_token>';
+
+interface SplitRecipient {
+  address: string;
+  percent: number;
+  label?: string;
+}
+
+async function createSplit(name: string, recipients: SplitRecipient[]) {
+  const total = recipients.reduce((sum, r) => sum + r.percent, 0);
+  if (total !== 100) {
+    throw new Error(`Recipient percentages must sum to 100 (got ${total})`);
+  }
+
+  const res = await fetch(`${COAL_API}/api/console/splits`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${consoleToken}`,
+    },
+    body: JSON.stringify({ name, recipients }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(`Failed to create split: ${err.error}`);
+  }
+
+  return res.json();
+}
+
+// Example: 5% platform, 95% seller
+const split = await createSplit('Standard Marketplace Split', [
+  { address: '0xYourPlatformAddress', percent: 5,  label: 'Platform' },
+  { address: '0xSellerAddress',       percent: 95, label: 'Seller'   },
+]);
+
+console.log('Split created:', split.id);
+```
+
+---
+
+## How Splits Are Applied
+
+When a payment is confirmed for a checkout session that has an associated split:
+
+1. Coal calculates each recipient's share by multiplying the total payment amount by their percentage.
+2. The amounts are rounded down to the settlement token precision.
+3. Any rounding remainder is added to the last recipient in the array.
+4. Each transfer is dispatched as an on-chain settlement-token transfer on Base.
+5. The webhook payload includes a `splits` array showing each disbursement's `txHash`.
+
+```json
+{
+  "event": "checkout.session.completed",
+  "data": {
+    "id": "cm9x4k2j00003lb08n5qz7v1r",
+    "amount": 100,
+    "splits": [
+      {
+        "address": "0xPlatformWalletAddress000000000000000000",
+        "amount": 10,
+        "percent": 10,
+        "txHash": "0xabc111..."
+      },
+      {
+        "address": "0xCreatorWalletAddress0000000000000000000",
+        "amount": 90,
+        "percent": 90,
+        "txHash": "0xabc222..."
+      }
+    ]
+  }
+}
+```

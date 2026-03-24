@@ -1,0 +1,228 @@
+# Payment Links API
+
+Payment links are shareable URLs that open a hosted Coal checkout page. This page covers the console-managed link lifecycle.
+
+> Public merchant API actions still use `x-api-key` on checkout/session routes. Payment-link CRUD under `/api/console/*` is part of the authenticated console surface and uses a Privy Bearer token.
+
+**Base URL:** `https://api.usecoal.xyz`
+
+---
+
+## Create a Payment Link
+
+**`POST /api/console/links`**
+
+Creates a new payment link for your merchant account.
+
+### Authentication
+
+| Header | Required | Description |
+|:--|:--|:--|
+| `Authorization` | **Yes** | `Bearer <privy_access_token>` from an authenticated console session |
+
+### Request Body
+
+| Field | Type | Required | Description |
+|:--|:--|:--|:--|
+| `slug` | `string` | No | Optional URL-safe path segment used at `usecoal.xyz/pay/:slug`. |
+| `productId` | `string` | No | Existing product to attach to this link. |
+| `title` | `string` | No | Title shown when no product is attached. |
+| `description` | `string` | No | Optional description shown on the hosted checkout page. |
+| `payerInfo` | `object` | No | Configure which payer details Coal should collect before checkout. |
+
+### Response
+
+`201 Created`
+
+| Field | Type | Description |
+|:--|:--|:--|
+| `id` | `string` | Payment link ID. |
+| `merchantId` | `string` | Owning merchant ID. |
+| `productId` | `string \| null` | Attached product, if present. |
+| `slug` | `string` | Public checkout slug. |
+| `title` | `string \| null` | Title for flexible links. |
+| `description` | `string \| null` | Description shown on checkout. |
+| `payerInfoConfig` | `object \| null` | Payer info collection rules attached to the link. |
+| `active` | `boolean` | Whether the link is active. |
+| `createdAt` | `string` | ISO 8601 creation timestamp. |
+
+### cURL Example
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <privy_access_token>" \
+  -d '{
+    "slug": "premium-membership",
+    "title": "Premium Membership",
+    "description": "Full access to all premium features for one year.",
+    "payerInfo": {
+      "required": true,
+      "fields": ["fullName", "email", "company"]
+    }
+  }'
+```
+
+### Response Example
+
+```json
+{
+  "id": "lnk_cm9x4k2j00003lb08n5qz7v1r",
+  "merchantId": "usr_cm9x1merch",
+  "productId": null,
+  "slug": "premium-membership",
+  "title": "Premium Membership",
+  "description": "Full access to all premium features for one year.",
+  "payerInfoConfig": {
+    "required": true,
+    "fields": ["fullName", "email", "company"]
+  },
+  "active": true,
+  "createdAt": "2026-03-22T10:00:00.000Z"
+}
+```
+
+---
+
+## List Payment Links
+
+**`GET /api/console/links`**
+
+Returns all payment links for the authenticated merchant, sorted by creation date descending.
+
+### Authentication
+
+| Header | Required | Description |
+|:--|:--|:--|
+| `Authorization` | **Yes** | `Bearer <privy_access_token>` from an authenticated console session |
+
+### Response
+
+`200 OK`
+
+```json
+{
+  "links": [
+    {
+      "id": "lnk_cm9x4k2j00003lb08n5qz7v1r",
+      "slug": "premium-membership",
+      "url": "https://usecoal.xyz/pay/premium-membership",
+      "productName": "Premium Membership",
+      "productImage": null,
+      "price": "49.00",
+      "payerInfoConfig": {
+        "required": true,
+        "fields": ["fullName", "email", "company"]
+      },
+      "active": true,
+      "createdAt": "2026-03-22T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+### cURL Example
+
+```bash
+curl https://api.usecoal.xyz/api/console/links \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+---
+
+## Delete a Payment Link
+
+**`DELETE /api/console/links/:id`**
+
+Soft-deletes a payment link by marking it inactive.
+
+### Authentication
+
+| Header | Required | Description |
+|:--|:--|:--|
+| `Authorization` | **Yes** | `Bearer <privy_access_token>` from an authenticated console session |
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|:--|:--|:--|
+| `id` | `string` | The payment link ID (`lnk_…`). |
+
+### Response
+
+`200 OK`
+
+```json
+{
+  "id": "lnk_cm9x4k2j00003lb08n5qz7v1r",
+  "slug": "premium-membership",
+  "title": "Premium Membership",
+  "description": "Full access to all premium features for one year.",
+  "active": false
+}
+```
+
+### Error Responses
+
+| Status | Code | Description |
+|:--|:--|:--|
+| `401` | `UNAUTHORIZED` | Missing or invalid Bearer token. |
+| `404` | `NOT_FOUND` | No link found for this merchant. |
+
+### cURL Example
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/links/lnk_cm9x4k2j00003lb08n5qz7v1r \
+  -H "Authorization: Bearer <privy_access_token>"
+```
+
+---
+
+## Node.js Examples
+
+```typescript
+const COAL_API = 'https://api.usecoal.xyz';
+const consoleToken = '<privy_access_token>';
+
+async function createPaymentLink(opts: {
+  slug: string;
+  amount?: number;
+  productName: string;
+  redirectUrl?: string;
+  callbackUrl?: string;
+  flexible?: boolean;
+  payerInfo?: {
+    required: boolean;
+    fields: Array<'fullName' | 'email' | 'phone' | 'company' | 'country'>;
+  };
+}) {
+  const res = await fetch(`${COAL_API}/api/console/links`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${consoleToken}`,
+    },
+    body: JSON.stringify(opts),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(`Failed to create link: ${err.error}`);
+  }
+
+  return res.json();
+}
+
+async function deletePaymentLink(id: string) {
+  const res = await fetch(`${COAL_API}/api/console/links/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${consoleToken}` },
+  });
+
+  if (res.status === 404) {
+    throw new Error('Link not found');
+  }
+
+  return res.json();
+}
+```

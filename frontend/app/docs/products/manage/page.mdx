@@ -1,0 +1,188 @@
+
+# Managing Your Product Catalog
+
+This page covers day-to-day catalog operations: filtering your product list, deactivating items, updating prices, connecting products to payment links, and hosting product images.
+
+These are console-managed operations. The public merchant API uses `x-api-key`; `/api/console/*` routes use Privy Bearer tokens and are dashboard-only.
+
+---
+
+## Filtering and Searching
+
+### Console
+
+The Products table in the Console supports live search by name and SKU. Use the **Active / Archived** toggle to switch between live products and soft-deleted ones.
+
+### API
+
+The `GET /api/console/products` endpoint returns only active products. To work with archived products, use the Console UI — the API does not currently expose a filter parameter for `active: false`.
+
+If you need to find a specific product by SKU in code, filter the list client-side:
+
+```typescript
+const res = await fetch('https://api.usecoal.xyz/api/console/products', {
+  headers: { 'Authorization': 'Bearer <Privy JWT>' },
+});
+const { products } = await res.json();
+
+const hoodie = products.find((p: { sku: string }) => p.sku === 'MERCH-HOODIE-BLK-L');
+```
+
+---
+
+## Deactivating a Product
+
+Deactivating (deleting) a product is a **soft delete** — the record is preserved in the database but `active` is set to `false`. All Payment Links that reference the product stop resolving immediately.
+
+```bash
+curl -X DELETE https://api.usecoal.xyz/api/console/products/clz9prod123 \
+  -H "Authorization: Bearer <Privy JWT>"
+```
+
+To reactivate a product, use the Console UI (toggle the archived product back to active). The API does not expose a reactivation endpoint — this is intentional to prevent accidental republication of stale pricing.
+
+---
+
+## Updating Prices
+
+Price changes take effect immediately for new Checkout Sessions. Existing confirmed sessions are unaffected — they retain the amount they were created with.
+
+**Via the API:**
+
+```bash
+curl -X PUT https://api.usecoal.xyz/api/console/products/clz9prod123 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -d '{ "price": 59 }'
+```
+
+**Via the Console:**
+
+1. Open **Products** and click the product row.
+2. Edit the price field.
+3. Click **Save Changes**.
+
+> **Tip:** If you run a promotional price, consider creating a separate product (e.g. `"Pro Plan — Early Access"` at `$29`) rather than editing the main product. This keeps your analytics clean and lets you easily revert.
+
+---
+
+## Bulk Operations
+
+Coal does not currently expose a bulk API. For large catalog imports, loop over your product list and call `POST /api/console/products` for each item. Use `Promise.allSettled` to handle partial failures gracefully:
+
+```typescript
+const catalog = [
+  { name: 'Item A', price: 10, sku: 'SKU-A' },
+  { name: 'Item B', price: 20, sku: 'SKU-B' },
+  { name: 'Item C', price: 30, sku: 'SKU-C' },
+];
+
+const results = await Promise.allSettled(
+  catalog.map((item) =>
+    fetch('https://api.usecoal.xyz/api/console/products', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer <Privy JWT>',
+      },
+      body: JSON.stringify(item),
+    }).then((r) => r.json())
+  )
+);
+
+const created = results.filter((r) => r.status === 'fulfilled').map((r) => (r as PromiseFulfilledResult<unknown>).value);
+const failed  = results.filter((r) => r.status === 'rejected');
+
+console.log(`Created: ${created.length}, Failed: ${failed.length}`);
+```
+
+Rate limiting applies per merchant — stay under 30 requests per minute on the console tier.
+
+---
+
+## Connecting Products to Payment Links
+
+Once a product exists in your catalog you can attach it to a Payment Link in two ways.
+
+### Console
+
+1. Go to **Payment Links → Create Link**.
+2. In the **Product** dropdown, select the product.
+3. Click **Create** — the link immediately resolves to that product's price.
+
+### API
+
+Pass `productId` when creating a link:
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/console/links \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <Privy JWT>" \
+  -d '{
+    "productId": "clz9prod123",
+    "slug": "pro-plan"
+  }'
+```
+
+A product can be attached to **multiple** payment links simultaneously (e.g., one link shared on Twitter, another embedded in an email). All links share the same product price. Changing the product price updates all linked checkouts at once.
+
+To swap the product on an existing link, delete the link and create a new one — the API does not support patching the `productId` on an existing link.
+
+---
+
+## Image Hosting Recommendations
+
+Coal does not host product images — you provide a URL. Use a CDN that serves images over HTTPS with low latency.
+
+### Uploadthing (recommended for Coal users)
+
+Coal's backend already integrates with [Uploadthing](https://uploadthing.com). If you upload images through the Console product editor, they are stored via Uploadthing and you receive a stable CDN URL automatically.
+
+For programmatic uploads (e.g., bulk imports), use the Uploadthing SDK:
+
+```typescript
+import { UTApi } from 'uploadthing/server';
+
+const utapi = new UTApi();
+
+async function uploadProductImage(filePath: string): Promise<string> {
+  // Read the file as a Blob/File object
+  const file = new File([await Bun.file(filePath).arrayBuffer()], 'product.png', {
+    type: 'image/png',
+  });
+
+  const res = await utapi.uploadFiles([file]);
+  if (!res[0].data?.url) throw new Error('Upload failed');
+  return res[0].data.url;
+}
+```
+
+### Cloudinary
+
+Cloudinary is a solid alternative with automatic image transformations (resize, format conversion, WebP):
+
+```typescript
+import { v2 as cloudinary } from 'cloudinary';
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+async function uploadToCloudinary(localPath: string): Promise<string> {
+  const result = await cloudinary.uploader.upload(localPath, {
+    folder: 'coal-products',
+    transformation: [{ width: 400, height: 400, crop: 'fill', quality: 'auto' }],
+  });
+  return result.secure_url;
+}
+```
+
+### General guidelines
+
+- **Use square images.** The checkout page renders product images as a square thumbnail. Non-square images are center-cropped.
+- **Target 400×400 px** at 72 DPI for the thumbnail. Provide 800×800 px if you also display the image elsewhere.
+- **Use WebP or JPEG.** PNG is fine but heavier. Avoid GIF and SVG for product thumbnails.
+- **Use HTTPS.** HTTP image URLs will be blocked by the browser on the HTTPS checkout page.
+- **Keep URLs stable.** Changing a product's image URL after creation requires a `PUT /api/console/products/:id` call to update the stored URL.

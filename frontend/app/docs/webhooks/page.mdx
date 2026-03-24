@@ -1,0 +1,259 @@
+
+# Webhooks
+
+Webhooks are HTTP callbacks that Coal sends to your server when something happens in your account — a payment is confirmed, a session expires, or a transaction fails. Instead of your application continuously polling the Coal API to check for status changes, Coal pushes the data to you the moment it occurs.
+
+> Webhooks are the recommended way to trigger fulfillment logic — provisioning access, sending receipts, updating a database — because polling introduces latency and wastes API quota.
+
+## Configuring Webhooks
+
+There are two ways to receive webhooks:
+
+### Option 1 — Per-session callback URL
+
+Pass a `callbackUrl` when creating a checkout session. Coal will deliver events for that session exclusively to this URL.
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/checkouts \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: coal_live_..." \
+  -d '{
+    "amount": 49.99,
+    "description": "Pro Plan",
+    "redirectUrl": "https://yoursite.com/success",
+    "callbackUrl": "https://yoursite.com/api/webhooks/coal"
+  }'
+```
+
+### Option 2 — Default webhook URL (Console)
+
+Set a global webhook URL that applies to all sessions in your account:
+
+1. Open the [Developer Console](/console).
+2. Navigate to **Settings → Webhook URL**.
+3. Paste your endpoint URL and click **Save**.
+
+If both a `callbackUrl` and a default URL are configured, Coal delivers the event to the **per-session URL only**.
+
+---
+
+## Events
+
+| Event | Trigger |
+|:------|:--------|
+| `checkout.confirmed` | Payment verified on-chain |
+| `checkout.failed` | Payment verification failed |
+| `checkout.expired` | Session expired before payment was received |
+
+---
+
+## Payload Structure
+
+Every webhook is a `POST` request with a JSON body. The top-level shape is the same for all events; only the `event` field and parts of `data` vary.
+
+### `checkout.confirmed`
+
+Fired when the on-chain transaction has been verified by Coal's indexer and the session is marked `confirmed`.
+
+```json
+{
+  "event": "checkout.confirmed",
+  "id": "evt_clx7k2p3q0000abc12345",
+  "timestamp": "2026-03-22T12:00:00.000Z",
+  "data": {
+    "sessionId": "clx7k2p3q0000abc12345",
+    "merchantId": "clx1mer0h0000xyz98765",
+    "amount": "49.99",
+    "currency": "USDC",
+    "status": "confirmed",
+    "txHash": "0xabc123def456abc123def456abc123def456abc123def456abc123def456abc123",
+    "description": "Pro Plan",
+    "redirectUrl": "https://yoursite.com/success",
+    "metadata": {
+      "userId": "usr_42",
+      "plan": "pro"
+    }
+  }
+}
+```
+
+### `checkout.failed`
+
+Fired when Coal attempted to verify the on-chain transaction but validation failed (insufficient amount, wrong address, replay, etc.).
+
+```json
+{
+  "event": "checkout.failed",
+  "id": "evt_clx7k2p3q0001abc12346",
+  "timestamp": "2026-03-22T12:04:33.217Z",
+  "data": {
+    "sessionId": "clx7k2p3q0001abc12346",
+    "merchantId": "clx1mer0h0000xyz98765",
+    "amount": "49.99",
+    "currency": "USDC",
+    "status": "failed",
+    "txHash": "0xdeadbeef...",
+    "description": "Pro Plan",
+    "redirectUrl": "https://yoursite.com/success",
+    "metadata": {}
+  }
+}
+```
+
+### `checkout.expired`
+
+Fired when the session's TTL (30 minutes by default) elapsed without receiving a payment.
+
+```json
+{
+  "event": "checkout.expired",
+  "id": "evt_clx7k2p3q0002abc12347",
+  "timestamp": "2026-03-22T12:30:00.000Z",
+  "data": {
+    "sessionId": "clx7k2p3q0002abc12347",
+    "merchantId": "clx1mer0h0000xyz98765",
+    "amount": "49.99",
+    "currency": "USDC",
+    "status": "expired",
+    "txHash": null,
+    "description": "Pro Plan",
+    "redirectUrl": "https://yoursite.com/success",
+    "metadata": {}
+  }
+}
+```
+
+---
+
+## Handling Webhooks — Node.js / Next.js
+
+The following is a production-ready route handler for Next.js App Router. It verifies the signature, guards against replays using an idempotency check, and dispatches to your business logic.
+
+```typescript
+// app/api/webhooks/coal/route.ts
+import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+
+const COAL_WEBHOOK_SECRET = process.env.COAL_WEBHOOK_SECRET!;
+
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const sigHeader = request.headers.get('x-coal-signature');
+
+  // 1. Reject requests with no signature header
+  if (!sigHeader) {
+    return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+  }
+
+  // 2. Verify HMAC-SHA256 signature
+  const expectedSig = crypto
+    .createHmac('sha256', COAL_WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest('hex');
+
+  const providedSig = sigHeader.replace(/^sha256=/, '');
+
+  const signaturesMatch = crypto.timingSafeEqual(
+    Buffer.from(expectedSig, 'hex'),
+    Buffer.from(providedSig, 'hex')
+  );
+
+  if (!signaturesMatch) {
+    console.error('[coal/webhook] Invalid signature — possible tampering');
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+  }
+
+  const event = JSON.parse(rawBody) as CoalWebhookEvent;
+
+  // 3. Idempotency guard — check sessionId, not event id
+  const alreadyProcessed = await db.processedSessions.has(event.data.sessionId);
+  if (alreadyProcessed) {
+    return NextResponse.json({ received: true }); // silently ack duplicate
+  }
+
+  // 4. Dispatch
+  switch (event.event) {
+    case 'checkout.confirmed':
+      await fulfillOrder(event.data);
+      await db.processedSessions.add(event.data.sessionId);
+      break;
+
+    case 'checkout.failed':
+      await notifyPaymentFailed(event.data);
+      break;
+
+    case 'checkout.expired':
+      await releaseReservedInventory(event.data);
+      break;
+
+    default:
+      console.warn('[coal/webhook] Unknown event type:', (event as any).event);
+  }
+
+  // 5. Always return 2xx within 30 seconds
+  return NextResponse.json({ received: true });
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface CoalEventData {
+  sessionId: string;
+  merchantId: string;
+  amount: string;
+  currency: string; // configured settlement token
+  status: 'confirmed' | 'failed' | 'expired';
+  txHash: string | null;
+  description: string;
+  redirectUrl: string;
+  metadata: Record<string, unknown>;
+}
+
+interface CoalWebhookEvent {
+  event: 'checkout.confirmed' | 'checkout.failed' | 'checkout.expired';
+  id: string;
+  timestamp: string;
+  data: CoalEventData;
+}
+```
+
+---
+
+## Idempotency
+
+Coal may deliver the same event more than once (see [Retry Logic](/docs/webhooks/retries)). Your handler must be idempotent — processing the same event twice must not double-charge, double-provision, or cause any side effects.
+
+**Best practice:** Use `data.sessionId` as your idempotency key, not `id` (the event envelope ID). Store processed session IDs in a database set or cache and skip re-processing.
+
+```typescript
+// Example with a simple Redis set
+const key = `coal:processed:${event.data.sessionId}`;
+const wasSet = await redis.set(key, '1', { NX: true, EX: 86400 }); // 24h TTL
+if (!wasSet) {
+  return NextResponse.json({ received: true }); // duplicate, skip
+}
+```
+
+---
+
+## HTTPS Requirement
+
+Production webhooks **must** be delivered to an HTTPS endpoint with a valid TLS certificate. Coal will not deliver to `http://` URLs in live mode. During development, use a tunneling tool like [ngrok](https://ngrok.com) or [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to expose your local server:
+
+```bash
+ngrok http 3000
+# Forwarding: https://abc123.ngrok.io -> http://localhost:3000
+```
+
+Set your `callbackUrl` to the HTTPS forwarding URL while testing.
+
+---
+
+## Response Requirements
+
+| Requirement | Detail |
+|:------------|:-------|
+| Status code | Must be `2xx` (200–299) |
+| Timeout | Must respond within **30 seconds** |
+| Body | Any body — Coal ignores the response body |
+
+If your handler returns a non-2xx status or takes longer than 30 seconds, Coal marks the attempt as failed and schedules a retry. See [Retry Logic](/docs/webhooks/retries) for the full schedule.
