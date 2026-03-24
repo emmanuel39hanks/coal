@@ -9,6 +9,7 @@ import {
     Steps,
     Step,
     QuickLinks,
+    PaymentFlowDiagram,
 } from '@/components/DocComponents'
 
 export function useMDXComponents(components: MDXComponents): MDXComponents {
@@ -24,6 +25,7 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
         Steps,
         Step,
         QuickLinks,
+        PaymentFlowDiagram,
 
         // ── Styled HTML elements ──────────────────────────────────────────
         table: (props) => (

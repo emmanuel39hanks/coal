@@ -279,6 +279,74 @@ export function Step({
     );
 }
 
+// ─── PaymentFlowDiagram ───────────────────────────────────────────────────────
+
+type FlowActor = 'app' | 'user' | 'coal' | 'chain';
+
+const FLOW_ACTOR_STYLES: Record<FlowActor, string> = {
+    app:   'bg-blue-50 text-blue-700 border-blue-200',
+    user:  'bg-green-50 text-green-700 border-green-200',
+    coal:  'bg-orange-50 text-[#FF5C16] border-orange-200',
+    chain: 'bg-purple-50 text-purple-700 border-purple-200',
+};
+
+const FLOW_ACTOR_LABELS: Record<FlowActor, string> = {
+    app:   'Your App',
+    user:  'User / Browser',
+    coal:  'Coal',
+    chain: 'Base Chain',
+};
+
+export type FlowRow =
+    | { kind: 'msg'; from: FlowActor; to: FlowActor; label: string; sub?: string }
+    | { kind: 'event'; actor: FlowActor; label: string }
+    | { kind: 'phase'; label: string };
+
+export function PaymentFlowDiagram({ rows }: { rows: FlowRow[] }) {
+    return (
+        <div className="not-prose my-6 rounded-2xl border border-black/8 bg-white overflow-hidden shadow-sm text-sm">
+            {rows.map((row, i) => {
+                if (row.kind === 'phase') {
+                    return (
+                        <div key={i} className="flex items-center gap-3 px-5 py-2 bg-gray-50 border-y border-black/5">
+                            <div className="flex-1 h-px bg-gray-200" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">{row.label}</span>
+                            <div className="flex-1 h-px bg-gray-200" />
+                        </div>
+                    );
+                }
+                if (row.kind === 'event') {
+                    return (
+                        <div key={i} className="flex items-center gap-3 px-5 py-2.5 border-b border-black/4 last:border-0">
+                            <span className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full border ${FLOW_ACTOR_STYLES[row.actor]}`}>
+                                {FLOW_ACTOR_LABELS[row.actor]}
+                            </span>
+                            <span className="text-xs text-gray-500 italic">{row.label}</span>
+                        </div>
+                    );
+                }
+                // msg
+                const arrow = '→';
+                return (
+                    <div key={i} className="flex items-start gap-3 px-5 py-2.5 border-b border-black/4 last:border-0 hover:bg-gray-50/50 transition-colors">
+                        <span className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full border ${FLOW_ACTOR_STYLES[row.from]}`}>
+                            {FLOW_ACTOR_LABELS[row.from]}
+                        </span>
+                        <span className="shrink-0 text-gray-300 text-base mt-0.5">→</span>
+                        <span className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full border ${FLOW_ACTOR_STYLES[row.to]}`}>
+                            {FLOW_ACTOR_LABELS[row.to]}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                            <span className="font-semibold text-[var(--color-brand-navy)] font-mono text-xs">{row.label}</span>
+                            {row.sub && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{row.sub}</p>}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 // ─── QuickLinks ───────────────────────────────────────────────────────────────
 
 export function QuickLinks({ items }: { items: { title: string; description: string; href: string }[] }) {

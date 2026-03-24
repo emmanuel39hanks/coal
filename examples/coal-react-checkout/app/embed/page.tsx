@@ -139,6 +139,7 @@ export default function EmbedDemoPage() {
               <CoalCheckoutButton
                 checkoutUrl={checkoutUrl ?? undefined}
                 sessionId={!checkoutUrl ? sessionId : undefined}
+                target="_blank"
                 style={{ width: '100%', maxWidth: '280px', height: '52px', fontSize: '15px' }}
               />
 

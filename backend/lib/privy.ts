@@ -36,7 +36,7 @@ export async function getAuthUser(request: Request) {
     }
 
     // Create new user
-    return prisma.user.create({
+    const newUser = await prisma.user.create({
       data: {
         privyDid,
         email,
@@ -45,6 +45,33 @@ export async function getAuthUser(request: Request) {
         emailVerified: true, // Privy handles email verification
       },
     });
+
+    // Auto-accept any pending team invites for this email
+    const pendingInvites = await prisma.verification.findMany({
+      where: {
+        identifier: { startsWith: `team_invite:${email}:` },
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    for (const invite of pendingInvites) {
+      try {
+        const { merchantId, role, invitedBy } = JSON.parse(invite.value);
+        await prisma.teamMember.create({
+          data: { merchantId, userId: newUser.id, role, invitedBy },
+        });
+      } catch {
+        // ignore duplicate or parse errors
+      }
+    }
+
+    if (pendingInvites.length > 0) {
+      await prisma.verification.deleteMany({
+        where: { identifier: { startsWith: `team_invite:${email}:` } },
+      });
+    }
+
+    return newUser;
   } catch {
     return null;
   }

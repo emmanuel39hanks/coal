@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { CoalWidget } from 'coal-react';
 
-type Step = 'select' | 'checkout' | 'success' | 'error';
+type Step = 'select' | 'error';
 
 const PRODUCTS = [
   { id: 'starter', name: 'Starter Plan', description: 'Perfect for indie devs', price: 9.99, features: ['5 payment links', 'Webhook notifications', 'Community support'] },
@@ -14,8 +13,6 @@ const PRODUCTS = [
 export default function CheckoutPage() {
   const [step, setStep] = useState<Step>('select');
   const [selected, setSelected] = useState(PRODUCTS[1]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -31,18 +28,16 @@ export default function CheckoutPage() {
         body: JSON.stringify({ amount: selected.price, productName: selected.name, productDescription: selected.description }),
       });
       const data = await res.json();
-      if (!res.ok || !data.sessionId) {
-        throw new Error(data.error || 'Failed to create checkout session');
-      }
-      setSessionId(data.sessionId);
-      setStep('checkout');
+      if (!res.ok || !data.sessionId) throw new Error(data.error || 'Failed to create checkout session');
+      // Redirect directly — SDK is redirect-based, no iframe
+      const url = data.checkoutUrl || `${coalBaseUrl}/pay/checkout/${data.sessionId}`;
+      window.location.href = url;
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Something went wrong');
       setStep('error');
-    } finally {
       setIsCreating(false);
     }
-  }, [selected]);
+  }, [selected, coalBaseUrl]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
@@ -51,7 +46,7 @@ export default function CheckoutPage() {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
           <span style={{ display: 'inline-block', background: 'white', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '11px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
-            Powered by @coal/react
+            Powered by coal-react
           </span>
           <h1 style={{ fontSize: '2.5rem', fontWeight: 900, color: '#180D43', margin: '0 0 8px', letterSpacing: '-0.04em' }}>
             Choose your plan
@@ -74,7 +69,7 @@ export default function CheckoutPage() {
                     onClick={() => setSelected(product)}
                     style={{
                       background: isHighlighted ? '#180D43' : 'white',
-                      border: isSelected ? `2px solid #FF5C16` : '2px solid rgba(0,0,0,0.06)',
+                      border: isSelected ? '2px solid #FF5C16' : '2px solid rgba(0,0,0,0.06)',
                       borderRadius: '24px',
                       padding: '28px',
                       textAlign: 'left',
@@ -124,12 +119,10 @@ export default function CheckoutPage() {
                   fontSize: '15px',
                   fontWeight: 700,
                   cursor: isCreating ? 'not-allowed' : 'pointer',
-                  boxShadow: '6px 6px 0px 0px #FF5C16',
+                  boxShadow: isCreating ? 'none' : '6px 6px 0px 0px #FF5C16',
                   transition: 'all 0.15s',
                   opacity: isCreating ? 0.7 : 1,
                 }}
-                onMouseOver={(e) => { if (!isCreating) { (e.target as HTMLButtonElement).style.transform = 'translate(2px, 2px)'; (e.target as HTMLButtonElement).style.boxShadow = '4px 4px 0px 0px #FF5C16'; }}}
-                onMouseOut={(e) => { (e.target as HTMLButtonElement).style.transform = ''; (e.target as HTMLButtonElement).style.boxShadow = '6px 6px 0px 0px #FF5C16'; }}
               >
                 {isCreating ? 'Creating session…' : `Pay $${selected.price.toFixed(2)} with crypto →`}
               </button>
@@ -137,76 +130,6 @@ export default function CheckoutPage() {
                 Non-custodial · Funds go directly to merchant · ~2 sec settlement on Base
               </p>
             </div>
-          </div>
-        )}
-
-        {/* Step: Coal checkout widget */}
-        {step === 'checkout' && sessionId && (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <div>
-                <p style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#9CA3AF', margin: '0 0 4px' }}>Checking out</p>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#180D43', margin: 0, letterSpacing: '-0.03em' }}>
-                  {selected.name} — ${selected.price.toFixed(2)}
-                </h2>
-              </div>
-              <button
-                onClick={() => { setStep('select'); setSessionId(null); }}
-                style={{ background: 'white', border: '2px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '8px 18px', fontSize: '13px', fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}
-              >
-                ← Back
-              </button>
-            </div>
-
-            <div style={{ background: 'white', borderRadius: '32px', overflow: 'hidden', border: '2px solid rgba(0,0,0,0.06)', boxShadow: '0 20px 60px rgba(24,13,67,0.10)' }}>
-              <CoalWidget
-                sessionId={sessionId}
-                baseUrl={coalBaseUrl}
-                height={640}
-                onSuccess={(data) => {
-                  setTxHash(data.txHash);
-                  setStep('success');
-                }}
-                onError={(err) => {
-                  setErrorMessage(err.message);
-                  setStep('error');
-                }}
-                onCancel={() => {
-                  setStep('select');
-                  setSessionId(null);
-                }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Step: success */}
-        {step === 'success' && (
-          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <div style={{ width: '72px', height: '72px', background: '#ECFDF5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: '32px' }}>
-              ✓
-            </div>
-            <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#180D43', margin: '0 0 8px', letterSpacing: '-0.04em' }}>Payment confirmed!</h2>
-            <p style={{ color: '#6B7280', marginBottom: '24px', fontSize: '15px' }}>
-              Your {selected.name} is now active.
-            </p>
-            {txHash && (
-              <a
-                href={`https://basescan.org/tx/${txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'white', border: '2px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '8px 18px', fontSize: '12px', fontWeight: 700, color: '#180D43', textDecoration: 'none', marginBottom: '32px' }}
-              >
-                View on Basescan →
-              </a>
-            )}
-            <br />
-            <button
-              onClick={() => { setStep('select'); setSessionId(null); setTxHash(null); }}
-              style={{ background: '#000', color: 'white', border: 'none', borderRadius: '999px', padding: '12px 32px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', boxShadow: '4px 4px 0px 0px #FF5C16' }}
-            >
-              Start another checkout
-            </button>
           </div>
         )}
 
@@ -219,7 +142,7 @@ export default function CheckoutPage() {
             <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#180D43', margin: '0 0 8px' }}>Something went wrong</h2>
             <p style={{ color: '#EF4444', marginBottom: '32px', fontSize: '14px', fontFamily: 'monospace' }}>{errorMessage}</p>
             <button
-              onClick={() => { setStep('select'); setSessionId(null); setErrorMessage(''); }}
+              onClick={() => { setStep('select'); setErrorMessage(''); }}
               style={{ background: '#000', color: 'white', border: 'none', borderRadius: '999px', padding: '12px 32px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', boxShadow: '4px 4px 0px 0px #FF5C16' }}
             >
               Try again

@@ -5,57 +5,73 @@ import { motion } from 'framer-motion';
 import useSWR from 'swr';
 import {
     ArrowRight,
-    ShieldTick,
     Box,
     Cpu,
+    DocumentText,
+    ExportSquare,
     Flash,
-    ReceiptItem,
-    Profile2User,
     Lock,
-    TickCircle,
-    CloseCircle,
+    ReceiptItem,
+    ShieldTick,
+    Hierarchy,
 } from 'iconsax-reactjs';
-import { Skeleton } from '@/components/Skeleton';
+import { Skeleton, StatCardSkeleton } from '@/components/Skeleton';
 import { useApi } from '@/lib/api';
 
-type HealthCheck =
-    | { ok: true; details: Record<string, any> }
-    | { ok: false; error: string };
+/* ─── Types ───────────────────────────────────────────────────────────── */
 
-type ZeroGConsoleData = {
+type ActivityItem = {
+    id: string;
+    type: 'artifact' | 'anchor' | 'compute';
+    kind: string;
+    status: string;
+    createdAt: string;
+    explorerUrl?: string | null;
+    storageUri?: string | null;
+    anchorTxHash?: string | null;
+    storageTxHash?: string | null;
+    model?: string | null;
+    errorMessage?: string | null;
+};
+
+type ZeroGData = {
     status: 'ok' | 'degraded';
     timestamp: string;
+    explorers: { storageScan: string; chainScan: string };
+    stats: {
+        receiptsStored: number;
+        receiptsAnchored: number;
+        profilePublished: boolean;
+        memoryPublished: boolean;
+        paywallManifests: number;
+        aiQueries: number;
+        confirmedPayments: number;
+    };
     merchant: {
         id: string;
         profile: {
             name: string | null;
             productCount: number;
             paywallCount: number;
-            capabilities: {
-                paywalls: boolean;
-                receiptVerification: boolean;
-                aiCommerce: boolean;
-                merchantMemory: boolean;
-            };
-            storageUri: string | null;
             published: boolean;
             publishedAt: string | null;
-            updatedAt: string;
+            explorerUrl: string | null;
         } | null;
         memory: {
             published: boolean;
             publishedAt: string | null;
-            capturedAt: string;
-            productCount: number;
-            paywallCount: number;
+            explorerUrl: string | null;
         } | null;
     };
+    activity: ActivityItem[];
     checks: {
-        storage: HealthCheck;
-        chain: HealthCheck;
-        compute: HealthCheck;
+        storage: { ok: boolean };
+        chain: { ok: boolean };
+        compute: { ok: boolean };
     };
 };
+
+/* ─── Helpers ─────────────────────────────────────────────────────────── */
 
 function timeAgo(value?: string | null) {
     if (!value) return null;
@@ -70,266 +86,426 @@ function timeAgo(value?: string | null) {
     return `${Math.round(hrs / 24)}d ago`;
 }
 
+function truncate(s: string | null | undefined, len = 16) {
+    if (!s) return '—';
+    if (s.length <= len) return s;
+    return s.slice(0, 8) + '…' + s.slice(-6);
+}
+
+const KIND_LABELS: Record<string, string> = {
+    receipt_payload: 'Receipt proof',
+    merchant_profile: 'Merchant profile',
+    merchant_memory_snapshot: 'Memory snapshot',
+    paywall_manifest: 'Paywall manifest',
+    commerce_recommend: 'AI recommendation',
+    memory_query: 'Memory query',
+    policy_eval: 'Policy check',
+    support_answer: 'Support query',
+};
+
+const KIND_ICONS: Record<string, typeof ReceiptItem> = {
+    receipt_payload: ReceiptItem,
+    merchant_profile: Box,
+    merchant_memory_snapshot: Lock,
+    paywall_manifest: DocumentText,
+};
+
+function kindLabel(kind: string) {
+    return KIND_LABELS[kind] || kind.replace(/_/g, ' ');
+}
+
+/* ─── Page ────────────────────────────────────────────────────────────── */
+
 export default function ZeroGConsolePage() {
     const { fetcher } = useApi();
-    const { data, isLoading, error } = useSWR<ZeroGConsoleData>('/api/console/0g', fetcher);
-
-    const profile = data?.merchant.profile;
-    const memory = data?.merchant.memory;
-    const storageOk = data?.checks.storage.ok;
-    const chainOk = data?.checks.chain.ok;
-    const computeOk = data?.checks.compute.ok;
-    const allHealthy = storageOk && chainOk && computeOk;
+    const { data, isLoading, error } = useSWR<ZeroGData>('/api/console/0g', fetcher);
 
     if (error) {
         return (
             <div className="space-y-8">
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-[var(--color-brand-navy)]">0G</h1>
-                    <p className="font-medium text-[var(--color-text-secondary)]">Could not load 0G status. Try refreshing.</p>
+                    <p className="font-medium text-[var(--color-text-secondary)]">Failed to load. Try refreshing.</p>
                 </div>
             </div>
         );
     }
 
+    const stats = data?.stats;
+    const activity = data?.activity ?? [];
+    const hasActivity = activity.length > 0;
+
     return (
         <div className="space-y-8">
-            {/* Header */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                <h1 className="text-3xl font-black text-[var(--color-brand-navy)] tracking-tight">0G</h1>
-                <p className="text-[var(--color-text-secondary)] font-medium">
-                    Permanent receipts, AI paywalls, and portable identity — powered by 0G.
-                </p>
-            </motion.div>
-
-            {/* Status banner */}
+            {/* ─── Header ─────────────────────────────────────────────── */}
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.04 }}
-                className="rounded-[28px] border-2 border-black/5 bg-white p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-            >
-                <div className="flex items-center gap-3">
-                    {isLoading ? (
-                        <Skeleton className="h-10 w-10 rounded-2xl" />
-                    ) : (
-                        <div className={`rounded-2xl p-2.5 ${allHealthy ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-[var(--color-brand-orange)]'}`}>
-                            {allHealthy ? <TickCircle size={20} variant="Bold" /> : <CloseCircle size={20} variant="Bold" />}
-                        </div>
-                    )}
-                    <div>
-                        <p className="text-base font-black text-[var(--color-brand-navy)] tracking-tight">
-                            {isLoading ? <Skeleton className="h-5 w-40 rounded-lg" /> : allHealthy ? 'All systems operational' : 'Some services need attention'}
-                        </p>
-                        <p className="text-xs font-medium text-[var(--color-text-secondary)] mt-0.5">
-                            {isLoading ? <Skeleton className="h-3 w-56 rounded-lg mt-1" /> : `Storage · Chain · Compute — checked ${timeAgo(data?.timestamp) || 'now'}`}
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    {[
-                        { label: 'Storage', ok: storageOk },
-                        { label: 'Chain', ok: chainOk },
-                        { label: 'Compute', ok: computeOk },
-                    ].map(({ label, ok }) => (
-                        <span
-                            key={label}
-                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.12em] ${
-                                isLoading
-                                    ? 'bg-black/5 text-[var(--color-text-secondary)]'
-                                    : ok
-                                    ? 'bg-green-50 text-green-700'
-                                    : 'bg-orange-50 text-[var(--color-brand-orange)]'
-                            }`}
-                        >
-                            <span className={`h-1.5 w-1.5 rounded-full ${isLoading ? 'bg-current opacity-30' : ok ? 'bg-green-500' : 'bg-[var(--color-brand-orange)]'}`} />
-                            {label}
-                        </span>
-                    ))}
-                </div>
-            </motion.div>
-
-            {/* What 0G does for you — 4 cards */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.08 }}
-                className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-            >
-                {[
-                    {
-                        icon: ReceiptItem,
-                        title: 'Verifiable receipts',
-                        desc: 'Every confirmed payment is stored permanently on 0G. Customers and auditors can verify any receipt without contacting you.',
-                        enabled: profile?.capabilities.receiptVerification,
-                    },
-                    {
-                        icon: Flash,
-                        title: 'AI-ready paywalls',
-                        desc: 'Your paywalls are published as machine-readable manifests. AI agents can discover, pay, and verify access autonomously.',
-                        enabled: profile?.capabilities.paywalls,
-                    },
-                    {
-                        icon: Profile2User,
-                        title: 'Portable identity',
-                        desc: 'Your merchant profile and catalog live on decentralized storage. Your reputation and history stay yours, not locked to a platform.',
-                        enabled: profile?.capabilities.merchantMemory,
-                    },
-                    {
-                        icon: Cpu,
-                        title: 'AI commerce',
-                        desc: 'AI models can query your products, check buyer access, and answer questions using your merchant context.',
-                        enabled: profile?.capabilities.aiCommerce,
-                    },
-                ].map(({ icon: Icon, title, desc, enabled }, i) => (
-                    <div key={title} className="rounded-[28px] border-2 border-black/5 bg-white p-5 flex flex-col">
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="rounded-2xl bg-[var(--color-bg-base)] p-2.5 text-[var(--color-brand-navy)]">
-                                <Icon size={20} variant="Bold" />
-                            </div>
-                            <span
-                                className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${
-                                    isLoading ? 'bg-black/5 text-[var(--color-text-secondary)]' : enabled ? 'bg-green-50 text-green-700' : 'bg-black/5 text-[var(--color-text-secondary)]'
-                                }`}
-                            >
-                                {isLoading ? '...' : enabled ? 'Active' : 'Not yet'}
-                            </span>
-                        </div>
-                        <h3 className="mt-4 text-sm font-black text-[var(--color-brand-navy)] tracking-tight">{title}</h3>
-                        <p className="mt-1.5 text-xs leading-5 font-medium text-[var(--color-text-secondary)] flex-1">{desc}</p>
-                    </div>
-                ))}
-            </motion.div>
-
-            {/* Your published data */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.12 }}
-                className="grid gap-4 lg:grid-cols-2"
-            >
-                {/* Merchant Profile */}
-                <div className="rounded-[28px] border-2 border-black/5 bg-white p-6">
-                    <div className="flex items-center gap-3 mb-5">
-                        <div className="rounded-2xl bg-[var(--color-brand-navy)] p-2.5 text-white">
-                            <Box size={18} variant="Bold" />
-                        </div>
-                        <div className="flex-1">
-                            <h3 className="text-base font-black text-[var(--color-brand-navy)] tracking-tight">Your profile</h3>
-                            <p className="text-xs font-medium text-[var(--color-text-secondary)]">Published to 0G Storage</p>
-                        </div>
-                        <span
-                            className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${
-                                isLoading ? 'bg-black/5 text-[var(--color-text-secondary)]' : profile?.published ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-[var(--color-brand-orange)]'
-                            }`}
-                        >
-                            {isLoading ? '...' : profile?.published ? 'Live' : 'Pending'}
-                        </span>
-                    </div>
-                    <div className="space-y-3">
-                        {isLoading ? (
-                            <>
-                                <Skeleton className="h-4 w-full rounded-lg" />
-                                <Skeleton className="h-4 w-3/4 rounded-lg" />
-                            </>
-                        ) : (
-                            <>
-                                <Row label="Products" value={profile?.productCount ?? 0} />
-                                <Row label="Paywalls" value={profile?.paywallCount ?? 0} />
-                                <Row label="Last updated" value={timeAgo(profile?.updatedAt) || 'Never'} />
-                                <Row label="Last published" value={timeAgo(profile?.publishedAt) || 'Not yet'} />
-                            </>
-                        )}
-                    </div>
-                    {!isLoading && !profile?.published && (
-                        <p className="mt-4 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-bg-base)] rounded-2xl p-3">
-                            Your profile will auto-publish when you add your first product or paywall.
-                        </p>
-                    )}
-                </div>
-
-                {/* Merchant Memory */}
-                <div className="rounded-[28px] border-2 border-black/5 bg-white p-6">
-                    <div className="flex items-center gap-3 mb-5">
-                        <div className="rounded-2xl bg-[var(--color-brand-orange)] p-2.5 text-white">
-                            <Lock size={18} variant="Bold" />
-                        </div>
-                        <div className="flex-1">
-                            <h3 className="text-base font-black text-[var(--color-brand-navy)] tracking-tight">Your memory</h3>
-                            <p className="text-xs font-medium text-[var(--color-text-secondary)]">Encrypted snapshot on 0G</p>
-                        </div>
-                        <span
-                            className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${
-                                isLoading ? 'bg-black/5 text-[var(--color-text-secondary)]' : memory?.published ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-[var(--color-brand-orange)]'
-                            }`}
-                        >
-                            {isLoading ? '...' : memory?.published ? 'Live' : 'Pending'}
-                        </span>
-                    </div>
-                    <div className="space-y-3">
-                        {isLoading ? (
-                            <>
-                                <Skeleton className="h-4 w-full rounded-lg" />
-                                <Skeleton className="h-4 w-3/4 rounded-lg" />
-                            </>
-                        ) : (
-                            <>
-                                <Row label="Products synced" value={memory?.productCount ?? 0} />
-                                <Row label="Paywalls synced" value={memory?.paywallCount ?? 0} />
-                                <Row label="Last snapshot" value={timeAgo(memory?.capturedAt) || 'Never'} />
-                                <Row label="Last published" value={timeAgo(memory?.publishedAt) || 'Not yet'} />
-                            </>
-                        )}
-                    </div>
-                    {!isLoading && !memory?.published && (
-                        <p className="mt-4 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-bg-base)] rounded-2xl p-3">
-                            Memory snapshots are encrypted and published automatically as you add products and paywalls.
-                        </p>
-                    )}
-                </div>
-            </motion.div>
-
-            {/* Learn more CTA */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.16 }}
-                className="rounded-[28px] bg-[var(--color-brand-navy)] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                className="flex items-center justify-between"
             >
                 <div>
-                    <p className="text-base font-black text-white tracking-tight">
-                        Want to learn more about Coal x 0G?
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-white/50">
-                        See how verifiable receipts, AI paywalls, and portable identity work under the hood.
+                    <h1 className="text-3xl font-black text-[var(--color-brand-navy)] tracking-tight">0G</h1>
+                    <p className="text-[var(--color-text-secondary)] font-medium">
+                        Your payment proofs, published data, and AI activity on 0G.
                     </p>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                    <Link
-                        href="/0g"
-                        className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-bold text-[var(--color-brand-navy)] transition-all hover:shadow-lg"
-                    >
-                        Learn more
-                        <ArrowRight size={15} variant="Linear" />
-                    </Link>
-                    <Link
-                        href="/docs"
-                        className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 text-sm font-bold text-white/80 transition-all hover:border-white/30 hover:text-white"
-                    >
-                        Docs
-                        <ArrowRight size={15} variant="Linear" />
-                    </Link>
+                <div className="flex items-center gap-2">
+                    {['Storage', 'Chain', 'Compute'].map((label) => {
+                        const key = label.toLowerCase() as 'storage' | 'chain' | 'compute';
+                        const ok = data?.checks[key]?.ok;
+                        return (
+                            <span
+                                key={label}
+                                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${
+                                    isLoading
+                                        ? 'bg-black/5 text-[var(--color-text-secondary)]'
+                                        : ok
+                                        ? 'bg-green-50 text-green-700'
+                                        : 'bg-red-50 text-red-600'
+                                }`}
+                            >
+                                <span
+                                    className={`h-1.5 w-1.5 rounded-full ${
+                                        isLoading ? 'bg-current opacity-30' : ok ? 'bg-green-500' : 'bg-red-500'
+                                    }`}
+                                />
+                                {label}
+                            </span>
+                        );
+                    })}
                 </div>
+            </motion.div>
+
+            {/* ─── Stat cards ─────────────────────────────────────────── */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                className="grid grid-cols-1 md:grid-cols-4 gap-4"
+            >
+                {isLoading ? (
+                    <>
+                        <StatCardSkeleton />
+                        <StatCardSkeleton />
+                        <StatCardSkeleton />
+                        <StatCardSkeleton />
+                    </>
+                ) : (
+                    <>
+                        <StatCard
+                            icon={ReceiptItem}
+                            iconBg="bg-green-50"
+                            iconColor="text-green-600"
+                            label="Receipt proofs"
+                            value={stats?.receiptsStored ?? 0}
+                            sub={stats?.receiptsAnchored ? `${stats.receiptsAnchored} anchored on-chain` : 'Stored on 0G after each confirmed payment'}
+                        />
+                        <StatCard
+                            icon={ShieldTick}
+                            iconBg="bg-blue-50"
+                            iconColor="text-blue-600"
+                            label="Chain anchors"
+                            value={stats?.receiptsAnchored ?? 0}
+                            sub="Receipts permanently anchored on 0G Chain"
+                        />
+                        <StatCard
+                            icon={Hierarchy}
+                            iconBg="bg-purple-50"
+                            iconColor="text-purple-600"
+                            label="Published artifacts"
+                            value={(stats?.receiptsStored ?? 0) + (stats?.paywallManifests ?? 0) + (stats?.profilePublished ? 1 : 0) + (stats?.memoryPublished ? 1 : 0)}
+                            sub={
+                                [
+                                    stats?.profilePublished && 'Profile',
+                                    stats?.memoryPublished && 'Memory',
+                                    stats?.paywallManifests && `${stats.paywallManifests} paywall${stats.paywallManifests === 1 ? '' : 's'}`,
+                                ]
+                                    .filter(Boolean)
+                                    .join(', ') || 'Profile, memory, paywalls auto-publish'
+                            }
+                        />
+                        <StatCard
+                            icon={Cpu}
+                            iconBg="bg-orange-50"
+                            iconColor="text-[var(--color-brand-orange)]"
+                            label="AI queries"
+                            value={stats?.aiQueries ?? 0}
+                            sub="Commerce queries answered by 0G Compute"
+                        />
+                    </>
+                )}
+            </motion.div>
+
+            {/* ─── Published data ─────────────────────────────────────── */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="grid gap-4 lg:grid-cols-2"
+            >
+                <PublishedCard
+                    icon={Box}
+                    title="Merchant profile"
+                    description="Your name, products, and catalog published to 0G Storage. Discoverable by AI agents and apps."
+                    published={data?.merchant.profile?.published ?? false}
+                    publishedAt={data?.merchant.profile?.publishedAt}
+                    explorerUrl={data?.merchant.profile?.explorerUrl}
+                    isLoading={isLoading}
+                    detail={
+                        data?.merchant.profile
+                            ? `${data.merchant.profile.productCount} product${data.merchant.profile.productCount === 1 ? '' : 's'}, ${data.merchant.profile.paywallCount} paywall${data.merchant.profile.paywallCount === 1 ? '' : 's'}`
+                            : null
+                    }
+                />
+                <PublishedCard
+                    icon={Lock}
+                    title="Encrypted memory"
+                    description="Your full catalog and settings, encrypted and stored on 0G. Used by AI commerce to answer queries about your business."
+                    published={data?.merchant.memory?.published ?? false}
+                    publishedAt={data?.merchant.memory?.publishedAt}
+                    explorerUrl={data?.merchant.memory?.explorerUrl}
+                    isLoading={isLoading}
+                />
+            </motion.div>
+
+            {/* ─── Activity table ─────────────────────────────────────── */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="bg-white rounded-[40px] border-2 border-black/5 p-8"
+            >
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-bold text-[var(--color-brand-navy)]">Activity</h2>
+                    {data?.explorers && (
+                        <div className="flex gap-2">
+                            <a
+                                href={data.explorers.storageScan}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] transition-colors"
+                            >
+                                StorageScan <ExportSquare size={12} variant="Linear" />
+                            </a>
+                            <a
+                                href={data.explorers.chainScan}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] transition-colors"
+                            >
+                                ChainScan <ExportSquare size={12} variant="Linear" />
+                            </a>
+                        </div>
+                    )}
+                </div>
+
+                {isLoading ? (
+                    <div className="space-y-4">
+                        {[...Array(4)].map((_, i) => (
+                            <div key={i} className="flex items-center gap-4">
+                                <Skeleton className="h-10 w-10 rounded-full" />
+                                <div className="flex-1 space-y-2">
+                                    <Skeleton className="h-4 w-48 rounded-full" />
+                                    <Skeleton className="h-3 w-32 rounded-full" />
+                                </div>
+                                <Skeleton className="h-6 w-20 rounded-lg" />
+                            </div>
+                        ))}
+                    </div>
+                ) : !hasActivity ? (
+                    <div className="py-16 text-center">
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-bg-base)]">
+                            <Flash size={28} variant="Bold" className="text-[var(--color-text-secondary)]" />
+                        </div>
+                        <p className="text-base font-bold text-[var(--color-brand-navy)] mb-1">No 0G activity yet</p>
+                        <p className="text-sm text-[var(--color-text-secondary)] max-w-sm mx-auto mb-6">
+                            When customers pay you, receipt proofs are automatically stored on 0G. Add products and paywalls to publish your merchant profile.
+                        </p>
+                        <div className="flex items-center justify-center gap-3">
+                            <Link
+                                href="/console/products"
+                                className="inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white shadow-[4px_4px_0px_0px_#FF5C16] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#FF5C16]"
+                            >
+                                Add a product <ArrowRight size={15} variant="Linear" />
+                            </Link>
+                            <Link
+                                href="/docs"
+                                className="inline-flex items-center gap-2 rounded-full border-2 border-black/5 bg-white px-5 py-2.5 text-sm font-bold text-[var(--color-brand-navy)] hover:border-[var(--color-brand-orange)]/25 hover:text-[var(--color-brand-orange)] transition-colors"
+                            >
+                                Docs <ArrowRight size={15} variant="Linear" />
+                            </Link>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-black/5">
+                                    <th className="pb-4 text-left text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Event</th>
+                                    <th className="pb-4 text-left text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Type</th>
+                                    <th className="pb-4 text-left text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Status</th>
+                                    <th className="pb-4 text-left text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">When</th>
+                                    <th className="pb-4 text-right text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Explorer</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {activity.slice(0, 25).map((item) => {
+                                    const IconComp = item.type === 'anchor' ? ShieldTick : item.type === 'compute' ? Cpu : (KIND_ICONS[item.kind] ?? Flash);
+                                    const iconBg =
+                                        item.type === 'anchor' ? 'bg-blue-50 text-blue-600' :
+                                        item.type === 'compute' ? 'bg-orange-50 text-[var(--color-brand-orange)]' :
+                                        item.kind === 'receipt_payload' ? 'bg-green-50 text-green-600' :
+                                        'bg-purple-50 text-purple-600';
+                                    const statusColor =
+                                        item.status === 'confirmed' || item.status === 'completed'
+                                            ? 'bg-green-50 text-green-700 border-green-100'
+                                            : item.status === 'failed'
+                                            ? 'bg-red-50 text-red-600 border-red-100'
+                                            : 'bg-yellow-50 text-yellow-700 border-yellow-100';
+
+                                    return (
+                                        <tr key={item.id} className="group hover:bg-[var(--color-bg-base)] transition-colors">
+                                            <td className="py-4 pl-1 rounded-l-xl">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${iconBg}`}>
+                                                        <IconComp size={16} variant="Bold" />
+                                                    </div>
+                                                    <span className="text-sm font-bold text-[var(--color-brand-navy)]">
+                                                        {kindLabel(item.kind)}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="py-4">
+                                                <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
+                                                    {item.type === 'artifact' ? 'Storage' : item.type === 'anchor' ? 'Chain' : 'Compute'}
+                                                </span>
+                                            </td>
+                                            <td className="py-4">
+                                                <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${statusColor}`}>
+                                                    {item.status}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 text-sm font-medium text-[var(--color-text-secondary)]">
+                                                {timeAgo(item.createdAt) || '—'}
+                                            </td>
+                                            <td className="py-4 pr-1 text-right rounded-r-xl">
+                                                {item.explorerUrl ? (
+                                                    <a
+                                                        href={item.explorerUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] transition-colors"
+                                                    >
+                                                        View <ExportSquare size={12} variant="Linear" />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-xs text-[var(--color-text-secondary)]">—</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </motion.div>
         </div>
     );
 }
 
-function Row({ label, value }: { label: string; value: string | number }) {
+/* ─── Components ──────────────────────────────────────────────────────── */
+
+function StatCard({
+    icon: Icon,
+    iconBg,
+    iconColor,
+    label,
+    value,
+    sub,
+}: {
+    icon: typeof ReceiptItem;
+    iconBg: string;
+    iconColor: string;
+    label: string;
+    value: number;
+    sub: string;
+}) {
     return (
-        <div className="flex items-center justify-between gap-4 text-sm">
-            <span className="font-medium text-[var(--color-text-secondary)]">{label}</span>
-            <span className="font-bold text-[var(--color-brand-navy)]">{String(value)}</span>
+        <div className="bg-white p-6 rounded-[32px] border-2 border-black/5 h-40 group hover:border-[var(--color-brand-orange)]/20 transition-all">
+            <div className={`p-3 rounded-2xl inline-flex ${iconBg} group-hover:scale-105 transition-transform`}>
+                <Icon size={20} variant="Bold" className={iconColor} />
+            </div>
+            <p className="mt-3 text-[var(--color-text-secondary)] font-bold text-sm">{label}</p>
+            <p className="text-3xl font-black text-[var(--color-brand-navy)]">{value}</p>
+            <p className="text-xs font-medium text-[var(--color-text-secondary)] mt-0.5 truncate">{sub}</p>
+        </div>
+    );
+}
+
+function PublishedCard({
+    icon: Icon,
+    title,
+    description,
+    published,
+    publishedAt,
+    explorerUrl,
+    isLoading,
+    detail,
+}: {
+    icon: typeof Box;
+    title: string;
+    description: string;
+    published: boolean;
+    publishedAt?: string | null;
+    explorerUrl?: string | null;
+    isLoading: boolean;
+    detail?: string | null;
+}) {
+    return (
+        <div className="bg-white rounded-[32px] border-2 border-black/5 p-6">
+            <div className="flex items-start justify-between gap-4 mb-3">
+                <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-[var(--color-bg-base)] p-3">
+                        <Icon size={20} variant="Bold" className="text-[var(--color-brand-navy)]" />
+                    </div>
+                    <div>
+                        <h3 className="text-base font-black text-[var(--color-brand-navy)] tracking-tight">{title}</h3>
+                        {detail && (
+                            <p className="text-xs font-medium text-[var(--color-text-secondary)]">{detail}</p>
+                        )}
+                    </div>
+                </div>
+                <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${
+                        isLoading
+                            ? 'bg-black/5 text-[var(--color-text-secondary)]'
+                            : published
+                            ? 'bg-green-50 text-green-700'
+                            : 'bg-black/5 text-[var(--color-text-secondary)]'
+                    }`}
+                >
+                    {isLoading ? '...' : published ? 'Published' : 'Not published'}
+                </span>
+            </div>
+            <p className="text-sm font-medium text-[var(--color-text-secondary)] leading-6 mb-4">{description}</p>
+            <div className="flex items-center gap-3">
+                {published && publishedAt && (
+                    <span className="text-xs font-medium text-[var(--color-text-secondary)]">
+                        Published {timeAgo(publishedAt)}
+                    </span>
+                )}
+                {explorerUrl && (
+                    <a
+                        href={explorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--color-brand-orange)] hover:underline"
+                    >
+                        View on StorageScan <ExportSquare size={12} variant="Linear" />
+                    </a>
+                )}
+            </div>
         </div>
     );
 }

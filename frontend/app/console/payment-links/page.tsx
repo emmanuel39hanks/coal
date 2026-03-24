@@ -386,42 +386,56 @@ export default function PaymentLinksPage() {
                         </div>
                     </div>
 
-                    <div className="rounded-3xl border border-black/5 bg-[var(--color-bg-base)]/70 p-4">
-                        <div className="flex items-start justify-between gap-4">
+                    <div className="rounded-[24px] border border-black/5 bg-[var(--color-bg-base)]/70 p-5">
+                        <div className="flex items-center justify-between gap-4 mb-4">
                             <div>
                                 <h3 className="text-sm font-black text-[var(--color-brand-navy)]">Payer Info</h3>
-                                <p className="mt-1 text-sm font-medium text-[var(--color-text-secondary)]">
-                                    Ask for buyer details before checkout and save them on the payment record.
+                                <p className="mt-0.5 text-xs font-medium text-[var(--color-text-secondary)]">
+                                    Collect buyer details before checkout.
                                 </p>
                             </div>
-                            <label className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-[var(--color-brand-navy)] shadow-sm">
-                                <input
-                                    type="checkbox"
-                                    checked={requirePayerInfo}
-                                    onChange={(e) => setRequirePayerInfo(e.target.checked)}
-                                    disabled={payerInfoFields.length === 0}
-                                    className="h-4 w-4 rounded border-black/20 text-[var(--color-brand-orange)] focus:ring-[var(--color-brand-orange)]"
-                                />
-                                Required
-                            </label>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            {PAYER_INFO_FIELDS.map((field) => (
+                            <div className="flex items-center gap-2 shrink-0">
+                                <span className={`text-xs font-bold ${payerInfoFields.length === 0 ? 'text-gray-300' : requirePayerInfo ? 'text-[var(--color-brand-navy)]' : 'text-gray-400'}`}>
+                                    Required
+                                </span>
                                 <button
-                                    key={field}
                                     type="button"
-                                    onClick={() => togglePayerField(field)}
-                                    className={`rounded-2xl border px-4 py-3 text-left transition ${
-                                        payerInfoFields.includes(field)
-                                            ? 'border-[var(--color-brand-orange)] bg-white shadow-sm'
-                                            : 'border-black/5 bg-white/60 hover:border-black/10'
+                                    role="switch"
+                                    aria-checked={requirePayerInfo}
+                                    onClick={() => { if (payerInfoFields.length > 0) setRequirePayerInfo(!requirePayerInfo); }}
+                                    disabled={payerInfoFields.length === 0}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-30 ${
+                                        requirePayerInfo && payerInfoFields.length > 0 ? 'bg-[var(--color-brand-orange)]' : 'bg-gray-200'
                                     }`}
                                 >
-                                    <div className="text-sm font-bold text-[var(--color-brand-navy)]">{PAYER_INFO_FIELD_META[field].label}</div>
-                                    <div className="mt-1 text-xs font-medium text-[var(--color-text-secondary)]">{PAYER_INFO_FIELD_META[field].placeholder}</div>
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${requirePayerInfo && payerInfoFields.length > 0 ? 'translate-x-6' : 'translate-x-1'}`} />
                                 </button>
-                            ))}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                            {PAYER_INFO_FIELDS.map((field) => {
+                                const active = payerInfoFields.includes(field);
+                                return (
+                                    <button
+                                        key={field}
+                                        type="button"
+                                        onClick={() => togglePayerField(field)}
+                                        className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold border transition-colors ${
+                                            active
+                                                ? 'border-[var(--color-brand-orange)] bg-[var(--color-brand-orange)]/5 text-[var(--color-brand-orange)]'
+                                                : 'border-black/8 bg-white text-[var(--color-brand-navy)] hover:border-black/15'
+                                        }`}
+                                    >
+                                        {active && (
+                                            <svg className="h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                            </svg>
+                                        )}
+                                        {PAYER_INFO_FIELD_META[field].label}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 

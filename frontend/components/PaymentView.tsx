@@ -443,14 +443,24 @@ export default function PaymentView({
             console.error("Payment failed:", e);
             const msg = (e as Error).message || '';
             const friendly =
-                msg.includes('rejected') || msg.includes('denied') ? 'Transaction cancelled.' :
-                msg.includes('insufficient') || msg.includes('exceeds balance') ? 'Insufficient balance.' :
-                msg || 'Payment failed. Please try again.';
-            setErrorMsg(friendly);
-            toast('error', friendly);
+                msg.includes('rejected') || msg.includes('denied') || msg.includes('cancel') ? 'cancelled' :
+                msg.includes('gas required exceeds allowance') || msg.includes('allowance (0)') || msg.includes('gas required') ? 'gas' :
+                msg.includes('insufficient funds') || msg.includes('exceeds balance') || msg.includes('insufficient balance') ? 'balance' :
+                msg.includes('nonce') ? 'nonce' :
+                msg.includes('network') || msg.includes('fetch') || msg.includes('timeout') ? 'network' :
+                'unknown';
+            const friendlyMsg =
+                friendly === 'cancelled' ? 'Transaction cancelled.' :
+                friendly === 'gas' ? 'Not enough ETH for gas fees. Connect a funded wallet to pay.' :
+                friendly === 'balance' ? 'Insufficient USDC balance. Top up your wallet and try again.' :
+                friendly === 'nonce' ? 'Transaction nonce error. Please try again.' :
+                friendly === 'network' ? 'Network error. Check your connection and try again.' :
+                'Payment failed. Please try again.';
+            setErrorMsg(friendly === 'cancelled' ? '__cancelled__' : friendlyMsg);
+            if (friendly !== 'cancelled') toast('error', friendlyMsg);
             emitEmbedEvent('coal:error', {
                 txHash: pendingTxHash ?? null,
-                message: friendly,
+                message: friendly === 'cancelled' ? 'Transaction cancelled.' : (friendly === 'gas' ? 'Not enough ETH for gas fees.' : 'Payment failed.'),
             });
             setStatus('idle');
         }
@@ -621,22 +631,59 @@ export default function PaymentView({
                     </div>
 
                     {/* Gas fee indicator */}
-                    {isConnected && (
+                    {isConnected && !errorMsg && (
                         <div className="mb-4 text-xs text-center font-medium text-gray-400">
-                            {isEmbeddedWallet
-                                ? 'Gas: $0.00 (sponsored)'
-                                : '~$0.001 gas fee'}
+                            ~$0.001 gas fee on Base
                         </div>
                     )}
 
-                    {/* Inline error message (no txHash — wallet errors, network errors) */}
+                    {/* Inline error / cancellation notice */}
                     {errorMsg && (status === 'idle' || status === 'failed') && !pendingTxHash && (
                         <motion.div
                             initial={{ opacity: 0, y: -8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="mb-2 px-5 py-3 bg-red-50 border border-red-100 text-red-600 text-sm font-semibold rounded-2xl text-center"
+                            className={`mb-4 rounded-[20px] border p-4 ${
+                                errorMsg === '__cancelled__'
+                                    ? 'border-black/6 bg-gray-50'
+                                    : errorMsg.includes('gas') || errorMsg.includes('ETH')
+                                        ? 'border-amber-100 bg-amber-50'
+                                        : 'border-red-100 bg-red-50'
+                            }`}
                         >
-                            {errorMsg}
+                            <div className="flex items-start gap-3">
+                                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                                    errorMsg === '__cancelled__'
+                                        ? 'bg-gray-200 text-gray-500'
+                                        : errorMsg.includes('gas') || errorMsg.includes('ETH')
+                                            ? 'bg-amber-100 text-amber-600'
+                                            : 'bg-red-100 text-red-500'
+                                }`}>
+                                    {errorMsg === '__cancelled__' ? '↩' : '!'}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-bold leading-snug ${
+                                        errorMsg === '__cancelled__'
+                                            ? 'text-gray-600'
+                                            : errorMsg.includes('gas') || errorMsg.includes('ETH')
+                                                ? 'text-amber-800'
+                                                : 'text-red-700'
+                                    }`}>
+                                        {errorMsg === '__cancelled__' ? 'Transaction cancelled.' : errorMsg}
+                                    </p>
+                                    {(errorMsg.includes('gas') || errorMsg.includes('ETH')) && (
+                                        <p className="mt-1 text-xs font-medium text-amber-600">
+                                            Connect MetaMask or another wallet that holds ETH.
+                                        </p>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => setErrorMsg(null)}
+                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-gray-400 hover:bg-black/5 text-xs font-bold transition-colors"
+                                    aria-label="Dismiss"
+                                >
+                                    ✕
+                                </button>
+                            </div>
                         </motion.div>
                     )}
 
@@ -665,22 +712,27 @@ export default function PaymentView({
                         </motion.div>
                     )}
 
-                    {/* Timeout error — show txHash link so user can verify independently */}
+                    {/* Verification timeout — show txHash so user can check independently */}
                     {errorMsg && status === 'failed' && pendingTxHash && (
                         <motion.div
                             initial={{ opacity: 0, y: -8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="mb-2 px-5 py-3 bg-amber-50 border border-amber-100 text-amber-700 text-sm font-semibold rounded-2xl"
+                            className="mb-4 rounded-[20px] border border-amber-100 bg-amber-50 p-4"
                         >
-                            <p className="mb-1">{errorMsg}</p>
-                            <a
-                                href={`${EXPLORER_URL}/tx/${pendingTxHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs font-mono text-blue-500 underline break-all"
-                            >
-                                View on Basescan ↗
-                            </a>
+                            <div className="flex items-start gap-3">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 text-xs font-black">⏱</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-amber-800 leading-snug">{errorMsg}</p>
+                                    <a
+                                        href={`${EXPLORER_URL}/tx/${pendingTxHash}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-blue-500 hover:text-blue-700 transition-colors"
+                                    >
+                                        Check on Basescan ↗
+                                    </a>
+                                </div>
+                            </div>
                         </motion.div>
                     )}
 
@@ -796,8 +848,8 @@ export default function PaymentView({
                     )}
 
                     {status !== 'verifying' && isRoutePreviewSelection && (
-                        <p className="mt-3 text-center text-[11px] font-semibold leading-relaxed text-[var(--color-text-secondary)]">
-                            This selected asset is shown as a routed preview via Li.Fi. Live checkout execution still settles through direct {getSettlementToken().symbol}.
+                        <p className="mt-2 text-center text-[10px] font-medium leading-relaxed text-gray-400">
+                            Route preview via Li.Fi. Settles as direct {getSettlementToken().symbol}.
                         </p>
                     )}
 
@@ -820,19 +872,9 @@ export default function PaymentView({
                         </>
                     )}
 
-                    <div className="mt-12 pt-8 border-t-2 border-dashed border-gray-100 flex flex-col items-center justify-center gap-6">
-                        <div className="flex flex-col items-center gap-4">
-                            <span className="text-gray-400 font-bold text-xs uppercase tracking-wider">Powered by</span>
-                            <div className="flex items-center gap-3">
-                                <Image src="/logo.png" alt="Coal" width={66} height={66} className="object-contain" />
-                                <span className="rounded-full bg-[var(--color-bg-base)] px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-[var(--color-brand-navy)]">
-                                    Settlement: {getSettlementToken().symbol}
-                                </span>
-                            </div>
-                        </div>
-                        <p className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-gray-300">
-                            Direct settlement only. Additional routed assets graduate here after execution hardening.
-                        </p>
+                    <div className="mt-8 pt-6 border-t border-dashed border-gray-100 flex items-center justify-center gap-2.5">
+                        <Image src="/logo.png" alt="Coal" width={22} height={22} className="object-contain opacity-60" />
+                        <span className="text-xs font-bold text-gray-400 tracking-wide">Powered by Coal</span>
                     </div>
                 </div>
             </motion.div >

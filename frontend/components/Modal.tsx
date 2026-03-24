@@ -48,22 +48,25 @@ export default function Modal({ isOpen, onClose, children, title, maxWidth = 'ma
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className={`relative w-full ${maxWidth} bg-white rounded-[40px] p-8 shadow-2xl overflow-hidden`}
+                        className={`relative w-full ${maxWidth} bg-white rounded-[40px] shadow-2xl flex flex-col max-h-[90vh]`}
                     >
-                        <button
-                            onClick={onClose}
-                            className="absolute top-6 right-6 text-gray-400 hover:text-black transition-colors bg-gray-50 p-2 rounded-full hover:bg-gray-100"
-                        >
-                            <CloseCircle size={24} variant="Bold" />
-                        </button>
+                        {/* Sticky header */}
+                        <div className="flex items-start justify-between px-8 pt-8 shrink-0">
+                            {title ? (
+                                <h2 className="text-2xl font-black text-[var(--color-brand-navy)]">{title}</h2>
+                            ) : <div />}
+                            <button
+                                onClick={onClose}
+                                className="ml-4 shrink-0 text-gray-400 hover:text-black transition-colors bg-gray-50 p-2 rounded-full hover:bg-gray-100"
+                            >
+                                <CloseCircle size={24} variant="Bold" />
+                            </button>
+                        </div>
 
-                        {title && (
-                            <h2 className="text-2xl font-black text-[var(--color-brand-navy)] mb-6 pr-10">
-                                {title}
-                            </h2>
-                        )}
-
-                        {children}
+                        {/* Scrollable body */}
+                        <div className="overflow-y-auto px-8 pb-8 pt-6 flex-1">
+                            {children}
+                        </div>
                     </motion.div>
                 </div>
             )}
