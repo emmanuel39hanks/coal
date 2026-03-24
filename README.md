@@ -142,7 +142,7 @@ Coal settles to the configured Base settlement token.
 
 ### Prerequisites
 
-- Node.js `20+`
+- Node.js `24+`
 - npm
 - Neon or another Postgres database
 - Alchemy API key for Base
@@ -295,15 +295,16 @@ Coal deploys as two Vercel projects from the same repo:
 
 Use [DEPLOYMENT.md](/Users/emmanuel/Documents/schemalabs/coal/DEPLOYMENT.md) for the full production checklist.
 
-## Recommended Orientation Docs
+## Branch Strategy
 
-If you are picking up this repo cold, start here:
+- `main` is production and should point at Base mainnet + 0G mainnet.
+- `dev` is the working branch and should point at Base Sepolia + 0G mainnet.
+- Vercel production envs belong to `main`.
+- Vercel preview envs for the `dev` branch should be synced with [scripts/sync-vercel-dev-env.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/sync-vercel-dev-env.sh).
 
-- [context/01-current-state.md](/Users/emmanuel/Documents/schemalabs/coal/context/01-current-state.md)
-- [context/04-0g-integration.md](/Users/emmanuel/Documents/schemalabs/coal/context/04-0g-integration.md)
-- [context/05-product-surfaces-and-flows.md](/Users/emmanuel/Documents/schemalabs/coal/context/05-product-surfaces-and-flows.md)
-- [context/07-live-0g-hardening-and-explorer.md](/Users/emmanuel/Documents/schemalabs/coal/context/07-live-0g-hardening-and-explorer.md)
+Useful scripts:
 
-## License
-
-MIT
+- [scripts/check-all.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/check-all.sh) runs the full backend + frontend verification sweep.
+- [scripts/push-dev.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/push-dev.sh) checks and pushes `dev`.
+- [scripts/promote-dev-to-main.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/promote-dev-to-main.sh) fast-forwards `main` from `dev` after checks pass.
+- [scripts/sync-vercel-dev-env.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/sync-vercel-dev-env.sh) syncs branch-specific Vercel preview env vars for `dev`.

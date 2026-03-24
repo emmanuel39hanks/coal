@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getMerchantMemorySource } from '@/lib/0g/merchant';
 import { isZeroGComputeConfigured, zeroGEnv } from '@/lib/0g/env';

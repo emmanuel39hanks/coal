@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   frontend-build:
@@ -13,13 +16,13 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      - run: npm install --legacy-peer-deps
       - run: npm run typecheck
       - run: npm run build
         env:
@@ -27,6 +30,7 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_PRIVY_APP_ID: stub
           NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NEXT_PUBLIC_CHAIN_ENV: testnet
 
   backend-build:
     runs-on: ubuntu-latest
@@ -34,13 +38,13 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      - run: npm ci
+      - run: npm install
       - run: npm run typecheck
       - run: npm run build
         env:
@@ -58,13 +62,13 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      - run: npm ci
+      - run: npm install
       - run: npm run test
         env:
           DATABASE_URL: postgresql://stub:stub@localhost/stub
