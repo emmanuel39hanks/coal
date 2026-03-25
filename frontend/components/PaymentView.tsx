@@ -189,7 +189,14 @@ export default function PaymentView({
         selectedToken.address.toLowerCase() === USDC_BASE.address.toLowerCase() &&
         selectedToken.chainId === USDC_BASE.chainId;
     const isRoutePreviewSelection = !isDirectSettlementToken;
-    const canUseFiatOnramp = Boolean(process.env.NEXT_PUBLIC_MOONPAY_API_KEY);
+    const cardPaymentsStatus = (process.env.NEXT_PUBLIC_CARD_PAYMENTS_STATUS || 'coming_soon').toLowerCase();
+    const cardPaymentsComingSoon = cardPaymentsStatus !== 'live';
+    const canUseFiatOnramp =
+        cardPaymentsStatus === 'live' &&
+        Boolean(process.env.NEXT_PUBLIC_MOONPAY_API_KEY);
+    const showCardPaymentsCta =
+        !isRecurringRenewalCheckout &&
+        (cardPaymentsComingSoon || Boolean(process.env.NEXT_PUBLIC_MOONPAY_API_KEY));
     const recurringLabel = isRecurringProduct
         ? `Every ${data.product?.billingIntervalCount && data.product.billingIntervalCount > 1 ? `${data.product.billingIntervalCount} ` : ''}${data.product?.billingInterval || 'month'}${data.product?.billingIntervalCount && data.product.billingIntervalCount > 1 ? 's' : ''}`
         : null;
@@ -1216,7 +1223,7 @@ export default function PaymentView({
                     )}
 
                     {/* Divider + Card button */}
-                    {status !== 'verifying' && canUseFiatOnramp && !isRecurringRenewalCheckout && (
+                    {status !== 'verifying' && showCardPaymentsCta && (
                         <>
                             <div className="flex items-center gap-3 my-4">
                                 <div className="flex-1 h-px bg-gray-200" />
@@ -1224,40 +1231,66 @@ export default function PaymentView({
                                 <div className="flex-1 h-px bg-gray-200" />
                             </div>
 
-                            <FiatOnramp
-                                walletAddress={fundingWallet?.address || null}
-                                disabled={cardFlowBlocked}
-                                onRequireWallet={() => {
-                                    setFundingStatus('idle');
-                                    setFundingMessage('Securely sign in to Coal so we can create or reuse your embedded wallet for the card-funded checkout.');
-                                    if (!authenticated) {
-                                        login();
-                                        return;
-                                    }
+                            {cardPaymentsComingSoon ? (
+                                <>
+                                    <button
+                                        type="button"
+                                        disabled
+                                        className="w-full h-14 bg-white text-black rounded-full font-bold text-base border-2 border-black/10 opacity-70 cursor-not-allowed flex items-center justify-center gap-3"
+                                    >
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="2" />
+                                            <path d="M2 10H22" stroke="currentColor" strokeWidth="2" />
+                                            <path d="M6 14H10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                                        </svg>
+                                        <span>Pay with Card</span>
+                                        <span className="rounded-full bg-[var(--color-brand-orange)]/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-orange)]">
+                                            Coming soon
+                                        </span>
+                                    </button>
 
-                                    if (!fundingWallet) {
-                                        void createWallet().catch((error) => {
-                                            console.error('Failed to create embedded wallet', error);
-                                            const message = 'We could not create your Coal wallet yet. Please try again.';
-                                            setErrorMsg(message);
-                                            toast('error', message);
-                                        });
-                                    }
-                                }}
-                                onCreateFundingIntent={createCardFundingIntent}
-                                onSuccess={({ fundingIntentId: nextFundingIntentId }) => {
-                                    if (nextFundingIntentId) {
-                                        setFundingIntentId(nextFundingIntentId);
-                                        setAutoResumeFundingIntentId(null);
-                                    }
-                                    setFundingStatus('submitted');
-                                    setFundingMessage('Card purchase submitted. Waiting for MoonPay to confirm the wallet funding.');
-                                }}
-                            />
+                                    <p className="mt-2 text-center text-[10px] font-medium leading-relaxed text-gray-400">
+                                        Card checkout is temporarily disabled while MoonPay live on-ramp activation is finalized.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <FiatOnramp
+                                        walletAddress={fundingWallet?.address || null}
+                                        disabled={cardFlowBlocked}
+                                        onRequireWallet={() => {
+                                            setFundingStatus('idle');
+                                            setFundingMessage('Securely sign in to Coal so we can create or reuse your embedded wallet for the card-funded checkout.');
+                                            if (!authenticated) {
+                                                login();
+                                                return;
+                                            }
 
-                            <p className="mt-2 text-center text-[10px] font-medium leading-relaxed text-gray-400">
-                                Securely fund your Coal wallet with card, then Coal completes the onchain payment from that same wallet.
-                            </p>
+                                            if (!fundingWallet) {
+                                                void createWallet().catch((error) => {
+                                                    console.error('Failed to create embedded wallet', error);
+                                                    const message = 'We could not create your Coal wallet yet. Please try again.';
+                                                    setErrorMsg(message);
+                                                    toast('error', message);
+                                                });
+                                            }
+                                        }}
+                                        onCreateFundingIntent={createCardFundingIntent}
+                                        onSuccess={({ fundingIntentId: nextFundingIntentId }) => {
+                                            if (nextFundingIntentId) {
+                                                setFundingIntentId(nextFundingIntentId);
+                                                setAutoResumeFundingIntentId(null);
+                                            }
+                                            setFundingStatus('submitted');
+                                            setFundingMessage('Card purchase submitted. Waiting for MoonPay to confirm the wallet funding.');
+                                        }}
+                                    />
+
+                                    <p className="mt-2 text-center text-[10px] font-medium leading-relaxed text-gray-400">
+                                        Securely fund your Coal wallet with card, then Coal completes the onchain payment from that same wallet.
+                                    </p>
+                                </>
+                            )}
                         </>
                     )}
 

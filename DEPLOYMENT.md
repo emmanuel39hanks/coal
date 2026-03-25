@@ -78,6 +78,7 @@ Preview deployments should never silently point at the same production database 
 | `UPLOADTHING_TOKEN` | UploadThing token | UploadThing dashboard → API keys | Yes |
 | `NEXT_PUBLIC_MOONPAY_API_KEY` | MoonPay publishable API key | MoonPay dashboard → API keys | Yes |
 | `NEXT_PUBLIC_MOONPAY_ENV` | `sandbox` or `production` | Set manually | Yes |
+| `NEXT_PUBLIC_CARD_PAYMENTS_STATUS` | Set to `live` only when the card rail is ready for users; otherwise keep `coming_soon` | Default `coming_soon` | Yes |
 | `NEXT_PUBLIC_CHAIN_ENV` | `testnet` for Base Sepolia, empty for Base mainnet | Set manually | Yes |
 | `NEXT_PUBLIC_MNEE_BASE_ADDRESS` | Legacy alias for `NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS` | Use only for older MNEE-based environments | No |
 | `NEXT_PUBLIC_MNEE_BASE_DECIMALS` | Legacy alias for `NEXT_PUBLIC_SETTLEMENT_TOKEN_DECIMALS` (default: `6`) | Set to `6` only for legacy MNEE configs | No |
@@ -259,6 +260,7 @@ MoonPay powers the fiat on-ramp (buy crypto with card).
 4. Mirror the publishable key in the frontend:
    - `NEXT_PUBLIC_MOONPAY_API_KEY`
    - `NEXT_PUBLIC_MOONPAY_ENV=sandbox`
+   - `NEXT_PUBLIC_CARD_PAYMENTS_STATUS=coming_soon`
 5. Add your frontend origin to MoonPay's allowed domains.
 6. Point MoonPay webhooks at `https://your-api-domain/api/webhooks/moonpay`.
 7. Test the card-funding flow end-to-end using MoonPay's sandbox environment.
@@ -267,6 +269,7 @@ MoonPay powers the fiat on-ramp (buy crypto with card).
    - Switch to the live publishable + secret keys.
    - Set both `MOONPAY_ENV=production` and `NEXT_PUBLIC_MOONPAY_ENV=production`.
    - Set `MOONPAY_CURRENCY_CODE` to the live asset/network you want MoonPay to deliver, e.g. `eth_base`.
+   - Flip `NEXT_PUBLIC_CARD_PAYMENTS_STATUS=live` only after the live on-ramp is actually enabled.
 
 > Coal is non-custodial. MoonPay funds the payer wallet first, then Coal completes the actual payment only after the payer signs the onchain transfer. Coal should not pool or front user funds.
 >
