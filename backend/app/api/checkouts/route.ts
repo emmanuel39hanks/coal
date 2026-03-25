@@ -7,6 +7,7 @@ import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { toPrismaJson, toPrismaNullableJson } from '@/lib/prisma-json';
 import { getSettlementToken } from '@/lib/chain';
+import { validateWebhookUrl } from '@/lib/ssrf';
 
 export async function POST(request: Request) {
     try {
@@ -29,6 +30,14 @@ export async function POST(request: Request) {
             productId, productName, productDescription, productImage,
             description, redirectUrl, callbackUrl, splitConfigId, metadata, payerInfo,
         } = validated.data;
+
+        // Validate callbackUrl against SSRF blocklist (it's fetched server-side)
+        if (callbackUrl) {
+            const urlCheck = validateWebhookUrl(callbackUrl);
+            if (!urlCheck.valid) {
+                return errors.validation({ callbackUrl: [urlCheck.reason || 'Invalid callback URL'] });
+            }
+        }
 
         const merchant = keyRecord.merchant;
         const linkedProduct = productId
