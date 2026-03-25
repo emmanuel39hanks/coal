@@ -42,8 +42,23 @@ model User {
   ownedTeam            TeamMember[]          @relation("team_merchant")
   teamMemberships      TeamMember[]          @relation("team_member")
   webhookEvents        WebhookEvent[]
+  ownedWorkspaces      Workspace[]           @relation("workspace_owner")
+  workspaceProfile     Workspace?            @relation("workspace_profile")
 
   @@map("user")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  ownerId   String
+  userId    String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     User     @relation("workspace_owner", fields: [ownerId], references: [id])
+  user      User     @relation("workspace_profile", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("workspace")
 }
 
 model Session {

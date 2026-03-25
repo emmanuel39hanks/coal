@@ -4,21 +4,21 @@ This page explains how Coal verifies an on-chain ERC-20 payment after a customer
 
 ## The Verification Pipeline
 
-```
-Customer signs tx in wallet
-        ↓
-POST /api/pay/confirm  { sessionId, txHash }
-        ↓
-Session status: "pending" → "verifying"
-        ↓
-Cron job runs every 60 seconds
-        ↓
-Query Base chain for txHash
-        ↓
-Checks pass?
-  YES → status: "confirmed", webhook fired
-  NO  → status: "failed",   webhook fired
-```
+<PaymentFlowDiagram rows={[
+  { kind: 'phase', label: 'Payment Submitted' },
+  { kind: 'event', actor: 'user', label: 'Signs & broadcasts ERC-20 transfer in wallet' },
+  { kind: 'msg', from: 'user', to: 'coal', label: 'POST /api/pay/confirm', sub: '{ sessionId, txHash }' },
+  { kind: 'event', actor: 'coal', label: 'Session status: pending → verifying' },
+
+  { kind: 'phase', label: 'On-Chain Verification' },
+  { kind: 'event', actor: 'coal', label: 'Background cron job runs every 60 seconds' },
+  { kind: 'msg', from: 'coal', to: 'chain', label: 'getTransactionReceipt(txHash) on Base' },
+  { kind: 'msg', from: 'chain', to: 'coal', label: 'Transfer event logs + receipt' },
+
+  { kind: 'phase', label: 'Outcome' },
+  { kind: 'event', actor: 'coal', label: 'Checks pass → status: "confirmed", webhook fired' },
+  { kind: 'event', actor: 'coal', label: 'Checks fail → status: "failed", webhook fired' },
+]} />
 
 ## What Coal Verifies
 

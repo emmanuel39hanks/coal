@@ -1,10 +1,12 @@
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getCallerUser } from '@/lib/privy';
 import { errors, apiSuccess, apiError } from '@/lib/errors';
 
 export async function POST(request: Request) {
     try {
-        const user = await getAuthUser(request);
+        // Always use the actual authenticated user — never workspace context —
+        // because this endpoint is about the caller accepting their own invite.
+        const user = await getCallerUser(request);
         if (!user) return errors.unauthorized();
 
         const body = await request.json().catch(() => ({}));
@@ -32,18 +34,34 @@ export async function POST(request: Request) {
         });
 
         if (!invite) {
+            // The verification record may have been cleaned up by the auto-accept
+            // flow in getCallerUser (first-time signup). Check if the user is
+            // already a team member of any workspace they were invited to.
+            // We can't recover the merchantId from an expired/missing token, so
+            // look for any recent membership created for this user.
+            const recentMembership = await prisma.teamMember.findFirst({
+                where: {
+                    userId: user.id,
+                    createdAt: { gt: new Date(Date.now() - 10 * 60 * 1000) }, // within last 10 min
+                },
+                orderBy: { createdAt: 'desc' },
+            });
+            if (recentMembership) {
+                // Auto-accept already processed — return success
+                return apiSuccess({ alreadyMember: true, merchantId: recentMembership.merchantId });
+            }
             return apiError('NOT_FOUND', 'Invite not found — it may have expired or already been used', 404);
         }
 
         const { merchantId, role, invitedBy } = JSON.parse(invite.value);
 
-        // Check if already a member
+        // Delete the invite record regardless (cleanup)
+        await prisma.verification.delete({ where: { id: invite.id } }).catch(() => null);
+
+        // Check if already a member (idempotent)
         const existing = await prisma.teamMember.findUnique({
             where: { merchantId_userId: { merchantId, userId: user.id } },
         });
-
-        // Delete the invite regardless
-        await prisma.verification.delete({ where: { id: invite.id } }).catch(() => null);
 
         if (existing) {
             return apiSuccess({ alreadyMember: true, merchantId });

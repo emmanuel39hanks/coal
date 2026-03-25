@@ -28,24 +28,19 @@ After the 6th failed attempt, the delivery is marked `exhausted` and no further 
 
 ## Delivery Status Lifecycle
 
-```
-         ┌──────────┐
-         │ pending  │  Coal is about to send the first request
-         └────┬─────┘
-              │ 2xx within 30s
-         ┌────▼─────┐
-         │delivered │  Terminal success state
-         └──────────┘
+<PaymentFlowDiagram rows={[
+  { kind: 'phase', label: 'Initial Delivery' },
+  { kind: 'event', actor: 'coal', label: 'status: "pending" — about to send first request' },
+  { kind: 'msg', from: 'coal', to: 'app', label: 'POST webhook payload', sub: 'Signed with HMAC-SHA256' },
 
-              │ non-2xx / timeout
-         ┌────▼─────┐
-         │  failed  │  Retry scheduled
-         └────┬─────┘
-              │ more failures
-         ┌────▼──────┐
-         │ exhausted │  Terminal failure — no more retries
-         └───────────┘
-```
+  { kind: 'phase', label: 'Success Path' },
+  { kind: 'event', actor: 'app', label: '2xx within 30s → status: "delivered" ✓ (terminal)' },
+
+  { kind: 'phase', label: 'Failure & Retry Path' },
+  { kind: 'event', actor: 'app', label: 'non-2xx or timeout → status: "failed"' },
+  { kind: 'event', actor: 'coal', label: 'Retry scheduled: 1m → 5m → 30m → 2h → 8h' },
+  { kind: 'event', actor: 'coal', label: 'After 6th failure → status: "exhausted" (no more retries)' },
+]} />
 
 A delivery moves from `failed` back to `pending` while a retry is queued, then transitions to `delivered` or back to `failed` after the retry attempt resolves.
 

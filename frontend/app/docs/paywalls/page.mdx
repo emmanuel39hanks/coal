@@ -15,28 +15,22 @@ This pattern is defined by the **x402 protocol** — an open standard that assig
 
 ## How x402 Works
 
-```
-Client                             Coal Paywall
-  │                                     │
-  │  GET /api/paywalls/:id/verify       │
-  │ ─────────────────────────────────► │
-  │                                     │
-  │  402 Payment Required               │
-  │  { amount, address, paywallId }     │
-  │ ◄───────────────────────────────── │
-  │                                     │
-  │  [User/agent pays on-chain]         │
-  │                                     │
-  │  POST /api/paywalls/:id/pay         │
-  │  { txHash, address }                │
-  │ ─────────────────────────────────► │
-  │                                     │
-  │  [Coal verifies txHash on-chain]    │
-  │                                     │
-  │  200 OK                             │
-  │  { accessToken } or content         │
-  │ ◄───────────────────────────────── │
-```
+<PaymentFlowDiagram rows={[
+  { kind: 'phase', label: 'Access Request' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'GET /api/paywalls/:id/verify?address=0x...' },
+  { kind: 'msg', from: 'coal', to: 'app', label: '402 Payment Required', sub: '{ amount, currency, merchantAddress, paywallId }' },
+
+  { kind: 'phase', label: 'On-Chain Payment' },
+  { kind: 'event', actor: 'user', label: 'Approves on-chain token transfer' },
+  { kind: 'msg', from: 'user', to: 'chain', label: 'ERC-20 transfer(merchantAddress, amount)' },
+  { kind: 'event', actor: 'chain', label: 'Transaction mined on Base (~2 sec)' },
+
+  { kind: 'phase', label: 'Proof Submission' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/paywalls/:id/pay', sub: '{ txHash, address }' },
+  { kind: 'msg', from: 'coal', to: 'chain', label: 'Verify transfer event + recipient + amount' },
+  { kind: 'msg', from: 'chain', to: 'coal', label: 'Transfer confirmed' },
+  { kind: 'msg', from: 'coal', to: 'app', label: '200 OK', sub: '{ accessToken, expiresAt }' },
+]} />
 
 1. **Client requests access** — `GET /api/paywalls/:id/verify?address=0x...`
 2. **Server replies 402** — includes the price, merchant wallet address, and paywall ID.

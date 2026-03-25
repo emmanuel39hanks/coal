@@ -113,19 +113,20 @@ x-api-key: coal_live_your_key_here
 
 ### API Flow Overview
 
-```
-POST /api/checkouts
-  Headers: { "x-api-key": "coal_live_..." }
-  Body: { amount: 25, productName: "Premium Membership", redirectUrl: "https://yoursite.com/success" }
-  → Returns: id, url, status, amount, currency, expiresAt
+<PaymentFlowDiagram rows={[
+  { kind: 'phase', label: 'Create Checkout' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/checkouts', sub: 'x-api-key header · { amount, productName, redirectUrl }' },
+  { kind: 'msg', from: 'coal', to: 'app', label: '{ id, url, status: "pending", amount, currency, expiresAt }' },
 
-POST /api/pay/confirm
-  Body: { sessionId, txHash }
-  → Returns: { status: "verifying", sessionId }
+  { kind: 'phase', label: 'User Pays' },
+  { kind: 'event', actor: 'user', label: 'Sends ERC-20 transfer on Base' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/pay/confirm', sub: '{ sessionId, txHash }' },
+  { kind: 'msg', from: 'coal', to: 'app', label: '{ status: "verifying", sessionId }' },
 
-GET /api/pay/status/:sessionId
-  → Returns: { status, txHash, redirectUrl }
-```
+  { kind: 'phase', label: 'Poll for Confirmation' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'GET /api/pay/status/:sessionId' },
+  { kind: 'msg', from: 'coal', to: 'app', label: '{ status: "confirmed", txHash, redirectUrl }' },
+]} />
 
 ---
 

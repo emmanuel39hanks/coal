@@ -1,6 +1,6 @@
 # Coal Documentation
 
-Coal is a **crypto-native payments platform** for hosted checkout, payment links, paywalls, and programmable revenue routing. Accept stablecoin payments on Base, keep funds in your own wallet, and plug Coal into apps, agents, and internal tools.
+Coal is a **crypto-native payments platform** for hosted checkout, payment links, x402 paywalls, and programmable revenue routing. Accept stablecoin payments on Base, keep funds in your own wallet, and plug Coal into apps, agents, and internal tools.
 
 Merchant API requests use `x-api-key` with `coal_live_*` keys. Dashboard and `/api/console/*` routes use Privy Bearer tokens and are for console use, not the primary public merchant surface.
 
@@ -54,9 +54,9 @@ Merchant API requests use `x-api-key` with `coal_live_*` keys. Dashboard and `/a
 <div className="not-prose mb-10 grid grid-cols-1 sm:grid-cols-2 gap-3">
   {[
     { icon: "🛒", title: "E-commerce checkouts", body: "Issue payment links or hosted checkout sessions that settle instantly to your wallet." },
-    { icon: "🔒", title: "Content paywalls", body: "Gate any HTTP resource via the x402 protocol — one header, no server changes needed." },
+    { icon: "🔒", title: "x402 Paywalls", body: "Gate any URL or API with HTTP 402. Manifests publish to 0G so AI agents discover and pay autonomously." },
     { icon: "✂️", title: "Revenue splits", body: "Define split rules once; Coal distributes funds to multiple wallets at settlement." },
-    { icon: "🔗", title: "Embedded widgets", body: "A single <script> tag drops a full checkout UI with crypto or fiat on-ramp support." },
+    { icon: "🤖", title: "AI commerce", body: "Publish your catalog to 0G so AI agents can discover and transact with your store autonomously." },
   ].map((item) => (
     <div key={item.title} className="flex gap-3 rounded-xl border border-black/8 bg-gray-50/60 p-4">
       <span className="text-xl shrink-0">{item.icon}</span>
@@ -76,7 +76,6 @@ Merchant API requests use `x-api-key` with `coal_live_*` keys. Dashboard and `/a
 | **Merchant** | An authenticated account with a Coal API key. Merchants own products, links, and split configs. |
 | **Product** | A named, priced item in your catalog. Attach a product to a session to auto-populate checkout details. |
 | **Webhook** | An HTTPS endpoint you register to receive signed event notifications (e.g. `payment.confirmed`). |
-| **Paywall** | An HTTP-level payment gate powered by the x402 protocol — the server returns `402 Payment Required` until proof of payment is presented. |
 
 ## Base URL
 

@@ -212,8 +212,8 @@ export default function ZeroGConsolePage() {
                             icon={Hierarchy}
                             iconBg="bg-purple-50"
                             iconColor="text-purple-600"
-                            label="Published artifacts"
-                            value={(stats?.receiptsStored ?? 0) + (stats?.paywallManifests ?? 0) + (stats?.profilePublished ? 1 : 0) + (stats?.memoryPublished ? 1 : 0)}
+                            label="Published data"
+                            value={(stats?.profilePublished ? 1 : 0) + (stats?.memoryPublished ? 1 : 0) + (stats?.paywallManifests ?? 0)}
                             sub={
                                 [
                                     stats?.profilePublished && 'Profile',
@@ -221,7 +221,7 @@ export default function ZeroGConsolePage() {
                                     stats?.paywallManifests && `${stats.paywallManifests} paywall${stats.paywallManifests === 1 ? '' : 's'}`,
                                 ]
                                     .filter(Boolean)
-                                    .join(', ') || 'Profile, memory, paywalls auto-publish'
+                                    .join(', ') || 'Profile, memory, and paywall manifests'
                             }
                         />
                         <StatCard
@@ -253,7 +253,10 @@ export default function ZeroGConsolePage() {
                     isLoading={isLoading}
                     detail={
                         data?.merchant.profile
-                            ? `${data.merchant.profile.productCount} product${data.merchant.profile.productCount === 1 ? '' : 's'}, ${data.merchant.profile.paywallCount} paywall${data.merchant.profile.paywallCount === 1 ? '' : 's'}`
+                            ? [
+                                `${data.merchant.profile.productCount} product${data.merchant.profile.productCount === 1 ? '' : 's'}`,
+                                data.merchant.profile.paywallCount > 0 && `${data.merchant.profile.paywallCount} paywall${data.merchant.profile.paywallCount === 1 ? '' : 's'}`,
+                              ].filter(Boolean).join(', ')
                             : null
                     }
                 />
@@ -319,7 +322,7 @@ export default function ZeroGConsolePage() {
                         </div>
                         <p className="text-base font-bold text-[var(--color-brand-navy)] mb-1">No 0G activity yet</p>
                         <p className="text-sm text-[var(--color-text-secondary)] max-w-sm mx-auto mb-6">
-                            When customers pay you, receipt proofs are automatically stored on 0G. Add products and paywalls to publish your merchant profile.
+                            When customers pay you, receipt proofs are automatically stored on 0G. Add products to publish your merchant profile.
                         </p>
                         <div className="flex items-center justify-center gap-3">
                             <Link

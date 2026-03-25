@@ -9,11 +9,19 @@ A Checkout Session is a server-side payment intent you create programmatically. 
 
 ## Session Lifecycle
 
-```
-pending → verifying → confirmed
-                   ↘ failed
-         (auto)    → expired
-```
+<PaymentFlowDiagram rows={[
+  { kind: 'phase', label: 'Session Created' },
+  { kind: 'event', actor: 'coal', label: 'status: "pending" — waiting for buyer to submit txHash' },
+
+  { kind: 'phase', label: 'Payment Submitted' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/pay/confirm', sub: '{ sessionId, txHash }' },
+  { kind: 'event', actor: 'coal', label: 'status: "verifying" — on-chain verification in progress' },
+
+  { kind: 'phase', label: 'Verification Outcome' },
+  { kind: 'event', actor: 'coal', label: 'Checks pass → status: "confirmed" ✓' },
+  { kind: 'event', actor: 'coal', label: 'Checks fail → status: "failed" ✗' },
+  { kind: 'event', actor: 'coal', label: 'No action after 24h → status: "expired"' },
+]} />
 
 | Status      | Meaning                                                                            |
 |:------------|:-----------------------------------------------------------------------------------|

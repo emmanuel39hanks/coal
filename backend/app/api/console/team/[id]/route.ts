@@ -1,14 +1,24 @@
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, type CoalUser } from '@/lib/privy';
 import { errors, apiSuccess } from '@/lib/errors';
 import { syncMerchantArtifacts } from '@/lib/0g/merchant';
 
 const VALID_ROLES = ['admin', 'member', 'viewer'] as const;
 type ValidRole = typeof VALID_ROLES[number];
 
-async function getCallerMembership(merchantId: string, callerId: string) {
+// Returns the real caller's user ID — the authenticated person, not the workspace proxy
+function getCallerId(user: CoalUser): string {
+    return user._callerId ?? user.id;
+}
+
+// Returns true only if the caller IS the actual workspace owner (not a team member)
+function isActualOwner(user: CoalUser): boolean {
+    return !user._callerId;
+}
+
+async function getCallerMembership(merchantId: string, cid: string) {
     return prisma.teamMember.findUnique({
-        where: { merchantId_userId: { merchantId, userId: callerId } },
+        where: { merchantId_userId: { merchantId, userId: cid } },
     });
 }
 
@@ -27,25 +37,19 @@ export async function PUT(
             include: { user: { select: { id: true, name: true, email: true } } },
         });
 
-        if (!member || member.merchantId !== user.id) {
-            // Also allow if caller is an admin/owner of the same merchant
-            const callerMembership = await getCallerMembership(member?.merchantId ?? '', user.id);
-            if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role)) {
-                return errors.notFound('Team member');
-            }
-        }
+        if (!member) return errors.notFound('Team member');
 
-        // If the caller is the merchant owner (merchantId === user.id) OR an admin team member
-        // Verify authorization: must be owner (merchantId === user.id) or an admin member
-        const isOwner = member?.merchantId === user.id;
-        if (!isOwner) {
-            const callerMembership = await getCallerMembership(member!.merchantId, user.id);
+        // Authorization: actual workspace owner OR admin team member of the same merchant
+        const cid = getCallerId(user);
+        const ownerCheck = isActualOwner(user) && member.merchantId === user.id;
+        if (!ownerCheck) {
+            const callerMembership = await getCallerMembership(member.merchantId, cid);
             if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role)) {
                 return errors.forbidden();
             }
         }
 
-        if (member!.role === 'owner') {
+        if (member.role === 'owner') {
             return errors.forbidden("Cannot change the owner's role");
         }
 
@@ -68,11 +72,7 @@ export async function PUT(
             id: updated.id,
             role: updated.role,
             createdAt: updated.createdAt,
-            user: {
-                id: updated.user.id,
-                name: updated.user.name,
-                email: updated.user.email,
-            },
+            user: { id: updated.user.id, name: updated.user.name, email: updated.user.email },
             zeroG,
         });
     } catch {
@@ -93,10 +93,11 @@ export async function DELETE(
         const member = await prisma.teamMember.findUnique({ where: { id } });
         if (!member) return errors.notFound('Team member');
 
-        // Verify caller is the merchant (owner) or an admin of that merchant
-        const isOwner = member.merchantId === user.id;
-        if (!isOwner) {
-            const callerMembership = await getCallerMembership(member.merchantId, user.id);
+        // Authorization: actual workspace owner OR admin team member
+        const cid = getCallerId(user);
+        const ownerCheck = isActualOwner(user) && member.merchantId === user.id;
+        if (!ownerCheck) {
+            const callerMembership = await getCallerMembership(member.merchantId, cid);
             if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role)) {
                 return errors.forbidden();
             }
