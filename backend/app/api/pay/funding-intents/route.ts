@@ -6,6 +6,7 @@ import { paymentLogger } from '@/lib/logger';
 import {
   buildMoonPayReturnUrl,
   buildMoonPayUrl,
+  checkMoonPayQuoteAvailability,
   getMoonPayQuoteAmount,
   getMoonPayTestnetNotice,
   isMoonPayConfigured,
@@ -128,6 +129,40 @@ export async function POST(request: Request) {
       await prisma.checkoutSession.update({
         where: { id: session.id },
         data: { paymentMode: 'fund_then_pay' },
+      });
+    }
+
+    const quoteAvailability = await checkMoonPayQuoteAvailability({
+      walletAddress,
+      quoteCurrencyAmount: getMoonPayQuoteAmount(session.amount),
+      externalCustomerId: fundingIntent.externalCustomerId || undefined,
+    });
+
+    if (!quoteAvailability.ok) {
+      paymentLogger.warn(
+        {
+          sessionId: session.id,
+          fundingIntentId: fundingIntent.id,
+          provider: 'moonpay',
+          environment: moonPayConfig.environment,
+          moonPayErrorCode: quoteAvailability.code,
+          providerStatus: quoteAvailability.providerStatus,
+        },
+        'MoonPay quote preflight failed',
+      );
+
+      await prisma.fundingIntent.update({
+        where: { id: fundingIntent.id },
+        data: {
+          status: 'failed',
+          failureReason: quoteAvailability.message,
+        },
+      });
+
+      return apiError('INVALID_OPERATION', quoteAvailability.message, 503, {
+        provider: 'moonpay',
+        providerStatus: quoteAvailability.providerStatus,
+        moonPayErrorCode: quoteAvailability.code,
       });
     }
 

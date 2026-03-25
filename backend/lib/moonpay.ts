@@ -3,6 +3,9 @@ import { env } from '@/lib/env';
 
 export type MoonPayMode = 'sandbox' | 'production';
 export type MoonPayFundingStatus = 'pending' | 'processing' | 'funded' | 'failed' | 'cancelled';
+type MoonPayQuoteAvailability =
+  | { ok: true }
+  | { ok: false; message: string; code?: string; providerStatus?: number };
 
 type MoonPayRecord = Record<string, unknown>;
 
@@ -233,4 +236,54 @@ export function getMoonPayQuoteAmount(amount: { toString(): string } | string | 
 
 export function buildMoonPayReturnUrl(checkoutSessionId: string, fundingIntentId: string) {
   return `${env.APP_URL}/pay/checkout/${checkoutSessionId}?fundingIntentId=${fundingIntentId}`;
+}
+
+export async function checkMoonPayQuoteAvailability(input: {
+  walletAddress: string;
+  quoteCurrencyAmount: string;
+  externalCustomerId?: string;
+}): Promise<MoonPayQuoteAvailability> {
+  if (!moonPayConfig.enabled) {
+    return { ok: false, message: 'MoonPay is not configured' };
+  }
+
+  const params = new URLSearchParams({
+    apiKey: moonPayConfig.publishableKey,
+    currencyCode: moonPayConfig.currencyCode,
+    baseCurrencyCode: moonPayConfig.baseCurrencyCode,
+    quoteCurrencyAmount: input.quoteCurrencyAmount,
+    areFeesIncluded: 'true',
+    fixed: 'true',
+    walletAddress: input.walletAddress,
+  });
+
+  if (input.externalCustomerId) {
+    params.append('externalCustomerId', input.externalCustomerId);
+  }
+
+  const response = await fetch(`https://api.moonpay.com/v3/currencies/${moonPayConfig.currencyCode}/quote?${params.toString()}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+
+  if (response.ok) {
+    return { ok: true };
+  }
+
+  let payload: Record<string, unknown> | null = null;
+  try {
+    payload = (await response.json()) as Record<string, unknown>;
+  } catch {
+    payload = null;
+  }
+
+  return {
+    ok: false,
+    message:
+      (typeof payload?.message === 'string' && payload.message) ||
+      'MoonPay could not prepare a live quote for this checkout right now.',
+    code: typeof payload?.moonPayErrorCode === 'string' ? payload.moonPayErrorCode : undefined,
+    providerStatus: response.status,
+  };
 }
