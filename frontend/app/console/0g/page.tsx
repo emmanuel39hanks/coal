@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import useSWR from 'swr';
@@ -117,8 +118,26 @@ function kindLabel(kind: string) {
 /* ─── Page ────────────────────────────────────────────────────────────── */
 
 export default function ZeroGConsolePage() {
-    const { fetcher } = useApi();
-    const { data, isLoading, error } = useSWR<ZeroGData>('/api/console/0g', fetcher);
+    const { fetcher, request } = useApi();
+    const { data, isLoading, error, mutate } = useSWR<ZeroGData>('/api/console/0g', fetcher);
+    const [publishing, setPublishing] = useState(false);
+    const [publishDone, setPublishDone] = useState(false);
+
+    const handlePublish = async () => {
+        if (publishing) return;
+        setPublishing(true);
+        setPublishDone(false);
+        try {
+            await request('/api/console/0g', { method: 'POST' });
+            await mutate();
+            setPublishDone(true);
+            setTimeout(() => setPublishDone(false), 3000);
+        } catch {
+            // silently fail — user can retry
+        } finally {
+            setPublishing(false);
+        }
+    };
 
     if (error) {
         return (
@@ -149,30 +168,47 @@ export default function ZeroGConsolePage() {
                         Your payment proofs, published data, and AI activity on 0G.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    {['Storage', 'Chain', 'Compute'].map((label) => {
-                        const key = label.toLowerCase() as 'storage' | 'chain' | 'compute';
-                        const ok = data?.checks[key]?.ok;
-                        return (
-                            <span
-                                key={label}
-                                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${
-                                    isLoading
-                                        ? 'bg-black/5 text-[var(--color-text-secondary)]'
-                                        : ok
-                                        ? 'bg-green-50 text-green-700'
-                                        : 'bg-red-50 text-red-600'
-                                }`}
-                            >
+                <div className="flex items-center gap-3">
+                    {/* Status badges */}
+                    <div className="flex items-center gap-2">
+                        {['Storage', 'Chain', 'Compute'].map((label) => {
+                            const key = label.toLowerCase() as 'storage' | 'chain' | 'compute';
+                            const ok = data?.checks[key]?.ok;
+                            return (
                                 <span
-                                    className={`h-1.5 w-1.5 rounded-full ${
-                                        isLoading ? 'bg-current opacity-30' : ok ? 'bg-green-500' : 'bg-red-500'
+                                    key={label}
+                                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${
+                                        isLoading
+                                            ? 'bg-black/5 text-[var(--color-text-secondary)]'
+                                            : ok
+                                            ? 'bg-green-50 text-green-700'
+                                            : 'bg-red-50 text-red-600'
                                     }`}
-                                />
-                                {label}
-                            </span>
-                        );
-                    })}
+                                >
+                                    <span
+                                        className={`h-1.5 w-1.5 rounded-full ${
+                                            isLoading ? 'bg-current opacity-30' : ok ? 'bg-green-500' : 'bg-red-500'
+                                        }`}
+                                    />
+                                    {label}
+                                </span>
+                            );
+                        })}
+                    </div>
+
+                    {/* Publish button */}
+                    <button
+                        onClick={handlePublish}
+                        disabled={publishing || isLoading}
+                        className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold border-2 transition-all disabled:opacity-50 ${
+                            publishDone
+                                ? 'bg-white text-green-600 border-green-200 shadow-none'
+                                : 'bg-black text-white border-black shadow-[4px_4px_0px_0px_#FF5C16] hover:shadow-[2px_2px_0px_0px_#FF5C16] hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none'
+                        }`}
+                    >
+                        <Flash size={14} variant="Bold" className={publishing ? 'animate-pulse' : ''} />
+                        {publishing ? 'Publishing…' : publishDone ? 'Published!' : 'Publish to 0G'}
+                    </button>
                 </div>
             </motion.div>
 
@@ -198,7 +234,6 @@ export default function ZeroGConsolePage() {
                             iconColor="text-green-600"
                             label="Receipt proofs"
                             value={stats?.receiptsStored ?? 0}
-                            sub={stats?.receiptsAnchored ? `${stats.receiptsAnchored} anchored on-chain` : 'Stored on 0G after each confirmed payment'}
                         />
                         <StatCard
                             icon={ShieldTick}
@@ -206,7 +241,6 @@ export default function ZeroGConsolePage() {
                             iconColor="text-blue-600"
                             label="Chain anchors"
                             value={stats?.receiptsAnchored ?? 0}
-                            sub="Receipts permanently anchored on 0G Chain"
                         />
                         <StatCard
                             icon={Hierarchy}
@@ -214,15 +248,6 @@ export default function ZeroGConsolePage() {
                             iconColor="text-purple-600"
                             label="Published data"
                             value={(stats?.profilePublished ? 1 : 0) + (stats?.memoryPublished ? 1 : 0) + (stats?.paywallManifests ?? 0)}
-                            sub={
-                                [
-                                    stats?.profilePublished && 'Profile',
-                                    stats?.memoryPublished && 'Memory',
-                                    stats?.paywallManifests && `${stats.paywallManifests} paywall${stats.paywallManifests === 1 ? '' : 's'}`,
-                                ]
-                                    .filter(Boolean)
-                                    .join(', ') || 'Profile, memory, and paywall manifests'
-                            }
                         />
                         <StatCard
                             icon={Cpu}
@@ -230,7 +255,6 @@ export default function ZeroGConsolePage() {
                             iconColor="text-[var(--color-brand-orange)]"
                             label="AI queries"
                             value={stats?.aiQueries ?? 0}
-                            sub="Commerce queries answered by 0G Compute"
                         />
                     </>
                 )}
@@ -425,14 +449,12 @@ function StatCard({
     iconColor,
     label,
     value,
-    sub,
 }: {
     icon: typeof ReceiptItem;
     iconBg: string;
     iconColor: string;
     label: string;
     value: number;
-    sub: string;
 }) {
     return (
         <div className="bg-white p-6 rounded-[32px] border-2 border-black/5 h-40 group hover:border-[var(--color-brand-orange)]/20 transition-all">
@@ -441,7 +463,6 @@ function StatCard({
             </div>
             <p className="mt-3 text-[var(--color-text-secondary)] font-bold text-sm">{label}</p>
             <p className="text-3xl font-black text-[var(--color-brand-navy)]">{value}</p>
-            <p className="text-xs font-medium text-[var(--color-text-secondary)] mt-0.5 truncate">{sub}</p>
         </div>
     );
 }

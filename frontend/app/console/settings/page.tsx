@@ -11,7 +11,9 @@ import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/api-errors';
 
 type TeamMemberUser = { id: string; name: string | null; email: string };
-type TeamMember = { id: string; role: string; createdAt: string; user: TeamMemberUser };
+type ConfirmedMember = { id: string; role: string; createdAt: string; pending: false; user: TeamMemberUser };
+type PendingInvite = { id: string; role: string; createdAt: string; expiresAt: string; pending: true; email: string };
+type TeamEntry = ConfirmedMember | PendingInvite;
 
 const ROLE_COLORS: Record<string, string> = {
     owner: 'bg-[var(--color-brand-navy)] text-white',
@@ -117,13 +119,13 @@ export default function SettingsPage() {
         }
     };
 
-    const handleRemoveMember = async (memberId: string) => {
+    const handleRemoveMember = async (memberId: string, isPending = false) => {
         try {
             await request(`/api/console/team/${memberId}`, { method: 'DELETE' });
             mutate('/api/console/team');
-            toast('success', 'Team member removed');
+            toast('success', isPending ? 'Invite revoked' : 'Team member removed');
         } catch (e) {
-            toast('error', getErrorMessage(e, 'Failed to remove team member'));
+            toast('error', getErrorMessage(e, isPending ? 'Failed to revoke invite' : 'Failed to remove team member'));
         }
     };
 
@@ -377,33 +379,41 @@ export default function SettingsPage() {
                     <div className="text-center py-6 text-gray-400 font-medium">No team members yet.</div>
                 ) : (
                     <div className="space-y-3">
-                        {teamData.members.map((member: TeamMember) => (
+                        {teamData.members.map((entry: TeamEntry) => (
                             <div
-                                key={member.id}
-                                className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50 transition-colors"
+                                key={entry.id}
+                                className={`flex items-center justify-between p-4 rounded-2xl transition-colors ${entry.pending ? 'bg-gray-50/60' : 'hover:bg-gray-50'}`}
                             >
                                 <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-                                        <User size={18} variant="Bold" className="text-[var(--color-brand-navy)]" />
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${entry.pending ? 'bg-gray-100' : 'bg-gray-100'}`}>
+                                        <User size={18} variant="Bold" className={entry.pending ? 'text-gray-300' : 'text-[var(--color-brand-navy)]'} />
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="font-bold text-[var(--color-brand-navy)] truncate">
-                                            {member.user.name || member.user.email}
+                                        <p className={`font-bold truncate ${entry.pending ? 'text-gray-400' : 'text-[var(--color-brand-navy)]'}`}>
+                                            {entry.pending ? entry.email : (entry.user.name || entry.user.email)}
                                         </p>
-                                        <p className="text-xs text-[var(--color-text-secondary)] truncate">
-                                            {member.user.email}
-                                        </p>
+                                        {!entry.pending && (
+                                            <p className="text-xs text-[var(--color-text-secondary)] truncate">
+                                                {entry.user.email}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3 shrink-0 ml-4">
-                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold capitalize ${ROLE_COLORS[member.role] ?? 'bg-gray-100 text-gray-500'}`}>
-                                        {member.role}
-                                    </span>
-                                    {member.role !== 'owner' && (
+                                    {entry.pending ? (
+                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-600 border border-amber-200">
+                                            Invited
+                                        </span>
+                                    ) : (
+                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold capitalize ${ROLE_COLORS[entry.role] ?? 'bg-gray-100 text-gray-500'}`}>
+                                            {entry.role}
+                                        </span>
+                                    )}
+                                    {(entry.pending || entry.role !== 'owner') && (
                                         <button
-                                            onClick={() => handleRemoveMember(member.id)}
+                                            onClick={() => handleRemoveMember(entry.id, entry.pending)}
                                             className="text-gray-300 hover:text-red-500 transition-colors"
-                                            title="Remove member"
+                                            title={entry.pending ? 'Revoke invite' : 'Remove member'}
                                         >
                                             <Trash size={16} variant="Bold" />
                                         </button>

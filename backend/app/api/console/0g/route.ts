@@ -1,7 +1,7 @@
 import { getAuthUser } from '@/lib/privy';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, errors } from '@/lib/errors';
-import { getMerchantZeroGState } from '@/lib/0g/merchant';
+import { getMerchantZeroGState, syncMerchantArtifacts } from '@/lib/0g/merchant';
 import { checkZeroGChainHealth } from '@/lib/0g/chain';
 import { checkStorageHealth } from '@/lib/0g/storage';
 import { listComputeServices } from '@/lib/0g/compute';
@@ -201,5 +201,18 @@ export async function GET(request: Request) {
         });
     } catch {
         return errors.internal('0G console status failed');
+    }
+}
+
+// POST /api/console/0g — manually trigger publish of merchant profile + memory to 0G
+export async function POST(request: Request) {
+    try {
+        const user = await getAuthUser(request);
+        if (!user) return errors.unauthorized();
+
+        const result = await syncMerchantArtifacts(user.id);
+        return apiSuccess({ published: true, result });
+    } catch {
+        return errors.internal('0G publish failed');
     }
 }

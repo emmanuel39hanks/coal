@@ -5,14 +5,23 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Wallet, TickCircle, Copy, Verify, Money } from 'iconsax-reactjs';
-import { useAuth as usePrivy, useAuthWallets as useWallets } from '@/lib/auth';
+import { useAuth as usePrivy, useAuthWallets as useWallets, useCreateEmbeddedWallet } from '@/lib/auth';
 import { parseUnits, encodeFunctionData } from 'viem';
 import FiatOnramp from './FiatOnramp';
 import Spinner from './Spinner';
 import { useToast } from './Toast';
 import { getSettlementToken, EXPLORER_URL } from '@/lib/chain';
 import TokenSelector from './TokenSelector';
-import { TOKEN_OPTIONS, USDC_BASE, getLifiQuote, type TokenOption } from '@/lib/lifi';
+import {
+    ETH_BASE,
+    executeSettlementRoute,
+    getLifiQuote,
+    getSettlementExecutionQuote,
+    SETTLEMENT_TOKEN_OPTION,
+    TOKEN_OPTIONS,
+    USDC_BASE,
+    type TokenOption,
+} from '@/lib/lifi';
 import { formatAmount, parseAmountInput } from '@/lib/utils';
 import { getApiBaseUrl } from '@/lib/api-base';
 import {
@@ -70,6 +79,17 @@ const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS  = 2 * 60 * 1000; // 2 minutes
 
 type PaymentViewMode = 'standalone' | 'embed';
+type FundingStatus = 'idle' | 'submitted' | 'processing' | 'funded' | 'route_executing' | 'settlement_submitted' | 'settled' | 'failed';
+
+type FundingIntentSnapshot = {
+    id: string;
+    walletType: 'embedded' | 'external';
+    fundingAsset: string;
+    targetSettlementAsset: string | null;
+    gasReserve: string | null;
+    routeEstimate: Record<string, unknown> | null;
+    resumeState: string | null;
+};
 
 export default function PaymentView({
     data,
@@ -85,8 +105,11 @@ export default function PaymentView({
     const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
     const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(data.id ?? null);
     const [fundingIntentId, setFundingIntentId] = useState<string | null>(null);
-    const [fundingStatus, setFundingStatus] = useState<'idle' | 'submitted' | 'processing' | 'funded' | 'failed'>('idle');
+    const [fundingStatus, setFundingStatus] = useState<FundingStatus>('idle');
     const [fundingMessage, setFundingMessage] = useState<string | null>(null);
+    const [fundingIntent, setFundingIntent] = useState<FundingIntentSnapshot | null>(null);
+    const [autoResumingCardSettlement, setAutoResumingCardSettlement] = useState(false);
+    const [autoResumeFundingIntentId, setAutoResumeFundingIntentId] = useState<string | null>(null);
     const [recurringConsentAccepted, setRecurringConsentAccepted] = useState(false);
     const payerInfoConfig = normalizePayerInfoConfig(data.payerInfoConfig);
     const [payerInfo, setPayerInfo] = useState(() => ({
@@ -99,10 +122,19 @@ export default function PaymentView({
     const apiBaseUrl = getApiBaseUrl();
     const searchParams = useSearchParams();
     const toast = useToast();
-    const { login, authenticated } = usePrivy();
+    const { login, authenticated, getAccessToken } = usePrivy();
     const { wallets } = useWallets();
-    const activeWallet = wallets[0];
+    const { createWallet } = useCreateEmbeddedWallet();
+    const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy') ?? null;
+    const externalWallet = wallets.find((wallet) => wallet.walletClientType !== 'privy') ?? null;
+    const activeWallet = externalWallet ?? embeddedWallet ?? wallets[0];
+    const fundingWallet = embeddedWallet;
+    const settlementWallet =
+        fundingIntent?.walletType === 'embedded'
+            ? embeddedWallet ?? activeWallet
+            : activeWallet;
     const address = activeWallet?.address;
+    const settlementAddress = settlementWallet?.address;
     const isConnected = wallets.length > 0 && authenticated;
 
     // Expired session — show before any hooks that depend on data.merchant
@@ -175,7 +207,7 @@ export default function PaymentView({
         isRoutePreviewSelection;
 
     // Determine if using embedded wallet (gasless) vs external
-    const isEmbeddedWallet = activeWallet?.walletClientType === 'privy';
+    const isEmbeddedWallet = settlementWallet?.walletClientType === 'privy';
 
     const emitEmbedEvent = (type: string, payload: Record<string, unknown> = {}) => {
         if (mode !== 'embed' || typeof window === 'undefined' || window.parent === window) {
@@ -255,6 +287,7 @@ export default function PaymentView({
         setFundingIntentId(resumedFundingIntentId);
         setFundingStatus('processing');
         setFundingMessage('Checking your card funding status…');
+        setAutoResumeFundingIntentId(null);
     }, [fundingIntentId, searchParams]);
 
     // Fetch LiFi quote when a non-USDC token is selected
@@ -453,12 +486,17 @@ export default function PaymentView({
             }
 
             const currentSessionId = await ensureCheckoutSession();
+            const accessToken = await getAccessToken().catch(() => null);
             const response = await fetch(`${apiBaseUrl}/api/pay/funding-intents`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                },
                 body: JSON.stringify({
                     sessionId: currentSessionId,
                     walletAddress,
+                    fundingMode: fundingWallet?.address?.toLowerCase() === walletAddress.toLowerCase() ? 'embedded' : 'external',
                 }),
             });
 
@@ -472,6 +510,15 @@ export default function PaymentView({
 
             const json = await response.json();
             setFundingIntentId(json.fundingIntentId);
+            setFundingIntent({
+                id: json.fundingIntentId as string,
+                walletType: (json.walletType as 'embedded' | 'external' | undefined) || 'external',
+                fundingAsset: (json.fundingAsset as string | undefined) || ETH_BASE.symbol.toLowerCase(),
+                targetSettlementAsset: (json.targetSettlementAsset as string | undefined) ?? null,
+                gasReserve: (json.gasReserve as string | undefined) ?? null,
+                routeEstimate: (json.routeEstimate as Record<string, unknown> | undefined) ?? null,
+                resumeState: (json.resumeState as string | undefined) ?? null,
+            });
             setFundingMessage(json.testnetNotice || json.note || null);
             return {
                 fundingIntentId: json.fundingIntentId as string,
@@ -488,7 +535,7 @@ export default function PaymentView({
     };
 
     useEffect(() => {
-        if (!fundingIntentId || (fundingStatus !== 'submitted' && fundingStatus !== 'processing')) {
+        if (!fundingIntentId || (fundingStatus !== 'submitted' && fundingStatus !== 'processing' && fundingStatus !== 'settlement_submitted')) {
             return;
         }
 
@@ -506,11 +553,33 @@ export default function PaymentView({
                     return;
                 }
 
+                setFundingIntent((current) => ({
+                    id: json.id as string,
+                    walletType: (json.walletType as 'embedded' | 'external' | undefined) || current?.walletType || 'external',
+                    fundingAsset: (json.fundingAsset as string | undefined) || current?.fundingAsset || ETH_BASE.symbol.toLowerCase(),
+                    targetSettlementAsset: (json.targetSettlementAsset as string | undefined) ?? current?.targetSettlementAsset ?? null,
+                    gasReserve: (json.gasReserve as string | undefined) ?? current?.gasReserve ?? null,
+                    routeEstimate: (json.routeEstimate as Record<string, unknown> | undefined) ?? current?.routeEstimate ?? null,
+                    resumeState: (json.resumeState as string | undefined) ?? current?.resumeState ?? null,
+                }));
+
+                if (json.resumeState === 'settled') {
+                    setFundingStatus('settled');
+                    setFundingMessage('Card-funded wallet settlement completed.');
+                    return;
+                }
+
+                if (json.resumeState === 'settlement_submitted') {
+                    setFundingStatus('settlement_submitted');
+                    setFundingMessage('Onchain settlement submitted. Waiting for Coal to verify the payment.');
+                    return;
+                }
+
                 if (json.status === 'funded') {
                     setFundingStatus('funded');
                     setFundingMessage(
                         json.testnetNotice ||
-                            'Wallet funding confirmed. You still need to sign the onchain payment from this wallet to complete checkout.',
+                            'Wallet funding confirmed. Coal is ready to complete the merchant payment from this wallet.',
                     );
                     return;
                 }
@@ -547,7 +616,128 @@ export default function PaymentView({
         };
     }, [apiBaseUrl, fundingIntentId, fundingStatus]);
 
-    const processPayment = async () => {
+    useEffect(() => {
+        if (fundingStatus !== 'funded' || !fundingIntentId) {
+            return;
+        }
+
+        if (!settlementWallet || !settlementAddress) {
+            setFundingMessage('Wallet funded. Sign in to your Coal wallet to finish the onchain payment.');
+            return;
+        }
+
+        if (autoResumeFundingIntentId === fundingIntentId || autoResumingCardSettlement) {
+            return;
+        }
+
+        setAutoResumeFundingIntentId(fundingIntentId);
+        setAutoResumingCardSettlement(true);
+
+        void processPayment().finally(() => {
+            setAutoResumingCardSettlement(false);
+        });
+    }, [
+        autoResumeFundingIntentId,
+        autoResumingCardSettlement,
+        fundingIntentId,
+        fundingStatus,
+        settlementAddress,
+        settlementWallet,
+    ]);
+
+    const submitPaymentConfirmation = async (currentSessionId: string, hash: string, payerWalletAddress?: string | null) => {
+        const confirmRes = await fetch(`${apiBaseUrl}/api/pay/confirm`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: currentSessionId,
+                txHash: hash,
+                fundingIntentId: fundingIntentId || undefined,
+                payerAddress: payerWalletAddress || undefined,
+                customerEmail: payerInfoPayload.email || undefined,
+                subscriptionConsentAccepted: isRecurringProduct ? recurringConsentAccepted : undefined,
+                payerInfo: hasPayerInfoFields ? payerInfoPayload : undefined,
+            }),
+        });
+
+        if (!confirmRes.ok) {
+            const err = await confirmRes.json().catch(() => ({}));
+            throw new Error(err?.error?.message || err?.error || 'Failed to submit transaction');
+        }
+
+        setFundingStatus((current) =>
+            current === 'route_executing' || current === 'funded' ? 'settlement_submitted' : current,
+        );
+        setFundingMessage((current) =>
+            fundingIntentId
+                ? 'Onchain settlement submitted. Waiting for Coal to verify the payment.'
+                : current,
+        );
+    };
+
+    const executeSettlementFromWallet = async (currentSessionId: string) => {
+        const currentWallet = settlementWallet;
+        const currentAddress = settlementWallet?.address;
+        if (!merchant.payoutAddress) {
+            throw new Error('No payout address configured for this merchant');
+        }
+        if (!currentWallet || !currentAddress) {
+            throw new Error('No wallet connected');
+        }
+
+        const finalAmount = isDonation ? customAmount : amount;
+        const settlementToken = getSettlementToken();
+
+        if (fundingIntent?.fundingAsset === ETH_BASE.address || fundingIntent?.fundingAsset === 'eth_base' || fundingIntent?.fundingAsset === 'eth') {
+            setFundingStatus('route_executing');
+            setFundingMessage(`Funding confirmed. Coal is routing ${ETH_BASE.symbol} into ${settlementToken.symbol} and settling this payment from your Coal wallet.`);
+
+            const quote = await getSettlementExecutionQuote({
+                fromAddress: currentAddress,
+                toAddress: merchant.payoutAddress,
+                settlementAmount: finalAmount,
+            });
+
+            const route = await executeSettlementRoute({
+                quote,
+                wallet: currentWallet,
+            });
+
+            const routeProcesses = route.steps.flatMap((step) => step.execution?.process || []);
+            const finalHash = [...routeProcesses].reverse().find((process) => process.txHash)?.txHash;
+
+            if (!finalHash) {
+                throw new Error('Route executed, but Coal could not determine the settlement transaction hash.');
+            }
+
+            await submitPaymentConfirmation(currentSessionId, finalHash, currentAddress);
+            pollStatus(currentSessionId, finalHash);
+            return;
+        }
+
+        const targetAddress = merchant.payoutAddress as `0x${string}`;
+        const amountInAtomicUnits = parseUnits(finalAmount, settlementToken.decimals);
+        const callData = encodeFunctionData({
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [targetAddress, amountInAtomicUnits],
+        });
+
+        const provider = await currentWallet.getEthereumProvider();
+        const hash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{
+                from: currentAddress,
+                to: settlementToken.address,
+                data: callData,
+            }],
+        }) as string;
+
+        await submitPaymentConfirmation(currentSessionId, hash, currentAddress);
+        pollStatus(currentSessionId, hash);
+    };
+
+    async function processPayment() {
         setStatus('processing');
         setErrorMsg(null);
         try {
@@ -557,55 +747,7 @@ export default function PaymentView({
             }
 
             const currentSessionId = await ensureCheckoutSession();
-
-            // 2. Send ERC-20 transfer via Privy wallet
-            const targetAddress = merchant.payoutAddress as `0x${string}`;
-            if (!targetAddress) throw new Error("No payout address configured for this merchant");
-            if (!activeWallet) throw new Error("No wallet connected");
-
-            const finalAmount = isDonation ? customAmount : amount;
-            const settlementToken = getSettlementToken();
-            const amountInAtomicUnits = parseUnits(finalAmount, settlementToken.decimals);
-
-            // Encode the transfer call data
-            const callData = encodeFunctionData({
-                abi: ERC20_ABI,
-                functionName: 'transfer',
-                args: [targetAddress, amountInAtomicUnits],
-            });
-
-            // Get the EIP-1193 provider from Privy wallet
-            const provider = await activeWallet.getEthereumProvider();
-            const hash = await provider.request({
-                method: 'eth_sendTransaction',
-                params: [{
-                    from: address,
-                    to: settlementToken.address,
-                    data: callData,
-                }],
-            }) as string;
-
-            // 3. Submit txHash to backend — returns immediately with { status: "verifying" }
-            const confirmRes = await fetch(`${apiBaseUrl}/api/pay/confirm`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId: currentSessionId,
-                    txHash: hash,
-                    payerAddress: address,
-                    customerEmail: payerInfoPayload.email || undefined,
-                    subscriptionConsentAccepted: isRecurringProduct ? recurringConsentAccepted : undefined,
-                    payerInfo: hasPayerInfoFields ? payerInfoPayload : undefined,
-                })
-            });
-
-            if (!confirmRes.ok) {
-                const err = await confirmRes.json();
-                throw new Error(err.error || "Failed to submit transaction");
-            }
-
-            // 4. Start polling for confirmation
-            pollStatus(currentSessionId!, hash);
+            await executeSettlementFromWallet(currentSessionId);
 
         } catch (e) {
             console.error("Payment failed:", e);
@@ -619,11 +761,15 @@ export default function PaymentView({
                 'unknown';
             const friendlyMsg =
                 friendly === 'cancelled' ? 'Transaction cancelled.' :
-                friendly === 'gas' ? 'Not enough ETH for gas fees. Connect a funded wallet to pay.' :
+                friendly === 'gas' ? 'Not enough ETH for gas fees. Fund your Coal wallet with a little more Base ETH and try again.' :
                 friendly === 'balance' ? 'Insufficient USDC balance. Top up your wallet and try again.' :
                 friendly === 'nonce' ? 'Transaction nonce error. Please try again.' :
                 friendly === 'network' ? 'Network error. Check your connection and try again.' :
                 'Payment failed. Please try again.';
+            if (fundingIntentId && friendly !== 'cancelled') {
+                setFundingStatus('failed');
+                setFundingMessage('Wallet funding succeeded, but Coal could not complete the onchain settlement yet. You can retry from this checkout.');
+            }
             setErrorMsg(friendly === 'cancelled' ? '__cancelled__' : friendlyMsg);
             if (friendly !== 'cancelled') toast('error', friendlyMsg);
             emitEmbedEvent('coal:error', {
@@ -632,7 +778,7 @@ export default function PaymentView({
             });
             setStatus('idle');
         }
-    };
+    }
 
     if (status === 'success') {
         return (
@@ -988,7 +1134,7 @@ export default function PaymentView({
                     {status !== 'verifying' && fundingStatus !== 'idle' && (
                         <div
                             className={`mt-5 rounded-[24px] border p-4 ${
-                                fundingStatus === 'funded'
+                                fundingStatus === 'funded' || fundingStatus === 'settled'
                                     ? 'border-emerald-100 bg-emerald-50'
                                     : fundingStatus === 'failed'
                                         ? 'border-red-100 bg-red-50'
@@ -998,18 +1144,24 @@ export default function PaymentView({
                             <div className="flex items-start gap-3">
                                 <span
                                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
-                                        fundingStatus === 'funded'
+                                        fundingStatus === 'funded' || fundingStatus === 'settled'
                                             ? 'bg-emerald-100 text-emerald-700'
                                             : fundingStatus === 'failed'
                                                 ? 'bg-red-100 text-red-600'
                                                 : 'bg-blue-100 text-blue-600'
                                     }`}
                                 >
-                                    {fundingStatus === 'funded' ? '✓' : fundingStatus === 'failed' ? '!' : '…'}
+                                    {fundingStatus === 'funded' || fundingStatus === 'settled' ? '✓' : fundingStatus === 'failed' ? '!' : '…'}
                                 </span>
                                 <div className="min-w-0 flex-1">
                                     <div className="text-sm font-black text-[var(--color-brand-navy)]">
-                                        {fundingStatus === 'funded'
+                                        {fundingStatus === 'settled'
+                                            ? 'Card payment settled'
+                                            : fundingStatus === 'settlement_submitted'
+                                                ? 'Settlement submitted'
+                                                : fundingStatus === 'route_executing'
+                                                    ? 'Settlement route in progress'
+                                                    : fundingStatus === 'funded'
                                             ? 'Wallet funded'
                                             : fundingStatus === 'failed'
                                                 ? 'Card funding needs attention'
@@ -1060,7 +1212,7 @@ export default function PaymentView({
                     )}
 
                     {/* Divider + Card button */}
-                    {status !== 'verifying' && canUseFiatOnramp && (
+                    {status !== 'verifying' && canUseFiatOnramp && !isRecurringProduct && (
                         <>
                             <div className="flex items-center gap-3 my-4">
                                 <div className="flex-1 h-px bg-gray-200" />
@@ -1069,17 +1221,30 @@ export default function PaymentView({
                             </div>
 
                             <FiatOnramp
-                                walletAddress={address || null}
+                                walletAddress={fundingWallet?.address || null}
                                 disabled={cardFlowBlocked}
                                 onRequireWallet={() => {
                                     setFundingStatus('idle');
-                                    setFundingMessage('Connect or create a wallet first so the card purchase has somewhere to land.');
-                                    login();
+                                    setFundingMessage('Securely sign in to Coal so we can create or reuse your embedded wallet for the card-funded checkout.');
+                                    if (!authenticated) {
+                                        login();
+                                        return;
+                                    }
+
+                                    if (!fundingWallet) {
+                                        void createWallet().catch((error) => {
+                                            console.error('Failed to create embedded wallet', error);
+                                            const message = 'We could not create your Coal wallet yet. Please try again.';
+                                            setErrorMsg(message);
+                                            toast('error', message);
+                                        });
+                                    }
                                 }}
                                 onCreateFundingIntent={createCardFundingIntent}
                                 onSuccess={({ fundingIntentId: nextFundingIntentId }) => {
                                     if (nextFundingIntentId) {
                                         setFundingIntentId(nextFundingIntentId);
+                                        setAutoResumeFundingIntentId(null);
                                     }
                                     setFundingStatus('submitted');
                                     setFundingMessage('Card purchase submitted. Waiting for MoonPay to confirm the wallet funding.');
@@ -1087,7 +1252,7 @@ export default function PaymentView({
                             />
 
                             <p className="mt-2 text-center text-[10px] font-medium leading-relaxed text-gray-400">
-                                Card funding tops up the payment asset only. The paying wallet still needs Base ETH for gas.
+                                Securely fund your Coal wallet with card, then Coal completes the onchain payment from that same wallet.
                             </p>
                         </>
                     )}

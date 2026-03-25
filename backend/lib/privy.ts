@@ -14,18 +14,55 @@ export type CoalUser = User & {
   _callerRole?: string;
 };
 
+export type PrivyIdentity = {
+  privyDid: string;
+  email: string | null;
+  walletAddress: string | null;
+};
+
+async function verifyPrivyAuthToken(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7);
+
+  try {
+    return await privyClient.verifyAuthToken(token);
+  } catch {
+    return null;
+  }
+}
+
+export async function getPrivyIdentity(request: Request): Promise<PrivyIdentity | null> {
+  const verifiedClaims = await verifyPrivyAuthToken(request);
+  if (!verifiedClaims?.userId) return null;
+
+  try {
+    const privyUser = await privyClient.getUser(verifiedClaims.userId);
+    const email = privyUser.email?.address
+      ?? privyUser.google?.email
+      ?? privyUser.apple?.email
+      ?? null;
+
+    return {
+      privyDid: verifiedClaims.userId,
+      email,
+      walletAddress: privyUser.wallet?.address?.toLowerCase() ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // getCallerUser — always returns the authenticated user, ignores workspace context.
 // Use this for endpoints that need to know WHO is making the request
 // (invite accept, workspace listing, etc.).
 // ---------------------------------------------------------------------------
 export async function getCallerUser(request: Request): Promise<User | null> {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
+  const verifiedClaims = await verifyPrivyAuthToken(request);
+  if (!verifiedClaims?.userId) return null;
 
   try {
-    const verifiedClaims = await privyClient.verifyAuthToken(token);
     const privyDid = verifiedClaims.userId;
 
     let user = await prisma.user.findUnique({ where: { privyDid } });
@@ -45,12 +82,10 @@ export async function getCallerUser(request: Request): Promise<User | null> {
 // as the merchantId without any code changes.
 // ---------------------------------------------------------------------------
 export async function getAuthUser(request: Request): Promise<CoalUser | null> {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7);
+  const verifiedClaims = await verifyPrivyAuthToken(request);
+  if (!verifiedClaims?.userId) return null;
 
   try {
-    const verifiedClaims = await privyClient.verifyAuthToken(token);
     const privyDid = verifiedClaims.userId;
 
     let user = await prisma.user.findUnique({ where: { privyDid } });
@@ -118,6 +153,15 @@ async function _createUserFromPrivy(privyDid: string): Promise<User | null> {
       });
     }
 
+    // Fetch pending invites BEFORE user creation so we can set onboarding state correctly
+    const pendingInvites = await prisma.verification.findMany({
+      where: {
+        identifier: { startsWith: `team_invite:${email}:` },
+        expiresAt: { gt: new Date() },
+      },
+    });
+    const hasPendingInvites = pendingInvites.length > 0;
+
     // Create new user
     const newUser = await prisma.user.create({
       data: {
@@ -126,6 +170,8 @@ async function _createUserFromPrivy(privyDid: string): Promise<User | null> {
         name: privyUser.google?.name ?? email.split('@')[0],
         payoutAddress: privyUser.wallet?.address ?? null,
         emailVerified: true,
+        onboardingComplete: hasPendingInvites,
+        onboardingStep: hasPendingInvites ? 7 : 0,
       },
     });
 
@@ -133,12 +179,6 @@ async function _createUserFromPrivy(privyDid: string): Promise<User | null> {
     // We create the TeamMember rows but intentionally leave the Verification
     // records so the invite page can still call /accept and get a proper
     // success response (alreadyMember: true handles idempotency).
-    const pendingInvites = await prisma.verification.findMany({
-      where: {
-        identifier: { startsWith: `team_invite:${email}:` },
-        expiresAt: { gt: new Date() },
-      },
-    });
 
     for (const invite of pendingInvites) {
       try {

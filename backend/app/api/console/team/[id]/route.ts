@@ -6,12 +6,10 @@ import { syncMerchantArtifacts } from '@/lib/0g/merchant';
 const VALID_ROLES = ['admin', 'member', 'viewer'] as const;
 type ValidRole = typeof VALID_ROLES[number];
 
-// Returns the real caller's user ID — the authenticated person, not the workspace proxy
 function getCallerId(user: CoalUser): string {
     return user._callerId ?? user.id;
 }
 
-// Returns true only if the caller IS the actual workspace owner (not a team member)
 function isActualOwner(user: CoalUser): boolean {
     return !user._callerId;
 }
@@ -39,7 +37,6 @@ export async function PUT(
 
         if (!member) return errors.notFound('Team member');
 
-        // Authorization: actual workspace owner OR admin team member of the same merchant
         const cid = getCallerId(user);
         const ownerCheck = isActualOwner(user) && member.merchantId === user.id;
         if (!ownerCheck) {
@@ -66,14 +63,14 @@ export async function PUT(
             include: { user: { select: { id: true, name: true, email: true } } },
         });
 
-        const zeroG = await syncMerchantArtifacts(updated.merchantId).catch(() => null);
+        // Fire-and-forget 0G sync
+        syncMerchantArtifacts(updated.merchantId).catch(() => null);
 
         return apiSuccess({
             id: updated.id,
             role: updated.role,
             createdAt: updated.createdAt,
             user: { id: updated.user.id, name: updated.user.name, email: updated.user.email },
-            zeroG,
         });
     } catch {
         return errors.internal();
@@ -90,27 +87,34 @@ export async function DELETE(
 
         const { id } = await params;
 
+        // --- Case 1: Confirmed team member ---
         const member = await prisma.teamMember.findUnique({ where: { id } });
-        if (!member) return errors.notFound('Team member');
-
-        // Authorization: actual workspace owner OR admin team member
-        const cid = getCallerId(user);
-        const ownerCheck = isActualOwner(user) && member.merchantId === user.id;
-        if (!ownerCheck) {
-            const callerMembership = await getCallerMembership(member.merchantId, cid);
-            if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role)) {
-                return errors.forbidden();
+        if (member) {
+            const cid = getCallerId(user);
+            const ownerCheck = isActualOwner(user) && member.merchantId === user.id;
+            if (!ownerCheck) {
+                const callerMembership = await getCallerMembership(member.merchantId, cid);
+                if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role)) {
+                    return errors.forbidden();
+                }
             }
+            if (member.role === 'owner') {
+                return errors.forbidden('Cannot remove the owner from the team');
+            }
+            await prisma.teamMember.delete({ where: { id } });
+            // Fire-and-forget 0G sync
+            syncMerchantArtifacts(member.merchantId).catch(() => null);
+            return apiSuccess({ success: true });
         }
 
-        if (member.role === 'owner') {
-            return errors.forbidden('Cannot remove the owner from the team');
+        // --- Case 2: Pending invite (Verification record) ---
+        const invite = await prisma.verification.findUnique({ where: { id } });
+        if (invite && invite.identifier.endsWith(`:${user.id}`)) {
+            await prisma.verification.delete({ where: { id } });
+            return apiSuccess({ success: true });
         }
 
-        await prisma.teamMember.delete({ where: { id } });
-        const zeroG = await syncMerchantArtifacts(member.merchantId).catch(() => null);
-
-        return apiSuccess({ success: true, zeroG });
+        return errors.notFound('Team member');
     } catch {
         return errors.internal();
     }

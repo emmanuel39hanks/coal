@@ -5,6 +5,12 @@ const DEFAULT_USDC_ADDRESS = (IS_TESTNET
   : '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913') as `0x${string}`;
 
 export const TOKENS = {
+  ETH: {
+    address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+    decimals: 18,
+    symbol: 'ETH',
+    name: 'Ethereum',
+  },
   USDC: {
     address: DEFAULT_USDC_ADDRESS,
     decimals: 6,
@@ -27,4 +33,8 @@ export const TOKENS = {
 // Returns the configured settlement token if present, else USDC.
 export function getSettlementToken() {
   return TOKENS.CUSTOM.address ? TOKENS.CUSTOM as { address: `0x${string}`; decimals: number; symbol: string; name: string } : TOKENS.USDC;
+}
+
+export function getNativeFundingToken() {
+  return TOKENS.ETH;
 }

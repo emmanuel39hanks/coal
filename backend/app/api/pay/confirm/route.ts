@@ -15,6 +15,7 @@ export async function POST(request: Request) {
         const {
             sessionId,
             txHash: rawHash,
+            fundingIntentId,
             payerAddress,
             customerEmail,
             subscriptionConsentAccepted,
@@ -116,6 +117,18 @@ export async function POST(request: Request) {
                 },
             }
         });
+
+        if (fundingIntentId) {
+            await prisma.fundingIntent.updateMany({
+                where: {
+                    id: fundingIntentId,
+                    checkoutSessionId: sessionId,
+                },
+                data: {
+                    resumeState: 'settlement_submitted',
+                },
+            });
+        }
 
         paymentLogger.info({ sessionId, txHash: normalizedHash }, 'On-chain verification started');
         return apiSuccess({ status: 'verifying', sessionId });

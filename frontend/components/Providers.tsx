@@ -18,15 +18,15 @@ const defaultChain = process.env.NEXT_PUBLIC_CHAIN_ENV === 'testnet' ? baseSepol
 const privyConfig: PrivyClientConfig = {
   defaultChain,
   supportedChains: [base, baseSepolia],
-  loginMethods: ['wallet', 'email', 'google', 'passkey'],
+  loginMethods: ['email', 'passkey', 'google', 'wallet'],
   embeddedWallets: {
-    ethereum: { createOnLogin: 'users-without-wallets' },
+    ethereum: { createOnLogin: 'all-users' },
   },
   appearance: {
     theme: 'light',
     accentColor: '#FF5C16',
     logo: 'https://usecoal.xyz/logo.png',
-    showWalletLoginFirst: true,
+    showWalletLoginFirst: false,
     walletList: ['metamask', 'coinbase_wallet', 'rainbow', 'wallet_connect'],
   },
   legal: {

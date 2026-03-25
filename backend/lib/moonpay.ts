@@ -54,7 +54,7 @@ export const moonPayConfig = {
   baseCurrencyCode: (readEnv('MOONPAY_BASE_CURRENCY_CODE') || 'usd').toLowerCase(),
   currencyCode: (
     readEnv('MOONPAY_CURRENCY_CODE') ||
-    (env.CHAIN_ENV === 'testnet' ? readEnv('MOONPAY_SANDBOX_CURRENCY_CODE') || 'eth' : 'usdc_base')
+    (env.CHAIN_ENV === 'testnet' ? readEnv('MOONPAY_SANDBOX_CURRENCY_CODE') || 'eth' : 'eth_base')
   ).toLowerCase(),
   colorCode: readEnv('MOONPAY_COLOR_CODE') || '#FF5C16',
   baseUrl:
@@ -73,6 +73,10 @@ export function getMoonPayTestnetNotice() {
   }
 
   return 'MoonPay sandbox funds Sepolia test assets only. This validates the card-funding step, not a full Base Sepolia merchant settlement.';
+}
+
+export function getMoonPayFundingAsset() {
+  return moonPayConfig.currencyCode;
 }
 
 export function buildMoonPayUrl(input: {

@@ -21,6 +21,13 @@ const ERC20_TRANSFER_ABI = parseAbi([
     'event Transfer(address indexed from, address indexed to, uint256 value)'
 ]);
 
+async function updateFundingIntentResumeState(checkoutSessionId: string, resumeState: string) {
+    await prisma.fundingIntent.updateMany({
+        where: { checkoutSessionId, provider: 'moonpay' },
+        data: { resumeState },
+    }).catch(() => null);
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
@@ -79,6 +86,9 @@ export async function POST(request: Request) {
                 where: { id: session.id },
                 data: { status: "expired" }
             });
+            if (session.paymentMode === 'fund_then_pay') {
+                await updateFundingIntentResumeState(session.id, 'funded_but_unsettled');
+            }
             await markSubscriptionInvoicePastDueBySessionId(session.id).catch(() => null);
             results.expired++;
             paymentLogger.info({ sessionId: session.id }, 'Session expired');
@@ -110,6 +120,9 @@ export async function POST(request: Request) {
                     where: { id: session.id },
                     data: { status: "failed" }
                 });
+                if (session.paymentMode === 'fund_then_pay') {
+                    await updateFundingIntentResumeState(session.id, 'funded_but_unsettled');
+                }
                 await markSubscriptionInvoicePastDueBySessionId(session.id).catch(() => null);
                 results.failed++;
                 paymentLogger.warn({ sessionId: session.id, txHash, reason: 'tx_reverted' }, 'Payment verification failed');
@@ -138,6 +151,9 @@ export async function POST(request: Request) {
                     where: { id: session.id },
                     data: { status: "failed" }
                 });
+                if (session.paymentMode === 'fund_then_pay') {
+                    await updateFundingIntentResumeState(session.id, 'funded_but_unsettled');
+                }
                 await markSubscriptionInvoicePastDueBySessionId(session.id).catch(() => null);
                 results.failed++;
                 paymentLogger.warn({ sessionId: session.id, txHash, reason: 'no_transfer_event' }, 'Payment verification failed');
@@ -161,6 +177,9 @@ export async function POST(request: Request) {
                     where: { id: session.id },
                     data: { status: "failed" }
                 });
+                if (session.paymentMode === 'fund_then_pay') {
+                    await updateFundingIntentResumeState(session.id, 'funded_but_unsettled');
+                }
                 await markSubscriptionInvoicePastDueBySessionId(session.id).catch(() => null);
                 results.failed++;
                 paymentLogger.warn({ sessionId: session.id, txHash, reason: 'recipient_mismatch' }, 'Payment verification failed');
@@ -173,6 +192,9 @@ export async function POST(request: Request) {
                     where: { id: session.id },
                     data: { status: "failed" }
                 });
+                if (session.paymentMode === 'fund_then_pay') {
+                    await updateFundingIntentResumeState(session.id, 'funded_but_unsettled');
+                }
                 await markSubscriptionInvoicePastDueBySessionId(session.id).catch(() => null);
                 results.failed++;
                 paymentLogger.warn({ sessionId: session.id, txHash, reason: 'amount_mismatch', onChain: formatUnits(transferAmount, settlementToken.decimals), expected: session.amount.toString() }, 'Payment verification failed');
@@ -212,6 +234,9 @@ export async function POST(request: Request) {
                     data: { status: "confirmed", txHash }
                 });
             });
+            if (session.paymentMode === 'fund_then_pay') {
+                await updateFundingIntentResumeState(session.id, 'settled');
+            }
 
             let zeroGReceiptProof: Awaited<ReturnType<typeof publishVerifiedReceiptProof>> | null = null;
             try {
