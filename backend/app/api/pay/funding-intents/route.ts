@@ -171,7 +171,7 @@ export async function POST(request: Request) {
     if (fundingAsset !== expectedFundingAsset) {
       return errors.conflict(
         'INVALID_OPERATION',
-        `MoonPay is configured to fund ${fundingAsset}, but Coal card checkout expects ${expectedFundingAsset}. Update MOONPAY_CURRENCY_CODE before enabling card funding.`,
+        `MoonPay is configured to fund ${fundingAsset}, but Coal card checkout now funds ${expectedFundingAsset} first so the same embedded wallet has gas to finish the payment. Update MOONPAY_CURRENCY_CODE before enabling card funding.`,
       );
     }
 

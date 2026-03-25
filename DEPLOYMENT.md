@@ -55,7 +55,7 @@ Preview deployments should never silently point at the same production database 
 | `MOONPAY_WEBHOOK_API_KEY` | MoonPay webhook signing key | MoonPay dashboard → Developers / webhooks | No |
 | `MOONPAY_ENV` | `sandbox` or `production` for the hosted MoonPay flow | Set manually | No |
 | `MOONPAY_BASE_CURRENCY_CODE` | Fiat base currency shown in the MoonPay flow | Usually `usd` | No |
-| `MOONPAY_CURRENCY_CODE` | Asset/network MoonPay should deliver in production | Example: `usdc_base` | No |
+| `MOONPAY_CURRENCY_CODE` | Asset/network MoonPay should deliver in production | Example: `eth_base` | No |
 | `MOONPAY_SANDBOX_CURRENCY_CODE` | Sandbox asset used only to validate the funding step | Example: `eth` | No |
 | `UPSTASH_REDIS_REST_URL` | Upstash Redis REST endpoint | Upstash console → database → REST API | No |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token | Upstash console → database → REST API | No |
@@ -266,7 +266,7 @@ MoonPay powers the fiat on-ramp (buy crypto with card).
    - Complete MoonPay's KYB (business verification) process.
    - Switch to the live publishable + secret keys.
    - Set both `MOONPAY_ENV=production` and `NEXT_PUBLIC_MOONPAY_ENV=production`.
-   - Set `MOONPAY_CURRENCY_CODE` to the live asset/network you want MoonPay to deliver, e.g. `usdc_base`.
+   - Set `MOONPAY_CURRENCY_CODE` to the live asset/network you want MoonPay to deliver, e.g. `eth_base`.
 
 > Coal is non-custodial. MoonPay funds the payer wallet first, then Coal completes the actual payment only after the payer signs the onchain transfer. Coal should not pool or front user funds.
 >
