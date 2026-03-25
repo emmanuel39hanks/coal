@@ -130,7 +130,7 @@ Open `http://localhost:3000` to see the app.
 | `NEXT_PUBLIC_SETTLEMENT_TOKEN_NAME` | Full token name displayed in the checkout UI | `USDC` |
 | `NEXT_PUBLIC_MNEE_BASE_ADDRESS` | Legacy alias for `NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS` | `0xYourTokenAddress` |
 | `NEXT_PUBLIC_MNEE_BASE_DECIMALS` | Legacy alias for `NEXT_PUBLIC_SETTLEMENT_TOKEN_DECIMALS` | `6` |
-| `NEXT_PUBLIC_MOONPAY_API_KEY` | MoonPay publishable key for fiat onramp | `pk_test_...` |
+| `NEXT_PUBLIC_MOONPAY_API_KEY` | MoonPay publishable key used to expose the card-funding option in the checkout UI | `pk_test_...` |
 | `NEXT_PUBLIC_MOONPAY_ENV` | MoonPay mode | `sandbox` or `production` |
 | `UPLOADTHING_SECRET` | UploadThing secret (server-side routes) | `sk_live_...` |
 | `UPLOADTHING_TOKEN` | UploadThing token | `eyJ...` |
@@ -149,6 +149,15 @@ Coal's backend verifies payments on the Base blockchain (an Ethereum L2). Two ne
 During development, set `CHAIN_ENV=testnet` in both your backend and frontend `.env.local` files. This routes all on-chain verification to Base Sepolia so you can test with a non-production settlement token without spending real funds.
 
 **Important:** Your settlement token contract address can differ between mainnet and testnet. Always set `SETTLEMENT_TOKEN_ADDRESS` and `NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS` to the correct contract for your current `CHAIN_ENV`. Legacy `MNEE_*` names still work if you already use them, but new integrations should prefer the settlement-token variables.
+
+MoonPay uses a server-signed funding session behind the scenes. The frontend only needs the publishable key to show the card path. The backend still needs:
+
+- `MOONPAY_PUBLISHABLE_KEY`
+- `MOONPAY_SECRET_KEY`
+- `MOONPAY_WEBHOOK_API_KEY`
+- `MOONPAY_ENV`
+
+Coal stays non-custodial: MoonPay funds the payer wallet first, and Coal only completes the merchant payment after the payer signs the onchain transfer from that wallet.
 
 ---
 

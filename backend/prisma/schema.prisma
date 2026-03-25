@@ -29,6 +29,8 @@ model User {
   chainAnchors         ChainAnchor[]
   checkouts            CheckoutSession[]
   computeJobs          ComputeJob[]
+  fundingIntents       FundingIntent[]
+  fundingWebhookEvents FundingWebhookEvent[]
   paymentLinks         PaymentLink[]
   paywalls             Paywall[]
   products             Product[]
@@ -170,6 +172,7 @@ model CheckoutSession {
   subscriptionId      String?
   payerInfo           Json?
   payerInfoConfig     Json?
+  fundingIntents      FundingIntent[]
   merchant            User                 @relation(fields: [merchantId], references: [id])
   product             Product?             @relation(fields: [productId], references: [id])
   subscription        Subscription?        @relation(fields: [subscriptionId], references: [id])
@@ -177,6 +180,59 @@ model CheckoutSession {
   transactions        Transaction[]
 
   @@map("checkout_session")
+}
+
+model FundingIntent {
+  id                   String               @id @default(cuid())
+  checkoutSessionId    String
+  merchantId           String
+  provider             String               @default("moonpay")
+  status               String               @default("pending")
+  walletAddress        String
+  baseCurrencyCode     String               @default("usd")
+  baseCurrencyAmount   Decimal?             @db.Decimal(18, 6)
+  currencyCode         String
+  quoteCurrencyAmount  Decimal              @db.Decimal(18, 6)
+  providerEnvironment  String?
+  customerEmail        String?
+  externalCustomerId   String?
+  externalTransactionId String?             @unique
+  providerTransactionId String?             @unique
+  trackerUrl           String?
+  returnUrl            String?
+  completedAt          DateTime?
+  failedAt             DateTime?
+  failureReason        String?
+  lastProviderStatus   String?
+  metadata             Json?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  checkoutSession      CheckoutSession      @relation(fields: [checkoutSessionId], references: [id])
+  merchant             User                 @relation(fields: [merchantId], references: [id])
+  webhookEvents        FundingWebhookEvent[]
+
+  @@index([checkoutSessionId, provider, walletAddress])
+  @@index([merchantId, provider, status])
+  @@map("funding_intent")
+}
+
+model FundingWebhookEvent {
+  id                String         @id @default(cuid())
+  fundingIntentId   String?
+  merchantId        String?
+  provider          String
+  eventType         String
+  dedupeKey         String         @unique
+  externalEventId   String?
+  externalTxId      String?
+  signatureVerified Boolean        @default(false)
+  payload           Json
+  createdAt         DateTime       @default(now())
+  fundingIntent     FundingIntent? @relation(fields: [fundingIntentId], references: [id])
+  merchant          User?          @relation(fields: [merchantId], references: [id])
+
+  @@index([provider, createdAt])
+  @@map("funding_webhook_event")
 }
 
 model Transaction {

@@ -80,6 +80,16 @@ validateAllOrNone('UploadThing', ['UPLOADTHING_SECRET', 'UPLOADTHING_APP_ID', 'U
     reason: 'required for uploads',
 });
 
+const moonPayPublishable = readEnv('MOONPAY_PUBLISHABLE_KEY') || readEnv('NEXT_PUBLIC_MOONPAY_API_KEY');
+const moonPaySecret = readEnv('MOONPAY_SECRET_KEY');
+const moonPayConfigured = Boolean(moonPayPublishable || moonPaySecret);
+if (moonPayConfigured && (!moonPayPublishable || !moonPaySecret)) {
+    pushError('MoonPay is partially configured; set both MOONPAY_SECRET_KEY and MOONPAY_PUBLISHABLE_KEY (or NEXT_PUBLIC_MOONPAY_API_KEY)');
+}
+if (moonPayConfigured && !readEnv('MOONPAY_WEBHOOK_API_KEY')) {
+    pushWarning('MOONPAY_WEBHOOK_API_KEY is missing; MoonPay webhook signatures cannot be verified');
+}
+
 validateAllOrNone('Upstash Redis', ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'], {
     absent: 'warn',
     reason: 'used for distributed rate limiting',
