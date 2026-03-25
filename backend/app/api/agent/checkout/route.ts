@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { validateApiKey } from '@/lib/api-auth';
 import { toPrismaJson, toPrismaNullableJson } from '@/lib/prisma-json';
 import { getSettlementToken } from '@/lib/chain';
+import { validateWebhookUrl } from '@/lib/ssrf';
 
 const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -22,6 +23,13 @@ export async function POST(request: Request) {
     if (!validated.success) return validated.error;
 
     const { amount, currency, description, metadata, redirectUrl, callbackUrl, payerInfo } = validated.data;
+
+    if (callbackUrl) {
+      const urlCheck = validateWebhookUrl(callbackUrl);
+      if (!urlCheck.valid) {
+        return errors.validation({ callbackUrl: [urlCheck.reason || 'Invalid callback URL'] });
+      }
+    }
 
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 min
     const session = await prisma.checkoutSession.create({

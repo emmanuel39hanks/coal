@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         } else {
             let unique = false;
             while (!unique) {
-                finalSlug = crypto.randomBytes(4).toString('hex');
+                finalSlug = crypto.randomBytes(8).toString('hex');
                 const existing = await prisma.paymentLink.findUnique({ where: { slug: finalSlug } });
                 if (!existing) unique = true;
             }
