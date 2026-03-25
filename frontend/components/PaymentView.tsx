@@ -1094,7 +1094,7 @@ export default function PaymentView({
 
                     <div className="mt-8 pt-6 border-t border-dashed border-gray-100 flex flex-col items-center justify-center gap-2">
                         <span className="text-xs font-bold uppercase text-gray-400 tracking-[0.2em]">Powered by</span>
-                        <Image src="/logo.png" alt="Coal" width={30} height={30} className="object-contain opacity-70" />
+                        <Image src="/logo.png" alt="Coal" width={48} height={48} className="object-contain opacity-80" />
                     </div>
                 </div>
             </motion.div >
