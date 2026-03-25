@@ -964,7 +964,7 @@ export default function PaymentView({
                     )}
 
                     {isRecurringProduct && status !== 'verifying' && (
-                        <div className="mt-5 rounded-[28px] border border-black/5 bg-[var(--color-bg-base)]/80 p-5">
+                        <div className="mt-5 mb-6 rounded-[28px] border border-black/5 bg-[var(--color-bg-base)]/80 p-5">
                             <div className="text-sm font-black text-[var(--color-brand-navy)]">Recurring billing mandate</div>
                             <p className="mt-2 text-sm font-medium leading-relaxed text-[var(--color-text-secondary)]">
                                 Your first payment activates the subscription and saves your billing mandate. Coal will generate each renewal checkout automatically on the billing cadence.
@@ -1092,9 +1092,9 @@ export default function PaymentView({
                         </>
                     )}
 
-                    <div className="mt-8 pt-6 border-t border-dashed border-gray-100 flex items-center justify-center gap-2.5">
-                        <Image src="/logo.png" alt="Coal" width={22} height={22} className="object-contain opacity-60" />
-                        <span className="text-xs font-bold text-gray-400 tracking-wide">Powered by Coal</span>
+                    <div className="mt-8 pt-6 border-t border-dashed border-gray-100 flex flex-col items-center justify-center gap-2">
+                        <span className="text-xs font-bold uppercase text-gray-400 tracking-[0.2em]">Powered by</span>
+                        <Image src="/logo.png" alt="Coal" width={30} height={30} className="object-contain opacity-70" />
                     </div>
                 </div>
             </motion.div >
