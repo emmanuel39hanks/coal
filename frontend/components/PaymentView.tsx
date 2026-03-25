@@ -1244,14 +1244,10 @@ export default function PaymentView({
                                             <path d="M6 14H10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                                         </svg>
                                         <span>Pay with Card</span>
-                                        <span className="rounded-full bg-[var(--color-brand-orange)]/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-orange)]">
-                                            Coming soon
+                                        <span className="rounded-full bg-[var(--color-brand-orange)]/12 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[var(--color-brand-orange)]">
+                                            Soon
                                         </span>
                                     </button>
-
-                                    <p className="mt-2 text-center text-[10px] font-medium leading-relaxed text-gray-400">
-                                        Card checkout is temporarily disabled while MoonPay live on-ramp activation is finalized.
-                                    </p>
                                 </>
                             ) : (
                                 <>
