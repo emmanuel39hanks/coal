@@ -3,10 +3,19 @@ import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 
-// DEV ONLY: Do not deploy to prod without auth protection
+// DEV ONLY: seed route is blocked in production
 export async function GET(request: Request) {
     if (process.env.NODE_ENV === 'production') {
         return NextResponse.json({ error: 'Dev only' }, { status: 403 });
+    }
+
+    // Require DEV_SEED_SECRET if set (additional safeguard for staging)
+    const seedSecret = process.env.DEV_SEED_SECRET;
+    if (seedSecret) {
+        const authHeader = request.headers.get('authorization');
+        if (authHeader !== `Bearer ${seedSecret}`) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
     }
 
     try {
@@ -23,8 +32,8 @@ export async function GET(request: Request) {
             });
         }
 
-        // 2. Create API Key
-        const keyRaw = "coal_live_dev123456";
+        // 2. Create API Key with a random value (never hardcoded)
+        const keyRaw = `coal_live_${crypto.randomBytes(24).toString('hex')}`;
         const hashed = crypto.createHash("sha256").update(keyRaw).digest("hex");
 
         const key = await prisma.apiKey.create({
@@ -38,7 +47,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             message: "Seed Successful",
-            user: user,
+            user: { id: user.id, email: user.email, name: user.name },
             apiKey: keyRaw, // Show the raw key once
         });
 

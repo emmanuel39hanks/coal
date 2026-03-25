@@ -14,6 +14,18 @@ import { getSettlementToken } from '@/lib/chain';
 
 import { useSearchParams } from 'next/navigation';
 
+interface Product {
+    id: string;
+    name: string;
+    description: string | null;
+    price: string;
+    image: string | null;
+    billingType: 'one_time' | 'subscription';
+    billingInterval: 'day' | 'week' | 'month' | 'year';
+    billingIntervalCount: number;
+    sales: number;
+}
+
 export default function ProductsPage() {
     const { fetcher, request: apiRequest } = useApi();
     const toast = useToast();
@@ -30,7 +42,7 @@ export default function ProductsPage() {
     const [billingType, setBillingType] = useState<'one_time' | 'subscription'>('one_time');
     const [billingInterval, setBillingInterval] = useState<'day' | 'week' | 'month' | 'year'>('month');
     const [billingIntervalCount, setBillingIntervalCount] = useState('1');
-    const [editingProduct, setEditingProduct] = useState<any | null>(null);
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const settlementSymbol = getSettlementToken().symbol;
 
     const handleOpenCreate = () => {
@@ -42,7 +54,7 @@ export default function ProductsPage() {
         setIsCreateOpen(true);
     };
 
-    const handleOpenEdit = (product: any) => {
+    const handleOpenEdit = (product: Product) => {
         setEditingProduct(product);
         setName(product.name);
         setDescription(product.description || '');
@@ -107,7 +119,7 @@ export default function ProductsPage() {
         }
     };
 
-    const products = data?.products || [];
+    const products: Product[] = data?.products || [];
 
     return (
         <div className="space-y-8">
@@ -143,7 +155,7 @@ export default function ProductsPage() {
                 ) : products.length === 0 ? (
                     <div className="col-span-full py-20 text-center text-gray-400">No products yet. Create one!</div>
                 ) : (
-                    products.map((product: any) => (
+                    products.map((product: Product) => (
                         <div key={product.id} className="bg-white p-6 rounded-[32px] border-2 border-black/5 group hover:border-[var(--color-brand-orange)] transition-all relative">
                             {/* Action Buttons */}
                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">

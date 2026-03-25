@@ -110,6 +110,11 @@ export async function DELETE(
         // --- Case 2: Pending invite (Verification record) ---
         const invite = await prisma.verification.findUnique({ where: { id } });
         if (invite && invite.identifier.endsWith(`:${user.id}`)) {
+            // Only owner/admin may revoke invites
+            const callerRole = (user as CoalUser)._callerRole;
+            if (callerRole && !['owner', 'admin'].includes(callerRole)) {
+                return errors.forbidden();
+            }
             await prisma.verification.delete({ where: { id } });
             return apiSuccess({ success: true });
         }

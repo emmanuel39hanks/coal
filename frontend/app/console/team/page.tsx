@@ -14,10 +14,27 @@ const ROLE_COLORS: Record<string, string> = {
     viewer: 'bg-gray-100 text-gray-600 border-gray-200',
 };
 
+interface TeamMemberUser {
+    name: string | null;
+    email: string;
+}
+
+interface TeamMember {
+    id: string;
+    role: string;
+    createdAt: string;
+    user: TeamMemberUser;
+}
+
+interface InviteResponse {
+    pending?: boolean;
+    email?: string;
+}
+
 export default function TeamPage() {
     const { fetcher, request } = useApi();
     const { data, isLoading } = useSWR('/api/console/team', fetcher);
-    const members = data?.members ?? [];
+    const members: TeamMember[] = data?.members ?? [];
 
     const [isInviteOpen, setIsInviteOpen] = useState(false);
     const [email, setEmail] = useState('');
@@ -36,7 +53,7 @@ export default function TeamPage() {
         setInviteSuccess('');
         setInviting(true);
         try {
-            const res = await request('/api/console/team', {
+            const res: InviteResponse = await request('/api/console/team', {
                 method: 'POST',
                 body: JSON.stringify({ email, role }),
             });
@@ -50,8 +67,9 @@ export default function TeamPage() {
                 setEmail('');
                 setRole('member');
             }
-        } catch (e: any) {
-            setInviteError(e?.message ?? 'Failed to add member');
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : 'Failed to add member';
+            setInviteError(message);
         } finally {
             setInviting(false);
         }
@@ -134,7 +152,7 @@ export default function TeamPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                members.map((m: any) => (
+                                members.map((m: TeamMember) => (
                                     <tr key={m.id} className="group hover:bg-[var(--color-bg-base)] transition-colors">
                                         <td className="py-4 pl-4 rounded-l-xl">
                                             <div>
@@ -204,7 +222,7 @@ export default function TeamPage() {
                                     <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Role</label>
                                     <select
                                         value={role}
-                                        onChange={e => setRole(e.target.value as any)}
+                                        onChange={e => setRole(e.target.value as 'admin' | 'member' | 'viewer')}
                                         className="w-full h-12 px-6 rounded-full bg-gray-100 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium appearance-none"
                                     >
                                         <option value="admin">Admin — full access</option>

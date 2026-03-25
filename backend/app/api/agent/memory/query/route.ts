@@ -5,7 +5,7 @@ import { errors, apiSuccess } from '@/lib/errors';
 import { checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 import { getMerchantMemorySource } from '@/lib/0g/merchant';
 import { isZeroGComputeConfigured, zeroGEnv } from '@/lib/0g/env';
-import { runStructuredInference } from '@/lib/0g/compute';
+import { isSealedInferenceEnabled, runStructuredInference } from '@/lib/0g/compute';
 import { normalizeStructuredStringList } from '@/lib/0g/ai-commerce';
 import { validateBody } from '@/lib/schemas';
 
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         const keyRecord = await validateApiKey(request);
         if (!keyRecord) return errors.unauthorized('Invalid or missing API Key');
 
-        const { limited } = await checkRateLimit(rateLimiters.checkout, keyRecord.id);
+        const { limited } = await checkRateLimit(rateLimiters.aiQuery, keyRecord.id);
         if (limited) return errors.rateLimited();
 
         const body = await request.json().catch(() => ({}));
@@ -77,6 +77,9 @@ export async function POST(request: Request) {
                     recommendedActions: string[];
                 }>({
                     temperature: 0,
+                    // Memory queries contain sensitive merchant data —
+                    // route through Sealed Inference (TEE) when available
+                    sealed: true,
                     messages: [
                         {
                             role: 'system',
@@ -156,6 +159,7 @@ export async function POST(request: Request) {
                 storageUri: memorySource.artifact?.storageUri ?? null,
                 storageRoot: memorySource.artifact?.storageRoot ?? null,
                 payloadHash: memorySource.artifact?.payloadHash ?? null,
+                sealedInference: isSealedInferenceEnabled(),
             },
         });
     } catch {

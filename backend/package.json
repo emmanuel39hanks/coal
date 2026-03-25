@@ -16,14 +16,17 @@
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.1",
     "@0glabs/0g-serving-broker": "^0.7.4",
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0",
     "@neondatabase/serverless": "^1.0.2",
-    "@prisma/adapter-neon": "^7.2.0",
-    "@prisma/client": "^7.2.0",
+    "@prisma/adapter-neon": "^7.5.0",
+    "@prisma/client": "^7.5.0",
     "@privy-io/server-auth": "^1.32.5",
     "@sentry/nextjs": "^10.45.0",
     "@uploadthing/react": "^7.3.3",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
+    "@x402/core": "^2.8.0",
     "dotenv": "^17.3.1",
     "next": "16.1.1",
     "openai": "^6.32.0",
@@ -41,7 +44,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/ws": "^8.18.1",
-    "prisma": "^7.2.0",
+    "prisma": "^7.5.0",
     "typescript": "5.9.3",
     "vitest": "^4.1.0"
   }

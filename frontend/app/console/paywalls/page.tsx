@@ -23,6 +23,20 @@ const PRICING_MODEL_LABELS: Record<string, string> = {
     per_call: 'Per call',
 };
 
+interface Paywall {
+    id: string;
+    name: string;
+    description: string | null;
+    price: string;
+    currency: string;
+    contentType: string;
+    contentUrl: string | null;
+    pricingModel: string;
+    _count: {
+        accesses: number;
+    } | null;
+}
+
 export default function PaywallsPage() {
     const { fetcher, request: apiRequest } = useApi();
     const toast = useToast();
@@ -95,7 +109,7 @@ export default function PaywallsPage() {
         setTimeout(() => setCopiedId(null), 2000);
     };
 
-    const paywalls: any[] = data?.paywalls ?? [];
+    const paywalls: Paywall[] = data?.paywalls ?? [];
     const filtered = paywalls.filter((p) =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -312,7 +326,7 @@ export default function PaywallsPage() {
                             <label className="block text-xs font-bold text-[var(--color-brand-navy)] mb-1.5">Pricing model</label>
                             <select
                                 value={pricingModel}
-                                onChange={(e) => setPricingModel(e.target.value as any)}
+                                onChange={(e) => setPricingModel(e.target.value as 'one_time' | 'per_call')}
                                 className="w-full rounded-2xl border-2 border-black/8 bg-[var(--color-bg-base)] px-4 py-3 text-sm font-medium focus:outline-none focus:border-[var(--color-brand-orange)]/40"
                             >
                                 <option value="one_time">One-time</option>
@@ -349,7 +363,7 @@ export default function PaywallsPage() {
                             className="w-full rounded-2xl border-2 border-black/8 bg-[var(--color-bg-base)] px-4 py-3 text-sm font-medium focus:outline-none focus:border-[var(--color-brand-orange)]/40"
                         />
                         <p className="text-[11px] text-[var(--color-text-secondary)] mt-1.5 font-medium">
-                            The URL clients gain access to after payment. Included in the 0G manifest so agents know what they're paying for.
+                            The URL clients gain access to after payment. Included in the 0G manifest so agents know what they&apos;re paying for.
                         </p>
                     </div>
 

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { validateRecipients, SplitRecipient } from '@/lib/splits';
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
+        if (!hasWriteAccess(user)) return errors.forbidden();
 
         const { limited } = await checkRateLimit(rateLimiters.console, user.id);
         if (limited) return errors.rateLimited();

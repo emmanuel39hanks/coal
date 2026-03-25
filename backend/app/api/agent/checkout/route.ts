@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const { amount, currency, description, metadata, redirectUrl, callbackUrl, payerInfo } = validated.data;
 
     if (callbackUrl) {
-      const urlCheck = validateWebhookUrl(callbackUrl);
+      const urlCheck = await validateWebhookUrl(callbackUrl);
       if (!urlCheck.valid) {
         return errors.validation({ callbackUrl: [urlCheck.reason || 'Invalid callback URL'] });
       }
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         description,
         payerInfoConfig: toPrismaNullableJson(payerInfo),
         metadata: toPrismaJson({
-          ...(metadata as Record<string, unknown> | undefined),
+          ...(metadata ? { custom: metadata } : {}),
           ...(payerInfo ? { payerInfoConfig: payerInfo } : {}),
         }),
         redirectUrl,

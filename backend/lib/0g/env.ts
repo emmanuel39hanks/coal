@@ -52,6 +52,9 @@ export const zeroGEnv = {
     computeBaseUrl: readEnv('ZERO_G_COMPUTE_BASE_URL') || '',
     computeApiKey: readEnv('ZERO_G_COMPUTE_API_KEY') || '',
     computeModel: readEnv('ZERO_G_COMPUTE_MODEL') || '',
+    daEnabled: readBoolean('ZERO_G_DA_ENABLED', false),
+    daGrpcUrl: readEnv('ZERO_G_DA_GRPC_URL') || 'localhost:51001',
+    sealedInferenceEnabled: readBoolean('ZERO_G_SEALED_INFERENCE_ENABLED', false),
 } as const;
 
 if (zeroGEnv.enabled && !zeroGEnv.chainPrivateKey) {

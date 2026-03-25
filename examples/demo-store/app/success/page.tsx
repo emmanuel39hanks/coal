@@ -1,7 +1,13 @@
 
 import Link from 'next/link';
 
-export default function SuccessPage() {
+export default function SuccessPage({
+    searchParams,
+}: {
+    searchParams: { session_id?: string };
+}) {
+    const sessionId = searchParams.session_id;
+
     return (
         <div className="min-h-screen bg-white flex items-center justify-center p-6">
             <div className="max-w-md w-full text-center">
@@ -19,6 +25,19 @@ export default function SuccessPage() {
                         Webhook received via Coal API
                     </div>
                 </div>
+                {sessionId && (
+                    <a
+                        href={`${process.env.NEXT_PUBLIC_COAL_URL || 'http://localhost:3000'}/verify/${sessionId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full mb-4 bg-gray-100 text-gray-800 h-14 rounded-full font-bold hover:scale-105 transition-transform flex items-center justify-center gap-2"
+                    >
+                        Verify Receipt
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M5 11L11 5M11 5H6M11 5V10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </a>
+                )}
                 <Link href="/">
                     <button className="w-full bg-black text-white h-14 rounded-full font-bold hover:scale-105 transition-transform">
                         Back to Shop

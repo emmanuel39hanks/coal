@@ -1,10 +1,15 @@
 import { prisma } from '@/lib/prisma';
 import { errors, apiSuccess } from '@/lib/errors';
+import { getIP, checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 import { savePayerInfoSchema, validateBody } from '@/lib/schemas';
 import { normalizePayerInfoConfig, validatePayerInfo } from '@/lib/payer-info';
 import { toPrismaNullableJson } from '@/lib/prisma-json';
 
 export async function POST(request: Request) {
+  const ip = getIP(request);
+  const { limited } = await checkRateLimit(rateLimiters.checkout, ip);
+  if (limited) return errors.rateLimited();
+
   const body = await request.json().catch(() => ({}));
   const validated = validateBody(savePayerInfoSchema, body);
   if (!validated.success) return validated.error;

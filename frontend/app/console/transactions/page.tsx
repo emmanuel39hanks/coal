@@ -9,11 +9,22 @@ import { Skeleton } from '@/components/Skeleton';
 import { formatAmount } from '@/lib/utils';
 import { EXPLORER_URL, getSettlementToken } from '@/lib/chain';
 
+interface Transaction {
+    id: string;
+    txHash: string | null;
+    type: string;
+    description: string | null;
+    amount: number | null;
+    currency: string | null;
+    date: string;
+    status: 'Confirmed' | 'Pending' | 'Failed';
+}
+
 export default function TransactionsPage() {
     const { fetcher } = useApi();
     const { data, error, isLoading } = useSWR('/api/console/transactions', fetcher);
 
-    const allTransactions = data?.transactions || [];
+    const allTransactions: Transaction[] = data?.transactions || [];
     const settlementSymbol = getSettlementToken().symbol;
 
     // Filter state
@@ -23,7 +34,7 @@ export default function TransactionsPage() {
 
     // Filtered transactions
     const transactions = useMemo(() => {
-        return allTransactions.filter((tx: any) => {
+        return allTransactions.filter((tx: Transaction) => {
             // Search filter
             const searchLower = searchQuery.toLowerCase();
             const matchesSearch = !searchQuery ||
@@ -44,7 +55,7 @@ export default function TransactionsPage() {
         if (transactions.length === 0) return;
 
         const headers = ['TX Hash', 'Type', 'Description', 'Amount', 'Currency', 'Date', 'Status'];
-        const rows = transactions.map((tx: any) => [
+        const rows = transactions.map((tx: Transaction) => [
             tx.txHash || tx.id,
             tx.type,
             tx.description || '',
@@ -209,7 +220,7 @@ export default function TransactionsPage() {
                                     {allTransactions.length > 0 ? 'No transactions match your filters' : 'No transactions found'}
                                 </td></tr>
                             ) : (
-                                transactions.map((tx: any) => (
+                                transactions.map((tx: Transaction) => (
                                     <tr key={tx.id} className="group hover:bg-[var(--color-bg-base)] transition-colors">
                                         <td className="py-4 pl-4 rounded-l-xl">
                                             {tx.txHash ? (

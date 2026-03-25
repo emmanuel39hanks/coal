@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, isWorkspaceOwner } from '@/lib/privy';
 import crypto from 'crypto';
 import { updateSettingsSchema, validateBody } from '@/lib/schemas';
 import { errors, apiSuccess } from '@/lib/errors';
@@ -58,6 +58,7 @@ export async function PUT(request: Request) {
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
+        if (!isWorkspaceOwner(user)) return errors.forbidden('Only the workspace owner can update settings');
 
         const body = await request.json().catch(() => ({}));
         const validated = validateBody(updateSettingsSchema, body);
@@ -66,7 +67,7 @@ export async function PUT(request: Request) {
         const { name, payoutAddress, webhookUrl } = validated.data;
 
         if (webhookUrl) {
-            const urlCheck = validateWebhookUrl(webhookUrl);
+            const urlCheck = await validateWebhookUrl(webhookUrl);
             if (!urlCheck.valid) {
                 return errors.validation({ webhookUrl: [urlCheck.reason || 'Invalid webhook URL'] });
             }

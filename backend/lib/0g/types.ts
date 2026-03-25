@@ -130,6 +130,14 @@ export interface PaywallManifest {
         payIntentUrl: string;
         receiptVerifyUrlTemplate: string;
     };
+    x402: {
+        scheme: 'exact';
+        network: string;
+        maxAmountRequired: string;
+        asset: string;
+        payTo: string;
+        resource: string;
+    } | null;
     merchantProfile: {
         storageUri: string | null;
         storageRoot: string | null;

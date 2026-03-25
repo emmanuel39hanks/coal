@@ -14,6 +14,37 @@ import { getErrorMessage } from '@/lib/api-errors';
 import { PAYER_INFO_FIELD_META, PAYER_INFO_FIELDS, type PayerInfoField } from '@/lib/payer-info';
 import { getSettlementToken } from '@/lib/chain';
 
+interface PaymentLink {
+    id: string;
+    slug: string;
+    url: string;
+    productName: string;
+    productImage: string | null;
+    price: string;
+    active: boolean;
+    payerInfoConfig: {
+        required: boolean;
+        fields: string[];
+    } | null;
+}
+
+interface ProductOption {
+    id: string;
+    name: string;
+    price: string;
+}
+
+interface CreateLinkBody {
+    slug?: string;
+    productId?: string;
+    title?: string;
+    description?: string;
+    payerInfo?: {
+        required: boolean;
+        fields: PayerInfoField[];
+    };
+}
+
 export default function PaymentLinksPage() {
     const { fetcher, request: apiRequest } = useApi();
     const toast = useToast();
@@ -45,7 +76,7 @@ export default function PaymentLinksPage() {
     const handleCreate = async () => {
         setCreateLoading(true);
         try {
-            const body: any = { slug: customSlug || undefined };
+            const body: CreateLinkBody = { slug: customSlug || undefined };
             if (linkType === 'product') {
                 body.productId = selectedProduct;
             } else {
@@ -74,7 +105,7 @@ export default function PaymentLinksPage() {
             setLinkType('product');
             setRequirePayerInfo(false);
             setPayerInfoFields([]);
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(e);
             toast('error', getErrorMessage(e, 'Failed to create link. Slug might be taken.'));
         } finally {
@@ -110,10 +141,10 @@ export default function PaymentLinksPage() {
         );
     };
 
-    const links = data?.links || [];
-    const products = productsData?.products || [];
+    const links: PaymentLink[] = data?.links || [];
+    const products: ProductOption[] = productsData?.products || [];
 
-    const filteredLinks = links.filter((link: any) =>
+    const filteredLinks = links.filter((link: PaymentLink) =>
         link.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
         link.productName.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -199,7 +230,7 @@ export default function PaymentLinksPage() {
                                 <tr>
                                     <td colSpan={6} className="py-20 text-center text-gray-400">No links found.</td>
                                 </tr>
-                            ) : filteredLinks.map((link: any) => (
+                            ) : filteredLinks.map((link: PaymentLink) => (
                                 <tr key={link.id} className="group hover:bg-gray-50/50 transition-colors">
                                     <td className="py-4 px-6">
                                         <div className="flex items-center gap-3">
@@ -333,7 +364,7 @@ export default function PaymentLinksPage() {
                                 className="w-full h-12 px-4 rounded-xl bg-gray-50 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium appearance-none"
                             >
                                 <option value="">Select a product...</option>
-                                {products.map((p: any) => (
+                                {products.map((p: ProductOption) => (
                                     <option key={p.id} value={p.id}>{p.name} ({p.price} {settlementSymbol})</option>
                                 ))}
                             </select>
@@ -349,7 +380,7 @@ export default function PaymentLinksPage() {
                                 <div className="flex-1">
                                     <p className="font-bold text-indigo-950 mb-1">Flexible Amount</p>
                                     <p className="leading-relaxed opacity-80">
-                                        Perfect for donations, tips, or "pay what you want" products. Clients can enter any amount they wish.
+                                        Perfect for donations, tips, or &quot;pay what you want&quot; products. Clients can enter any amount they wish.
                                     </p>
                                 </div>
                             </div>

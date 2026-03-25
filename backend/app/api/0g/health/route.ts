@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
 import { errors } from '@/lib/errors';
+import { getIP, checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 import { checkZeroGChainHealth } from '@/lib/0g/chain';
 import { listComputeServices } from '@/lib/0g/compute';
 import { zeroGEnv } from '@/lib/0g/env';
 import { checkStorageHealth, getStoragePerformancePlaybook } from '@/lib/0g/storage';
+import { checkDAHealth } from '@/lib/0g/da';
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
+        // C2: Rate limit the public health endpoint
+        const ip = getIP(request);
+        const { limited } = await checkRateLimit(rateLimiters.public, ip);
+        if (limited) return errors.rateLimited();
         if (!zeroGEnv.enabled && !zeroGEnv.computeEnabled) {
             return NextResponse.json(
                 {
@@ -20,24 +26,24 @@ export async function GET() {
             );
         }
 
-        const [storage, chain, compute] = await Promise.all([
+        const [storage, chain, compute, da] = await Promise.all([
             checkStorageHealth()
                 .then((details) => ({
                     ok: true as const,
                     details,
                 }))
-                .catch((error) => ({
+                .catch(() => ({
                     ok: false as const,
-                    error: error instanceof Error ? error.message : '0G storage health failed',
+                    error: '0G storage unavailable',
                 })),
             checkZeroGChainHealth()
                 .then((details) => ({
                     ok: true as const,
                     details,
                 }))
-                .catch((error) => ({
+                .catch(() => ({
                     ok: false as const,
-                    error: error instanceof Error ? error.message : '0G chain health failed',
+                    error: '0G chain unavailable',
                 })),
             listComputeServices(3)
                 .then((services) => ({
@@ -45,20 +51,26 @@ export async function GET() {
                     details: {
                         enabled: zeroGEnv.computeEnabled,
                         configured: Boolean(zeroGEnv.computeBaseUrl && zeroGEnv.computeApiKey),
-                        provider: zeroGEnv.computeProvider || null,
-                        services: services.map((service) => ({
-                            providerAddress: service.providerAddress,
-                            model: service.model,
-                            endpoint: service.endpoint ?? null,
-                            serviceName: service.serviceName ?? null,
-                            uptimePct: service.uptimePct,
-                            avgLatencyMs: service.avgLatencyMs,
-                        })),
+                        // C2: Don't expose provider addresses, endpoints, or internal URLs
+                        serviceCount: services.length,
                     },
                 }))
-                .catch((error) => ({
+                .catch(() => ({
                     ok: false as const,
-                    error: error instanceof Error ? error.message : '0G compute health failed',
+                    error: '0G compute unavailable',
+                })),
+            checkDAHealth()
+                .then((details) => ({
+                    ok: details.connected || !details.enabled,
+                    // C2: Strip gRPC URL and detailed errors from public response
+                    details: {
+                        enabled: details.enabled,
+                        connected: details.connected,
+                    },
+                }))
+                .catch(() => ({
+                    ok: false as const,
+                    error: '0G DA unavailable',
                 })),
         ]);
 
@@ -66,6 +78,7 @@ export async function GET() {
             storage,
             chain,
             compute,
+            da,
         };
 
         const allOk = Object.values(checks).every((check) => check.ok);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, hasWriteAccess } from '@/lib/privy';
+import { errors } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 
 // DELETE /api/console/keys/[id] - Revoke an API key
@@ -13,6 +14,7 @@ export async function DELETE(
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+        if (!hasWriteAccess(user)) return errors.forbidden();
 
         const { id } = await params;
 

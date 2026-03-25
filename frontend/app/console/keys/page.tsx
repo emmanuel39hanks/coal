@@ -7,6 +7,14 @@ import useSWR, { mutate } from 'swr';
 import { useApi } from '@/lib/api';
 import { Skeleton } from '@/components/Skeleton';
 
+interface ApiKey {
+    id: string;
+    name: string;
+    prefix: string;
+    createdAt: string;
+    lastUsed: string | null;
+}
+
 export default function KeysPage() {
     const { fetcher, request } = useApi();
     const { data, error, isLoading } = useSWR('/api/console/keys', fetcher);
@@ -57,7 +65,7 @@ export default function KeysPage() {
         }
     };
 
-    const keys = data?.keys || [];
+    const keys: ApiKey[] = data?.keys || [];
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
@@ -125,7 +133,7 @@ export default function KeysPage() {
                             ) : keys.length === 0 ? (
                                 <tr><td colSpan={5} className="text-center py-6 text-gray-400">No active keys</td></tr>
                             ) : (
-                                keys.map((key: any) => (
+                                keys.map((key: ApiKey) => (
                                     <tr key={key.id} className="group hover:bg-[var(--color-bg-base)] transition-colors">
                                         <td className="py-4 pl-4 rounded-l-xl font-bold">{key.name}</td>
                                         <td className="py-4 font-mono text-xs">{key.prefix}...</td>
@@ -254,7 +262,7 @@ export default function KeysPage() {
                                 </div>
                                 <h2 className="text-2xl font-black text-[var(--color-brand-navy)]">Revoke API Key?</h2>
                                 <p className="text-sm text-[var(--color-text-secondary)] mt-2 mb-6">
-                                    Are you sure you want to revoke <strong>"{revokeModal.keyName}"</strong>?
+                                    Are you sure you want to revoke <strong>&quot;{revokeModal.keyName}&quot;</strong>?
                                     This action cannot be undone and any applications using this key will stop working.
                                 </p>
                             </div>

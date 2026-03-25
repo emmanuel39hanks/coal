@@ -2,13 +2,14 @@
 
 import { useToast } from '@/components/Toast';
 import { useCreateWallet, usePrivy, useWallets } from '@privy-io/react-auth';
+import type { User, ConnectedWallet, Wallet } from '@privy-io/react-auth';
 
 const isConfigured = Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID);
 
 export type PrivySafe = {
     ready: boolean;
     authenticated: boolean;
-    user: any;
+    user: User | null;
     login: () => void;
     logout: () => Promise<void>;
     getAccessToken: () => Promise<string | null>;
@@ -34,19 +35,19 @@ function useAuthFallback(): PrivySafe {
     };
 }
 
-function useAuthWalletsConfigured(): { wallets: any[] } {
-    return useWallets() as { wallets: any[] };
+function useAuthWalletsConfigured(): { wallets: ConnectedWallet[] } {
+    return useWallets() as { wallets: ConnectedWallet[] };
 }
 
-function useAuthWalletsFallback(): { wallets: any[] } {
+function useAuthWalletsFallback(): { wallets: ConnectedWallet[] } {
     return { wallets: [] };
 }
 
-function useCreateWalletConfigured(): { createWallet: () => Promise<any> } {
-    return useCreateWallet() as { createWallet: () => Promise<any> };
+function useCreateWalletConfigured(): { createWallet: () => Promise<Wallet> } {
+    return useCreateWallet() as { createWallet: () => Promise<Wallet> };
 }
 
-function useCreateWalletFallback(): { createWallet: () => Promise<any> } {
+function useCreateWalletFallback(): { createWallet: () => Promise<Wallet> } {
     const toast = useToast();
 
     return {
@@ -59,6 +60,6 @@ function useCreateWalletFallback(): { createWallet: () => Promise<any> } {
 }
 
 export const useAuth: () => PrivySafe = isConfigured ? useAuthConfigured : useAuthFallback;
-export const useAuthWallets: () => { wallets: any[] } = isConfigured ? useAuthWalletsConfigured : useAuthWalletsFallback;
-export const useCreateEmbeddedWallet: () => { createWallet: () => Promise<any> } =
+export const useAuthWallets: () => { wallets: ConnectedWallet[] } = isConfigured ? useAuthWalletsConfigured : useAuthWalletsFallback;
+export const useCreateEmbeddedWallet: () => { createWallet: () => Promise<Wallet> } =
     isConfigured ? useCreateWalletConfigured : useCreateWalletFallback;

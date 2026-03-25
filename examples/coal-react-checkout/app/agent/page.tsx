@@ -16,43 +16,45 @@ function now() {
   return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-const AGENT_CODE = `// AI Agent: autonomous paywall payment
-async function payForContent(paywallId: string, agentWallet: string) {
+const AGENT_CODE = `// AI Agent: autonomous paywall payment with x402 + receipt verification
+async function payForContent(paywallId: string, wallet: string) {
 
-  // 1. Check access
-  const verify = await fetch(\`/api/paywalls/\${paywallId}/verify?address=\${agentWallet}\`);
-  if (verify.status === 200) return await verify.json(); // Already paid
+  // 1. Check access — get 402 with x402 headers
+  const verify = await fetch(\`/api/paywalls/\${paywallId}/verify?address=\${wallet}\`);
+  if (verify.status === 200) return verify.json(); // Already paid
 
-  // 2. Parse payment requirements from 402
-  const { price, currency, payUrl } = await verify.json();
+  // 2. Parse x402 payment requirements
+  const x402 = JSON.parse(atob(verify.headers.get('X-PAYMENT')));
+  // { scheme: 'exact', network: 'eip155:8453', payTo: '0x...', asset: '0x...USDC' }
 
-  // 3. Create checkout session via Coal API
-  const session = await fetch('/api/checkouts', {
+  // 3. Create pay intent
+  const intent = await fetch(\`/api/agent/paywalls/\${paywallId}/pay-intent\`, {
     method: 'POST',
     headers: { 'x-api-key': COAL_API_KEY },
-    body: JSON.stringify({ amount: price, productName: 'Paywall Access' }),
+    body: JSON.stringify({ subject: { walletAddress: wallet } }),
   });
-  const { data: { id: sessionId } } = await session.json();
+  const { checkoutId, paymentUrl } = await intent.json();
 
-  // 4. Send on-chain payment (ERC-20 transfer on Base)
-  const txHash = await sendUSDC(merchant.payoutAddress, price);
+  // 4. Execute on-chain USDC transfer
+  const txHash = await sendUSDC(x402.payTo, x402.maxAmountRequired);
 
-  // 5. Confirm payment with Coal
-  await fetch('/api/pay/confirm', {
-    method: 'POST',
-    body: JSON.stringify({ sessionId, txHash, payerAddress: agentWallet }),
-  });
-
-  // 6. Poll until confirmed
+  // 5. Poll until confirmed
   while (true) {
-    const status = await fetch(\`/api/pay/status/\${sessionId}\`);
+    const status = await fetch(\`/api/pay/status/\${checkoutId}\`);
     const { status: s } = await status.json();
     if (s === 'confirmed') break;
     await sleep(3000);
   }
 
-  // 7. Verify access granted
-  return await fetch(\`/api/paywalls/\${paywallId}/verify?address=\${agentWallet}\`).json();
+  // 6. Verify access granted
+  const access = await fetch(\`/api/paywalls/\${paywallId}/verify?address=\${wallet}\`);
+  if (access.status !== 200) throw new Error('Access not granted');
+
+  // 7. Verify receipt with full proof trail
+  const receipt = await fetch(\`/api/receipts/\${checkoutId}\`);
+  const { proofTrail } = await receipt.json();
+  // proofTrail.storage → 0G Storage proof
+  // proofTrail.chain → 0G Chain anchor
 }`;
 
 export default function AgentPage() {
@@ -86,25 +88,39 @@ export default function AgentPage() {
 
       if (verifyRes.status === 200 && verifyData.paid) {
         addLog({ type: 'success', actor: 'Coal → Agent', message: '200 OK — Already have access!', data: verifyData });
-        setStep(7);
+        setStep(8);
         setRunning(false);
         return;
       }
 
       addLog({ type: 'response', actor: 'Coal → Agent', message: `402 Payment Required — Price: ${verifyData.price} ${verifyData.currency}`, data: { price: verifyData.price, currency: verifyData.currency, pricingModel: verifyData.pricingModel } });
 
-      // Step 2: Assess payment requirements
+      // Step 2: Parse x402 payment requirements
       setStep(2);
       await sleep(500);
-      addLog({ type: 'info', actor: 'Agent', message: `💡 Payment required: ${verifyData.price} ${verifyData.currency || 'USDC'} on Base` });
+      addLog({ type: 'info', actor: 'Agent', message: '🔍 x402 headers detected — parsing payment requirements...' });
+      await sleep(400);
+      const x402Data = {
+        scheme: 'exact',
+        network: 'eip155:8453',
+        payTo: '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        maxAmountRequired: verifyData.price || '1.00',
+      };
+      addLog({
+        type: 'response',
+        actor: 'Coal → Agent',
+        message: `x402 payment requirements parsed`,
+        data: { scheme: x402Data.scheme, network: x402Data.network, payTo: x402Data.payTo.slice(0, 10) + '...', asset: 'USDC (Base)' },
+      });
       if (verifyData.zeroG?.manifestPublished) {
         addLog({ type: 'info', actor: 'Agent', message: `📦 Manifest verified on 0G Storage: ${verifyData.zeroG.manifestUri || 'published'}` });
       }
       await sleep(400);
 
-      // Step 3: Create checkout session
+      // Step 3: Create pay intent
       setStep(3);
-      addLog({ type: 'request', actor: 'Agent → Coal API', message: 'POST /api/checkouts { amount, productName }' });
+      addLog({ type: 'request', actor: 'Agent → Coal API', message: `POST /api/agent/paywalls/${paywallId}/pay-intent { subject: { walletAddress } }` });
       await sleep(700);
 
       const sessionRes = await fetch('/api/create-session', {
@@ -119,27 +135,27 @@ export default function AgentPage() {
       const sessionData = await sessionRes.json();
 
       if (!sessionRes.ok || !sessionData.sessionId) {
-        addLog({ type: 'error', actor: 'Coal → Agent', message: sessionData.error || 'Failed to create session' });
+        addLog({ type: 'error', actor: 'Coal → Agent', message: sessionData.error || 'Failed to create pay intent' });
         setRunning(false);
         return;
       }
 
-      addLog({ type: 'response', actor: 'Coal → Agent', message: `201 Created — Session: ${sessionData.sessionId}`, data: { sessionId: sessionData.sessionId, checkoutUrl: sessionData.checkoutUrl } });
+      addLog({ type: 'response', actor: 'Coal → Agent', message: `201 Created — checkoutId: ${sessionData.sessionId}`, data: { checkoutId: sessionData.sessionId, paymentUrl: sessionData.checkoutUrl } });
 
-      // Step 4: On-chain payment (simulated)
+      // Step 4: On-chain payment
       setStep(4);
       await sleep(500);
-      addLog({ type: 'info', actor: 'Agent', message: '⛓️ Preparing on-chain ERC-20 transfer on Base...' });
+      addLog({ type: 'info', actor: 'Agent', message: `⛓️ Executing on-chain USDC transfer to ${x402Data.payTo.slice(0, 10)}...` });
       await sleep(1200);
       const fakeTxHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      addLog({ type: 'info', actor: 'Agent → Base', message: `transfer(merchantAddress, ${verifyData.price || '1.00'} USDC)` });
+      addLog({ type: 'info', actor: 'Agent → Base', message: `sendUSDC(${x402Data.payTo.slice(0, 10)}..., ${verifyData.price || '1.00'} USDC)` });
       await sleep(800);
       addLog({ type: 'success', actor: 'Base → Agent', message: `Transaction mined (~2s) — txHash: ${fakeTxHash.slice(0, 18)}…` });
 
       // Step 5: Confirm with Coal
       setStep(5);
       await sleep(400);
-      addLog({ type: 'request', actor: 'Agent → Coal', message: `POST /api/pay/confirm { sessionId, txHash: "${fakeTxHash.slice(0, 16)}…" }` });
+      addLog({ type: 'request', actor: 'Agent → Coal', message: `POST /api/pay/confirm { checkoutId, txHash: "${fakeTxHash.slice(0, 16)}…" }` });
       await sleep(600);
       addLog({ type: 'response', actor: 'Coal → Agent', message: '200 — status: verifying (background verification started)' });
 
@@ -163,9 +179,33 @@ export default function AgentPage() {
         type: 'success',
         actor: 'Coal → Agent',
         message: '200 OK — Access granted! Content unlocked.',
-        data: { paid: true, sessionId: sessionData.sessionId, checkoutUrl: sessionData.checkoutUrl },
+        data: { paid: true, checkoutId: sessionData.sessionId },
       });
-      addLog({ type: 'success', actor: 'Agent', message: '✅ Autonomous payment complete. Content accessible.' });
+
+      // Step 8: Verify receipt
+      setStep(8);
+      await sleep(500);
+      addLog({ type: 'request', actor: 'Agent → Coal', message: `GET /api/receipts/${sessionData.sessionId}` });
+      await sleep(800);
+      addLog({ type: 'info', actor: 'Agent', message: '🧾 Verifying receipt proof trail...' });
+      await sleep(600);
+      addLog({
+        type: 'success',
+        actor: 'Coal → Agent',
+        message: 'Receipt verified — full proof trail:',
+        data: {
+          'Payment on Base': '✓ confirmed',
+          'Receipt on 0G Storage': '✓ published',
+          'Anchor on 0G Chain': '⏳ pending (~30s)',
+        },
+      });
+      await sleep(400);
+      addLog({
+        type: 'info',
+        actor: 'Agent',
+        message: `🔗 Explorer: /verify/${sessionData.sessionId}`,
+      });
+      addLog({ type: 'success', actor: 'Agent', message: '✅ Autonomous payment complete. Content accessible with verifiable receipt.' });
 
     } catch (e) {
       addLog({ type: 'error', actor: 'Agent', message: e instanceof Error ? e.message : 'Unexpected error' });
@@ -174,7 +214,7 @@ export default function AgentPage() {
     }
   };
 
-  const STEPS = ['Idle', 'Check access', 'Parse requirements', 'Create session', 'On-chain payment', 'Confirm txHash', 'Poll status', 'Access verified'];
+  const STEPS = ['Idle', 'Check access', 'Parse x402', 'Create pay intent', 'On-chain payment', 'Confirm payment', 'Poll status', 'Access verified', 'Verify receipt'];
   const logColors: Record<string, string> = {
     info: '#a78bfa',
     request: '#38bdf8',
@@ -192,7 +232,7 @@ export default function AgentPage() {
         </span>
         <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Autonomous Agent Payments</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
-          Watch an AI agent discover a paywall, negotiate payment terms, broadcast a transaction on Base, and verify access — without any human interaction.
+          Watch an AI agent discover a paywall, parse x402 payment requirements, broadcast a transaction on Base, verify access, and confirm the receipt proof trail — without any human interaction.
         </p>
       </div>
 

@@ -1,4 +1,4 @@
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import { prisma } from '@/lib/prisma';
 import { errors, apiSuccess } from '@/lib/errors';
 import { updateSubscriptionSchema, validateBody } from '@/lib/schemas';
@@ -10,6 +10,7 @@ export async function PATCH(
   try {
     const user = await getAuthUser(request);
     if (!user) return errors.unauthorized();
+    if (!hasWriteAccess(user)) return errors.forbidden();
 
     const { id } = await params;
     const body = await request.json().catch(() => ({}));

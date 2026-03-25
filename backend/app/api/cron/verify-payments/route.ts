@@ -11,6 +11,7 @@ import {
 import { publicClient, getSettlementToken, EXPLORER_URL } from '@/lib/chain';
 import { sendPaymentConfirmed } from '@/lib/emails/paymentConfirmed';
 import { publishVerifiedReceiptProof } from '@/lib/receipts/proof';
+import { postDAEvent } from '@/lib/0g/da';
 import {
     markSubscriptionInvoicePastDueBySessionId,
     syncSubscriptionAfterConfirmedPayment,
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
 
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -259,6 +260,23 @@ export async function POST(request: Request) {
                     '0G receipt publication failed without affecting settlement confirmation',
                 );
             }
+
+            // Post payment confirmation to 0G DA (fire-and-forget)
+            void postDAEvent('payment_confirmed', session.merchant.id, {
+                checkoutSessionId: session.id,
+                txHash,
+                amount: formattedAmount,
+                currency: session.currency,
+                from: transferFrom,
+                to: transferTo,
+                blockNumber: Number(receipt.blockNumber),
+                zeroGStorageUri: zeroGReceiptProof && !zeroGReceiptProof.skipped
+                    ? zeroGReceiptProof.artifact.storageUri
+                    : null,
+                zeroGAnchorTxHash: zeroGReceiptProof && !zeroGReceiptProof.skipped
+                    ? zeroGReceiptProof.anchor?.anchorTxHash ?? null
+                    : null,
+            });
 
             const metadata = session.metadata && typeof session.metadata === 'object'
                 ? (session.metadata as Record<string, unknown>)

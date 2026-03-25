@@ -100,6 +100,7 @@ export const rateLimiters = {
     confirm:  makeLimiter(5,  '1 m', 'rl:confirm'),
     console:  makeLimiter(60, '1 m', 'rl:console'),
     public:   makeLimiter(30, '1 m', 'rl:public'),
+    aiQuery:  makeLimiter(20, '1 m', 'rl:ai-query'),
 };
 
 export function getIP(request: Request): string {

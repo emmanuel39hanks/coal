@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, isWorkspaceOwner } from '@/lib/privy';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 import { errors, apiSuccess } from '@/lib/errors';
@@ -15,6 +15,7 @@ export async function POST(request: Request) {
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
+        if (!isWorkspaceOwner(user)) return errors.forbidden('Only the workspace owner can regenerate the webhook secret');
 
         const newSecret = `whsec_${crypto.randomBytes(32).toString('hex')}`;
 

@@ -1,13 +1,17 @@
-
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { errors, apiSuccess } from "@/lib/errors";
+import { getIP, checkRateLimit, rateLimiters } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
+    const ip = getIP(request);
+    const { limited } = await checkRateLimit(rateLimiters.public, ip);
+    if (limited) return errors.rateLimited();
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
     if (!id) {
-        return NextResponse.json({ error: "ID required" }, { status: 400 });
+        return errors.validation({ id: ["ID required"] });
     }
 
     const session = await prisma.checkoutSession.findUnique({
@@ -25,7 +29,7 @@ export async function GET(request: Request) {
     });
 
     if (!session) {
-        return NextResponse.json({ error: "Session not found" }, { status: 404 });
+        return errors.notFound("Session");
     }
 
     // Reject expired sessions — mark DB and return 410
@@ -33,7 +37,7 @@ export async function GET(request: Request) {
         if (session.status !== "expired") {
             await prisma.checkoutSession.update({ where: { id }, data: { status: "expired" } });
         }
-        return NextResponse.json({ error: "Session expired", status: "expired" }, { status: 410 });
+        return errors.gone("Session expired");
     }
 
     // Extract product info — prefer metadata, fall back to splits for older sessions
@@ -73,5 +77,5 @@ export async function GET(request: Request) {
         } : null
     };
 
-    return NextResponse.json(response);
+    return apiSuccess(response);
 }
