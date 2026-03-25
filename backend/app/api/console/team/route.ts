@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, type CoalUser } from '@/lib/privy';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { syncMerchantArtifacts } from '@/lib/0g/merchant';
@@ -53,6 +53,14 @@ export async function POST(request: Request) {
 
         const { limited } = await checkRateLimit(rateLimiters.console, user.id);
         if (limited) return errors.rateLimited();
+
+        // Only workspace owners and admins may invite team members.
+        // When acting via x-workspace-id, _callerRole is set to the caller's
+        // actual role; members and viewers must not be able to invite others.
+        const callerRole = (user as CoalUser)._callerRole;
+        if (callerRole && !['owner', 'admin'].includes(callerRole)) {
+            return errors.forbidden('Only workspace owners and admins can invite team members');
+        }
 
         const body = await request.json().catch(() => ({}));
         const { email, role } = body;

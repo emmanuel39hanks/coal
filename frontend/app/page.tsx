@@ -263,11 +263,11 @@ export default function Home() {
               </div>
             </BlurReveal>
 
-            {/* Pro — highlighted */}
+            {/* Pro — highlighted, coming soon */}
             <BlurReveal delay={0.1}>
-              <div className="flex flex-col p-8 rounded-[32px] bg-[var(--color-brand-navy)] border-2 border-[var(--color-brand-navy)] shadow-[6px_6px_0px_0px_var(--color-brand-orange)] h-full relative">
-                <div className="absolute top-6 right-6">
-                  <span className="px-3 py-1 rounded-full bg-[var(--color-brand-orange)] text-white text-[10px] font-black uppercase tracking-wider">Most popular</span>
+              <div className="flex flex-col p-8 rounded-[32px] bg-[var(--color-brand-navy)] border-2 border-[var(--color-brand-navy)] shadow-[6px_6px_0px_0px_var(--color-brand-orange)] h-full relative opacity-90">
+                <div className="absolute top-6 right-6 flex flex-col items-end gap-1.5">
+                  <span className="px-3 py-1 rounded-full bg-[var(--color-brand-orange)] text-white text-[10px] font-black uppercase tracking-wider">Coming soon</span>
                 </div>
                 <div className="mb-6">
                   <p className="text-xs font-bold text-white/50 uppercase tracking-widest mb-2">Pro</p>
@@ -287,21 +287,24 @@ export default function Home() {
                     "Priority email support",
                     "Higher API rate limits",
                   ].map((f) => (
-                    <li key={f} className="flex items-center gap-2.5 text-sm font-medium text-white">
+                    <li key={f} className="flex items-center gap-2.5 text-sm font-medium text-white/75">
                       <span className="w-4 h-4 rounded-full bg-[var(--color-brand-orange)]/20 border border-[var(--color-brand-orange)]/40 flex items-center justify-center shrink-0 text-[10px] text-[var(--color-brand-orange)] font-black">✓</span>
                       {f}
                     </li>
                   ))}
                 </ul>
-                <a href="/signup" className="mt-auto block text-center py-3 px-6 rounded-full bg-[var(--color-brand-orange)] border-2 border-[var(--color-brand-orange)] font-bold text-sm text-white shadow-[3px_3px_0px_0px_#c73f00] hover:shadow-[1px_1px_0px_0px_#c73f00] hover:translate-x-[2px] hover:translate-y-[2px] transition-all">
-                  Start free trial
-                </a>
+                <button disabled className="mt-auto block w-full text-center py-3 px-6 rounded-full bg-white/10 border-2 border-white/20 font-bold text-sm text-white/40 cursor-not-allowed">
+                  Coming soon
+                </button>
               </div>
             </BlurReveal>
 
-            {/* Enterprise */}
+            {/* Enterprise — coming soon */}
             <BlurReveal delay={0.15}>
-              <div className="flex flex-col p-8 rounded-[32px] bg-white border-2 border-black/8 h-full hover:border-black/20 transition-all">
+              <div className="flex flex-col p-8 rounded-[32px] bg-white border-2 border-black/8 h-full relative opacity-75">
+                <div className="absolute top-6 right-6">
+                  <span className="px-3 py-1 rounded-full bg-black/5 text-[var(--color-text-secondary)] text-[10px] font-black uppercase tracking-wider border border-black/8">Coming soon</span>
+                </div>
                 <div className="mb-6">
                   <p className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-widest mb-2">Enterprise</p>
                   <div className="flex items-baseline gap-1 mb-1">
@@ -319,15 +322,15 @@ export default function Home() {
                     "Dedicated support channel",
                     "Volume discounts",
                   ].map((f) => (
-                    <li key={f} className="flex items-center gap-2.5 text-sm font-medium text-[var(--color-brand-navy)]">
-                      <span className="w-4 h-4 rounded-full bg-[var(--color-bg-base)] border border-black/10 flex items-center justify-center shrink-0 text-[10px] text-[var(--color-brand-navy)] font-black">✓</span>
+                    <li key={f} className="flex items-center gap-2.5 text-sm font-medium text-[var(--color-text-secondary)]">
+                      <span className="w-4 h-4 rounded-full bg-[var(--color-bg-base)] border border-black/10 flex items-center justify-center shrink-0 text-[10px] text-[var(--color-text-secondary)] font-black">✓</span>
                       {f}
                     </li>
                   ))}
                 </ul>
-                <a href="mailto:hello@usecoal.xyz" className="mt-auto block text-center py-3 px-6 rounded-full border-2 border-[var(--color-brand-navy)] font-bold text-sm text-[var(--color-brand-navy)] hover:bg-[var(--color-brand-navy)] hover:text-white transition-all">
-                  Talk to us
-                </a>
+                <button disabled className="mt-auto block w-full text-center py-3 px-6 rounded-full border-2 border-black/10 font-bold text-sm text-[var(--color-text-secondary)] cursor-not-allowed">
+                  Coming soon
+                </button>
               </div>
             </BlurReveal>
           </div>

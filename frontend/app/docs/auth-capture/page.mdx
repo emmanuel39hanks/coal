@@ -19,30 +19,37 @@ For most use cases - simple product sales, digital downloads, subscriptions - th
 
 ## How It Works
 
-```
-1. Legacy/internal system creates an authorization-capable session
-2. Customer completes authorization via Commerce Payments
-   → status: "authorized", authId set
-3. Merchant reviews order
-4. Merchant captures payment
-   → POST /api/console/payments/capture
-   → status: "confirmed"
+<PaymentFlowDiagram rows={[
+  { kind: 'phase', label: 'Authorization' },
+  { kind: 'event', actor: 'app', label: 'Legacy/internal system creates authorization-capable session' },
+  { kind: 'event', actor: 'user', label: 'Customer completes authorization' },
+  { kind: 'event', actor: 'coal', label: 'status: "authorized", authId set' },
 
-   OR voids the authorization:
-   → POST /api/console/payments/void
-   → status: "voided"
-```
+  { kind: 'phase', label: 'Merchant Review' },
+  { kind: 'event', actor: 'app', label: 'Merchant reviews order' },
+
+  { kind: 'phase', label: 'Capture or Void' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/console/payments/capture', sub: '{ sessionId }' },
+  { kind: 'event', actor: 'coal', label: 'status: "confirmed" ✓' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/console/payments/void', sub: '{ sessionId }' },
+  { kind: 'event', actor: 'coal', label: 'status: "voided" — authorization released' },
+]} />
 
 Authorizations expire according to the session's `authExpiresAt` value. Check that timestamp before attempting capture or void.
 
 ## Status Transitions
 
-```
-pending → authorized → confirmed   (authorized → captured)
-                     → voided      (authorization released)
-         → failed                  (authorization declined)
-         → expired                 (session timed out before auth)
-```
+<PaymentFlowDiagram rows={[
+  { kind: 'phase', label: 'Normal Path' },
+  { kind: 'event', actor: 'coal', label: 'pending → authorized → confirmed (captured)' },
+
+  { kind: 'phase', label: 'Release Path' },
+  { kind: 'event', actor: 'coal', label: 'authorized → voided (authorization released)' },
+
+  { kind: 'phase', label: 'Failure Paths' },
+  { kind: 'event', actor: 'coal', label: 'pending → failed (authorization declined)' },
+  { kind: 'event', actor: 'coal', label: 'pending → expired (session timed out before auth)' },
+]} />
 
 ## Creating an Authorize & Capture Session
 

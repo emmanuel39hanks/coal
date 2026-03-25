@@ -83,6 +83,7 @@ function InviteContent() {
                 return;
             }
 
+            // alreadyMember: true means the invite was auto-accepted on signup — treat as success
             setAccepted(true);
             setTimeout(() => router.replace('/console'), 2000);
         } catch (e) {

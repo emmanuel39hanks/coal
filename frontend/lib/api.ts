@@ -7,17 +7,30 @@ export function getApiUrl() {
   return getApiBaseUrl();
 }
 
+// Read the active workspace from localStorage directly so this works
+// in both hook and non-hook contexts (e.g. SWR fetcher callbacks).
+function getStoredWorkspaceId(): string | null {
+  try {
+    return localStorage.getItem('coal:workspaceId');
+  } catch {
+    return null;
+  }
+}
+
 export async function apiFetch(
   path: string,
   options: RequestInit = {},
   getToken?: () => Promise<string | null>
 ): Promise<Response> {
   const token = getToken ? await getToken() : null;
+  const workspaceId = getStoredWorkspaceId();
   return fetch(`${getApiBaseUrl()}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // Pass active workspace so backend uses the correct merchantId
+      ...(workspaceId ? { 'x-workspace-id': workspaceId } : {}),
       ...options.headers,
     },
   });

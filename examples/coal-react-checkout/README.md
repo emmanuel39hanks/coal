@@ -27,7 +27,7 @@ npm run dev
 |---|---|---|
 | `COAL_API_KEY` | ✅ | Your Coal API key (`coal_live_...`) |
 | `COAL_API_URL` | — | Defaults to `https://api.usecoal.xyz` |
-| `NEXT_PUBLIC_COAL_BASE_URL` | — | Defaults to `https://usecoal.xyz` |
+| `NEXT_PUBLIC_COAL_BASE_URL` | — | Defaults to `https://www.usecoal.xyz` |
 
 ## How the `@coal/react` integration works
 
