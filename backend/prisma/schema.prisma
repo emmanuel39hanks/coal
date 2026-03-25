@@ -204,10 +204,15 @@ model FundingIntent {
   provider             String               @default("moonpay")
   status               String               @default("pending")
   walletAddress        String
+  walletType           String               @default("external")
   baseCurrencyCode     String               @default("usd")
   baseCurrencyAmount   Decimal?             @db.Decimal(18, 6)
   currencyCode         String
   quoteCurrencyAmount  Decimal              @db.Decimal(18, 6)
+  fundingAsset         String               @default("eth_base")
+  targetSettlementAsset String?
+  gasReserve           Decimal?             @db.Decimal(18, 6)
+  routeEstimate        Json?
   providerEnvironment  String?
   customerEmail        String?
   externalCustomerId   String?
@@ -215,6 +220,7 @@ model FundingIntent {
   providerTransactionId String?             @unique
   trackerUrl           String?
   returnUrl            String?
+  resumeState          String               @default("funding_pending")
   completedAt          DateTime?
   failedAt             DateTime?
   failureReason        String?

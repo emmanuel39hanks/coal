@@ -56,6 +56,7 @@ export const createCheckoutSchema = z.object({
 export const confirmPaymentSchema = z.object({
     sessionId: z.string().min(1, 'Session ID required'),
     txHash: txHashField,
+    fundingIntentId: z.string().optional(),
     signature: z.string().optional(), // EIP-712 (Task 13 — optional for now)
     payerAddress: evmAddress.optional(),
     customerEmail: optionalEmail,
@@ -131,7 +132,8 @@ export const savePayerInfoSchema = z.object({
 
 export const createFundingIntentSchema = z.object({
     sessionId: z.string().min(1, 'Session ID required'),
-    walletAddress: evmAddress,
+    walletAddress: evmAddress.optional(),
+    fundingMode: z.enum(['embedded', 'external']).optional(),
 });
 
 // ─── Console Keys ─────────────────────────────────────────────────────────────

@@ -15,6 +15,18 @@ export async function GET(request: Request) {
 
         if (!dbUser) return errors.notFound('User');
 
+        // Team members and workspace sub-users skip onboarding — mark complete if not already
+        if (!dbUser.onboardingComplete) {
+            const isMember = await prisma.teamMember.findFirst({ where: { userId: user.id } });
+            if (isMember) {
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { onboardingComplete: true, onboardingStep: 7 },
+                });
+                return apiSuccess({ step: 7, complete: true });
+            }
+        }
+
         return apiSuccess({
             step: dbUser.onboardingComplete ? 7 : dbUser.onboardingStep,
             complete: dbUser.onboardingComplete,

@@ -30,8 +30,8 @@ export default function FiatOnramp({
 
   const helperText = useMemo(() => {
     if (note) return note
-    if (!walletAddress) return 'Coal will connect or create a wallet first, then MoonPay will fund it with card.'
-    return 'MoonPay opens in a secure checkout, funds your wallet first, and then returns you here. Coal completes the actual payment only after you sign the onchain transfer from that wallet.'
+    if (!walletAddress) return 'Coal will securely sign you in and create your Coal wallet first, then MoonPay will fund it with card.'
+    return 'MoonPay securely funds your Coal wallet first, then Coal completes the merchant payment from that same wallet onchain.'
   }, [note, walletAddress])
 
   const openForWallet = useCallback(async (resolvedWalletAddress: string) => {

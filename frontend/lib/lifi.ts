@@ -1,9 +1,21 @@
 'use client';
 
-import { createConfig, getRoutes, type RoutesRequest } from '@lifi/sdk';
-import { IS_TESTNET, getSettlementToken } from '@/lib/chain';
+import {
+  config as lifiConfig,
+  convertQuoteToRoute,
+  createConfig,
+  EVM,
+  executeRoute,
+  getQuote,
+  getRoutes,
+  type QuoteRequestToAmount,
+  type RouteExtended,
+  type RoutesRequest,
+} from '@lifi/sdk';
+import { createWalletClient, custom, parseUnits } from 'viem';
+import { base, baseSepolia } from 'viem/chains';
+import { IS_TESTNET, getNativeFundingToken, getSettlementToken } from '@/lib/chain';
 
-// Initialize LiFi SDK
 createConfig({
   integrator: 'coal-payments',
 });
@@ -34,15 +46,28 @@ function getTokenIcon(symbol: string) {
 }
 
 const settlementToken = getSettlementToken();
-const settlementChainId = IS_TESTNET ? 84532 : 8453;
+const settlementChain = IS_TESTNET ? baseSepolia : base;
+const settlementChainId = settlementChain.id;
+const nativeFundingToken = getNativeFundingToken();
 
-export const USDC_BASE: TokenOption = {
+export const SETTLEMENT_TOKEN_OPTION: TokenOption = {
   address: settlementToken.address,
   chainId: settlementChainId,
   decimals: settlementToken.decimals,
   symbol: settlementToken.symbol,
   name: settlementToken.name,
   icon: getTokenIcon(settlementToken.symbol),
+};
+
+export const USDC_BASE: TokenOption = SETTLEMENT_TOKEN_OPTION;
+
+export const ETH_BASE: TokenOption = {
+  address: nativeFundingToken.address,
+  chainId: settlementChainId,
+  decimals: nativeFundingToken.decimals,
+  symbol: nativeFundingToken.symbol,
+  name: `${nativeFundingToken.name} (${IS_TESTNET ? 'Base Sepolia' : 'Base'})`,
+  icon: getTokenIcon(nativeFundingToken.symbol),
 };
 
 export const AUDITED_ROUTE_OPTIONS: TokenOption[] = [
@@ -68,45 +93,36 @@ function dedupeTokenOptions(options: TokenOption[]) {
 }
 
 export const TOKEN_OPTIONS: TokenOption[] = IS_TESTNET
-  ? [USDC_BASE]
+  ? [SETTLEMENT_TOKEN_OPTION]
   : dedupeTokenOptions([
-      USDC_BASE,
+      SETTLEMENT_TOKEN_OPTION,
       ...AUDITED_ROUTE_OPTIONS,
     ]);
 
-/**
- * Fetch a LiFi route quote.
- * We pass `fromAmount` as the USDC amount scaled to the source token's decimals
- * (a rough 1:1 USD estimate) and return the best route's fromAmount so the UI
- * can display how much of the source token the user will spend.
- */
 export async function getLifiQuote(params: {
   fromToken: TokenOption;
-  toAmountUSDC: number; // Amount merchant needs to receive in USDC
+  toAmountUSDC: number;
   fromAddress: string;
-  toAddress: string; // Merchant payout address
+  toAddress: string;
 }): Promise<{ fromAmount: string; estimatedTime: number; fees: string } | null> {
   try {
     if (IS_TESTNET) {
       return null;
     }
 
-    // Estimate: request a route for roughly `toAmountUSDC` worth of the fromToken
-    // (1 USD ≈ 1 unit of the token as a starting estimate for the LiFi query).
-    // LiFi will return the actual fromAmount needed for the target output.
     const estimatedFromAmount = BigInt(
       Math.floor(params.toAmountUSDC * 10 ** params.fromToken.decimals)
     ).toString();
 
     const routeRequest: RoutesRequest = {
       fromChainId: params.fromToken.chainId,
-      toChainId: USDC_BASE.chainId,
+      toChainId: SETTLEMENT_TOKEN_OPTION.chainId,
       fromTokenAddress: params.fromToken.address,
-      toTokenAddress: USDC_BASE.address,
+      toTokenAddress: SETTLEMENT_TOKEN_OPTION.address,
       fromAmount: estimatedFromAmount,
       fromAddress: params.fromAddress,
       toAddress: params.toAddress,
-      options: { slippage: 0.005 }, // 0.5% slippage
+      options: { slippage: 0.005 },
     };
 
     const result = await getRoutes(routeRequest);
@@ -124,4 +140,52 @@ export async function getLifiQuote(params: {
   } catch {
     return null;
   }
+}
+
+export async function getSettlementExecutionQuote(params: {
+  fromAddress: string;
+  toAddress: string;
+  settlementAmount: string;
+}) {
+  if (IS_TESTNET) {
+    throw new Error('Live LiFi route execution is not enabled on testnet.');
+  }
+
+  const request: QuoteRequestToAmount = {
+    fromChain: settlementChainId,
+    toChain: settlementChainId,
+    fromToken: ETH_BASE.address,
+    toToken: SETTLEMENT_TOKEN_OPTION.address,
+    toAmount: parseUnits(params.settlementAmount, SETTLEMENT_TOKEN_OPTION.decimals).toString(),
+    fromAddress: params.fromAddress,
+    toAddress: params.toAddress,
+    integrator: 'coal-payments',
+    slippage: 0.005,
+  };
+
+  return getQuote(request);
+}
+
+export async function executeSettlementRoute(params: {
+  quote: Awaited<ReturnType<typeof getSettlementExecutionQuote>>;
+  wallet: {
+    address: string;
+    getEthereumProvider: () => Promise<any>;
+  };
+}): Promise<RouteExtended> {
+  const provider = await params.wallet.getEthereumProvider();
+  const walletClient = createWalletClient({
+    account: params.wallet.address as `0x${string}`,
+    chain: settlementChain,
+    transport: custom(provider),
+  });
+
+  lifiConfig.setProviders([
+    EVM({
+      getWalletClient: async () => walletClient,
+    }),
+  ]);
+
+  const route = convertQuoteToRoute(params.quote);
+  return executeRoute(route);
 }

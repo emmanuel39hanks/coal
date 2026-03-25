@@ -69,6 +69,12 @@ export async function POST(request: Request) {
         where: { id: fundingIntent.id },
         data: {
           status: nextStatus,
+          resumeState:
+            nextStatus === 'funded'
+              ? 'funded_ready_to_route'
+              : nextStatus === 'failed' || nextStatus === 'cancelled'
+                ? 'funded_but_unsettled'
+                : 'funding_processing',
           providerTransactionId:
             normalized.providerTransactionId || fundingIntent.providerTransactionId || null,
           trackerUrl: normalized.trackerUrl || fundingIntent.trackerUrl || null,
