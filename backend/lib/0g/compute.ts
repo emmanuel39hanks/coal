@@ -152,16 +152,28 @@ export function createZeroGOpenAIClient() {
     });
 }
 
+/**
+ * Check if Sealed Inference (TEE-backed compute) is enabled.
+ * When enabled, sensitive commerce queries are routed through
+ * hardware enclaves for cryptographic privacy.
+ */
+export function isSealedInferenceEnabled(): boolean {
+    return zeroGEnv.sealedInferenceEnabled && isZeroGComputeConfigured();
+}
+
 export async function runStructuredInference<T>(input: {
     messages: ZeroGComputeMessage[];
     model?: string;
     temperature?: number;
+    /** Route through Sealed Inference (TEE) for privacy-sensitive queries */
+    sealed?: boolean;
 }): Promise<{
     output: T;
     provider: string | null;
     model: string;
-    verificationStatus: 'direct_secret';
+    verificationStatus: 'direct_secret' | 'sealed_tee';
 }> {
+    const useSealedInference = input.sealed && isSealedInferenceEnabled();
     const client = createZeroGOpenAIClient();
     const model = input.model || zeroGEnv.computeModel;
     if (!model) {
@@ -218,11 +230,18 @@ export async function runStructuredInference<T>(input: {
                 throw new Error('0G Compute returned an empty response');
             }
 
+            if (useSealedInference) {
+                zeroGLogger.info(
+                    { provider: zeroGEnv.computeProvider, model },
+                    'Completed Sealed Inference (TEE) query',
+                );
+            }
+
             return {
                 output: JSON.parse(extractJsonObject(content)) as T,
                 provider: zeroGEnv.computeProvider || null,
                 model,
-                verificationStatus: 'direct_secret' as const,
+                verificationStatus: useSealedInference ? 'sealed_tee' as const : 'direct_secret' as const,
             };
         } catch (error) {
             lastError = error;

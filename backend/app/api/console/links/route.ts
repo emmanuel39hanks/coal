@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import crypto from 'crypto';
 import { createLinkSchema, validateBody } from '@/lib/schemas';
 import { errors, apiSuccess } from '@/lib/errors';
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
+        if (!hasWriteAccess(user)) return errors.forbidden();
 
         const { limited } = await checkRateLimit(rateLimiters.console, user.id);
         if (limited) return errors.rateLimited();
@@ -49,6 +50,14 @@ export async function POST(request: Request) {
         if (!validated.success) return validated.error;
 
         const { productId, slug, title, description, payerInfo } = validated.data;
+
+        // Verify product ownership before linking
+        if (productId) {
+            const product = await prisma.product.findFirst({
+                where: { id: productId, merchantId: user.id, active: true },
+            });
+            if (!product) return errors.notFound('Product');
+        }
 
         let finalSlug = slug;
         if (finalSlug) {

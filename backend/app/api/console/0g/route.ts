@@ -1,10 +1,11 @@
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, errors } from '@/lib/errors';
 import { getMerchantZeroGState, syncMerchantArtifacts } from '@/lib/0g/merchant';
 import { checkZeroGChainHealth } from '@/lib/0g/chain';
 import { checkStorageHealth } from '@/lib/0g/storage';
-import { listComputeServices } from '@/lib/0g/compute';
+import { listComputeServices, isSealedInferenceEnabled } from '@/lib/0g/compute';
+import { checkDAHealth } from '@/lib/0g/da';
 import { zeroGEnv } from '@/lib/0g/env';
 
 export async function GET(request: Request) {
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
             storageResult,
             chainResult,
             computeResult,
+            daResult,
             artifacts,
             anchors,
             computeJobs,
@@ -64,6 +66,17 @@ export async function GET(request: Request) {
                     error: error instanceof Error ? error.message : '0G compute health failed',
                 })),
 
+            checkDAHealth()
+                .then((details) => ({
+                    ok: details.connected || !details.enabled,
+                    details,
+                }))
+                .catch((error) => ({
+                    ok: false as const,
+                    details: { enabled: false, configured: false, connected: false, grpcUrl: '' },
+                    error: error instanceof Error ? error.message : '0G DA health failed',
+                })),
+
             // Recent artifacts for this merchant
             prisma.storedArtifact.findMany({
                 where: { merchantId: user.id },
@@ -98,6 +111,7 @@ export async function GET(request: Request) {
             storage: storageResult,
             chain: chainResult,
             compute: computeResult,
+            da: daResult,
         };
 
         const status = Object.values(checks).every((check) => check.ok) ? 'ok' : 'degraded';
@@ -147,12 +161,18 @@ export async function GET(request: Request) {
         const paywallArtifacts = artifacts.filter((a) => a.kind === 'paywall_manifest');
         const memoryArtifacts = artifacts.filter((a) => a.kind === 'merchant_memory_snapshot');
 
+        const sealedJobs = computeJobs.filter((j) => j.verificationStatus === 'sealed_tee');
+
         return apiSuccess({
             status,
             timestamp: new Date().toISOString(),
             explorers: {
                 storageScan: storageScanBase,
                 chainScan: chainScanBase,
+            },
+            sealedInference: {
+                enabled: isSealedInferenceEnabled(),
+                queriesProcessed: sealedJobs.length,
             },
             stats: {
                 receiptsStored: receiptArtifacts.length,
@@ -161,6 +181,7 @@ export async function GET(request: Request) {
                 memoryPublished: memoryArtifacts.length > 0,
                 paywallManifests: paywallArtifacts.length,
                 aiQueries: computeJobs.length,
+                sealedQueries: sealedJobs.length,
                 confirmedPayments: confirmedPaymentCount,
             },
             merchant: {
@@ -209,6 +230,7 @@ export async function POST(request: Request) {
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
+        if (!hasWriteAccess(user)) return errors.forbidden();
 
         const result = await syncMerchantArtifacts(user.id);
         return apiSuccess({ published: true, result });

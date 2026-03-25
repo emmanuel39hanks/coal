@@ -23,10 +23,10 @@ function SuccessContent() {
   }, [sessionId]);
 
   const DEMOS = [
+    { href: '/receipt', label: 'Verify receipt' },
     { href: '/paywall', label: 'Test x402 Paywall' },
     { href: '/agent', label: 'AI Agent demo' },
     { href: '/subscription', label: 'Try subscriptions' },
-    { href: '/splits', label: 'Revenue splits' },
   ];
 
   return (
@@ -71,6 +71,14 @@ function SuccessContent() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {sessionId && (
+              <a
+                href={`/receipt?id=${sessionId}`}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: '#ecfdf5', border: '2px solid #bbf7d0', borderRadius: '12px', padding: '12px', fontSize: '13px', fontWeight: 700, color: '#166534', textDecoration: 'none' }}
+              >
+                🧾 Verify Receipt (0G Proof Trail)
+              </a>
+            )}
             {txHash && (
               <a
                 href={`https://basescan.org/tx/${txHash}`}

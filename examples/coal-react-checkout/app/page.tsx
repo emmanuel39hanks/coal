@@ -27,6 +27,15 @@ const DEMOS = [
     tagColor: '#059669',
   },
   {
+    href: '/receipt',
+    emoji: '🧾',
+    label: 'Receipt Verification',
+    tag: 'Proof trail',
+    desc: 'Verify any payment with a 3-step proof trail: Payment on Base → Receipt on 0G Storage → Anchor on 0G Chain. Public, no auth needed.',
+    color: '#ecfdf5',
+    tagColor: '#059669',
+  },
+  {
     href: '/subscription',
     emoji: '🔄',
     label: 'Subscriptions',
@@ -43,6 +52,15 @@ const DEMOS = [
     desc: 'Define percentage-based split configs once. Coal distributes payment proceeds to multiple wallet addresses at settlement.',
     color: '#fef9c3',
     tagColor: '#ca8a04',
+  },
+  {
+    href: '/receipt',
+    emoji: '🧾',
+    label: 'Receipt Verification',
+    tag: '0G proof trail',
+    desc: 'Verify any payment with a 3-step proof trail: Base L2 confirmation, 0G Storage receipt, and 0G Chain anchor. Fully public, no API key needed.',
+    color: '#ecfdf5',
+    tagColor: '#059669',
   },
   {
     href: '/embed',
@@ -98,6 +116,7 @@ export default function HubPage() {
             { icon: '💵', text: 'USDC settlement' },
             { icon: '⚡', text: '~2s confirmation' },
             { icon: '🤖', text: '0G AI-ready' },
+            { icon: '🔐', text: 'Sealed inference' },
           ].map(b => (
             <span key={b.text} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '6px 14px', fontSize: '12px', fontWeight: 700, color: '#180D43' }}>
               {b.icon} {b.text}

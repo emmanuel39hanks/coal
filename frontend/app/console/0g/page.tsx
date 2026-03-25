@@ -39,6 +39,10 @@ type ZeroGData = {
     status: 'ok' | 'degraded';
     timestamp: string;
     explorers: { storageScan: string; chainScan: string };
+    sealedInference: {
+        enabled: boolean;
+        queriesProcessed: number;
+    };
     stats: {
         receiptsStored: number;
         receiptsAnchored: number;
@@ -46,6 +50,7 @@ type ZeroGData = {
         memoryPublished: boolean;
         paywallManifests: number;
         aiQueries: number;
+        sealedQueries: number;
         confirmedPayments: number;
     };
     merchant: {
@@ -69,6 +74,7 @@ type ZeroGData = {
         storage: { ok: boolean };
         chain: { ok: boolean };
         compute: { ok: boolean };
+        da: { ok: boolean };
     };
 };
 
@@ -171,8 +177,14 @@ export default function ZeroGConsolePage() {
                 <div className="flex items-center gap-3">
                     {/* Status badges */}
                     <div className="flex items-center gap-2">
-                        {['Storage', 'Chain', 'Compute'].map((label) => {
-                            const key = label.toLowerCase() as 'storage' | 'chain' | 'compute';
+                        {data?.sealedInference?.enabled && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] bg-purple-50 text-purple-700">
+                                <Lock size={10} variant="Bold" />
+                                Sealed
+                            </span>
+                        )}
+                        {['Storage', 'Chain', 'Compute', 'DA'].map((label) => {
+                            const key = label.toLowerCase() as 'storage' | 'chain' | 'compute' | 'da';
                             const ok = data?.checks[key]?.ok;
                             return (
                                 <span
@@ -255,6 +267,13 @@ export default function ZeroGConsolePage() {
                             iconColor="text-[var(--color-brand-orange)]"
                             label="AI queries"
                             value={stats?.aiQueries ?? 0}
+                            detail={
+                                (stats?.sealedQueries ?? 0) > 0
+                                    ? `${stats?.sealedQueries} sealed`
+                                    : data?.sealedInference?.enabled
+                                      ? 'Sealed ready'
+                                      : undefined
+                            }
                         />
                     </>
                 )}
@@ -449,12 +468,14 @@ function StatCard({
     iconColor,
     label,
     value,
+    detail,
 }: {
     icon: typeof ReceiptItem;
     iconBg: string;
     iconColor: string;
     label: string;
     value: number;
+    detail?: string;
 }) {
     return (
         <div className="bg-white p-6 rounded-[32px] border-2 border-black/5 h-40 group hover:border-[var(--color-brand-orange)]/20 transition-all">
@@ -463,6 +484,9 @@ function StatCard({
             </div>
             <p className="mt-3 text-[var(--color-text-secondary)] font-bold text-sm">{label}</p>
             <p className="text-3xl font-black text-[var(--color-brand-navy)]">{value}</p>
+            {detail && (
+                <p className="text-[11px] font-bold text-purple-600 mt-0.5">{detail}</p>
+            )}
         </div>
     );
 }

@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
         // Validate callbackUrl against SSRF blocklist (it's fetched server-side)
         if (callbackUrl) {
-            const urlCheck = validateWebhookUrl(callbackUrl);
+            const urlCheck = await validateWebhookUrl(callbackUrl);
             if (!urlCheck.valid) {
                 return errors.validation({ callbackUrl: [urlCheck.reason || 'Invalid callback URL'] });
             }
@@ -72,16 +72,18 @@ export async function POST(request: Request) {
                 description: linkedProduct?.name || productName || description || 'Coal Checkout',
                 payerInfoConfig: toPrismaNullableJson(payerInfo),
                 metadata: toPrismaJson({
+                    // User-supplied metadata goes into a namespaced key so it cannot
+                    // override system fields (billingType, splitConfigId, etc.)
+                    ...(metadata ? { custom: metadata } : {}),
                     productId:          linkedProduct?.id ?? productId ?? null,
                     productName:        linkedProduct?.name ?? productName ?? null,
                     productDescription: linkedProduct?.description ?? productDescription ?? null,
                     productImage:       linkedProduct?.image ?? productImage ?? null,
-                    billingType:        linkedProduct?.billingType ?? metadata?.billingType ?? null,
-                    billingInterval:    linkedProduct?.billingInterval ?? metadata?.billingInterval ?? null,
-                    billingIntervalCount: linkedProduct?.billingIntervalCount ?? metadata?.billingIntervalCount ?? null,
+                    billingType:        linkedProduct?.billingType ?? null,
+                    billingInterval:    linkedProduct?.billingInterval ?? null,
+                    billingIntervalCount: linkedProduct?.billingIntervalCount ?? null,
                     ...(splitConfigId && { splitConfigId }),
                     ...(payerInfo ? { payerInfoConfig: payerInfo } : {}),
-                    ...(metadata ?? {}),
                 }),
                 billingReason: linkedProduct?.billingType === 'subscription' ? 'subscription_initial' : 'one_time',
                 redirectUrl:  redirectUrl  || null,

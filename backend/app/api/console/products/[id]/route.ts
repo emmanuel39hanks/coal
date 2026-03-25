@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import { updateProductSchema, validateBody } from '@/lib/schemas';
 import { errors, apiSuccess } from '@/lib/errors';
 import { syncMerchantArtifacts } from '@/lib/0g/merchant';
@@ -12,6 +12,7 @@ export async function PUT(
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
+        if (!hasWriteAccess(user)) return errors.forbidden();
 
         const { id } = await params;
         const body = await request.json().catch(() => ({}));
@@ -75,6 +76,7 @@ export async function DELETE(
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
+        if (!hasWriteAccess(user)) return errors.forbidden();
 
         const { id } = await params;
         const existing = await prisma.product.findUnique({ where: { id } });

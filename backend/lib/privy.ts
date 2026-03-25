@@ -14,6 +14,22 @@ export type CoalUser = User & {
   _callerRole?: string;
 };
 
+// ---------------------------------------------------------------------------
+// Role-check helpers — use after getAuthUser() to enforce RBAC on write endpoints.
+// ---------------------------------------------------------------------------
+
+/** Returns true if the caller has write access (owner or admin). */
+export function hasWriteAccess(user: CoalUser): boolean {
+  if (!user._callerRole) return true; // direct account owner
+  return ['owner', 'admin'].includes(user._callerRole);
+}
+
+/** Returns true if the caller is the actual workspace/account owner. */
+export function isWorkspaceOwner(user: CoalUser): boolean {
+  if (!user._callerRole) return true; // direct account owner
+  return user._callerRole === 'owner';
+}
+
 export type PrivyIdentity = {
   privyDid: string;
   email: string | null;

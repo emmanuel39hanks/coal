@@ -63,7 +63,7 @@ export async function POST(request: Request) {
         const keyRecord = await validateApiKey(request);
         if (!keyRecord) return errors.unauthorized('Invalid or missing API Key');
 
-        const { limited } = await checkRateLimit(rateLimiters.checkout, keyRecord.id);
+        const { limited } = await checkRateLimit(rateLimiters.aiQuery, keyRecord.id);
         if (limited) return errors.rateLimited();
 
         const body = await request.json().catch(() => ({}));
@@ -81,6 +81,8 @@ export async function POST(request: Request) {
         }>({
             merchantId: context.merchantId,
             kind: 'policy_eval',
+            // Policy evaluation involves sensitive merchant and customer data
+            sealed: true,
             systemPrompt:
                 'You evaluate commerce policy decisions for Coal merchants. Use only the supplied merchant context and return compact JSON with decision, rationale, citations, and nextActions.',
             userPayload: {

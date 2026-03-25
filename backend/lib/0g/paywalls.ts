@@ -71,6 +71,16 @@ export async function buildPaywallManifest(paywallId: string): Promise<PaywallMa
             payIntentUrl: `${API_BASE_URL}/api/agent/paywalls/${paywall.id}/pay-intent`,
             receiptVerifyUrlTemplate: `${API_BASE_URL}/api/agent/receipts/{checkoutId}/verify`,
         },
+        x402: paywall.merchant.payoutAddress
+            ? {
+                scheme: 'exact' as const,
+                network: `eip155:${CHAIN_ID}`,
+                maxAmountRequired: `$${paywall.price.toString()}`,
+                asset: settlementToken.address,
+                payTo: paywall.merchant.payoutAddress,
+                resource: `${API_BASE_URL}/api/paywalls/${paywall.id}/verify`,
+            }
+            : null,
         merchantProfile: profileArtifact
             ? {
                 storageUri: profileArtifact.storageUri ?? null,

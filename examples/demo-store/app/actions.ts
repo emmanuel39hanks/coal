@@ -47,6 +47,12 @@ export async function createCheckout(formData: FormData) {
 
     const data = await response.json();
 
+    // After payment is confirmed via webhook, verify the receipt:
+    // const receipt = await fetch(`${COAL_API_URL}/api/receipts/${sessionId}`);
+    // const { proofTrail } = await receipt.json();
+    // proofTrail.storage → 0G Storage proof (immutable receipt)
+    // proofTrail.chain → 0G Chain anchor (tamper-proof verification)
+
     // Redirect user to the payment page
     if (data.url) {
         redirect(data.url);

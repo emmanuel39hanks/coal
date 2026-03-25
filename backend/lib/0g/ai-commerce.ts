@@ -150,6 +150,8 @@ export async function runMerchantStructuredJob<T>(input: {
     responseSchema?: z.ZodType<T>;
     model?: string;
     temperature?: number;
+    /** Use Sealed Inference (TEE) for privacy-sensitive queries */
+    sealed?: boolean;
 }) {
     let computeJobId: string | null = null;
 
@@ -172,6 +174,7 @@ export async function runMerchantStructuredJob<T>(input: {
                 runStructuredInference<T>({
                     model: input.model,
                     temperature: input.temperature ?? 0,
+                    sealed: input.sealed,
                     messages: [
                         {
                             role: 'system',

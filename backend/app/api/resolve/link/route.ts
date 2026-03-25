@@ -1,13 +1,17 @@
-
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { errors, apiSuccess } from "@/lib/errors";
+import { getIP, checkRateLimit, rateLimiters } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
+    const ip = getIP(request);
+    const { limited } = await checkRateLimit(rateLimiters.public, ip);
+    if (limited) return errors.rateLimited();
+
     const { searchParams } = new URL(request.url);
     const slug = searchParams.get("slug");
 
     if (!slug) {
-        return NextResponse.json({ error: "Slug required" }, { status: 400 });
+        return errors.validation({ slug: ["Slug required"] });
     }
 
     const link = await prisma.paymentLink.findUnique({
@@ -25,8 +29,8 @@ export async function GET(request: Request) {
     });
 
     if (!link || !link.active) {
-        return NextResponse.json({ error: "Link not found" }, { status: 404 });
+        return errors.notFound("Link");
     }
 
-    return NextResponse.json(link);
+    return apiSuccess(link);
 }

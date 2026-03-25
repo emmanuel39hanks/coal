@@ -1,8 +1,13 @@
 import { prisma } from '@/lib/prisma';
 import { errors, apiSuccess } from '@/lib/errors';
+import { getIP, checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 
 export async function GET(request: Request) {
     try {
+        const ip = getIP(request);
+        const { limited } = await checkRateLimit(rateLimiters.public, ip);
+        if (limited) return errors.rateLimited();
+
         const { searchParams } = new URL(request.url);
         const address = searchParams.get('address')?.toLowerCase();
 

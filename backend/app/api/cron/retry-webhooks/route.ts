@@ -74,7 +74,7 @@ async function attemptDelivery(eventId: string): Promise<void> {
 
 export async function POST(request: Request) {
     const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
         return errors.unauthorized();
     }
 

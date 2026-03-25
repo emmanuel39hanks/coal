@@ -59,7 +59,7 @@ coal/
 ├── frontend/     # Next.js UI app, docs site, dashboard, checkout surfaces
 ├── contracts/    # 0G receipt anchor contract package
 ├── packages/     # JS + React SDK surfaces
-├── examples/     # Demo-store style examples
+├── examples/     # Example integrations: React checkout, AgentKit, demo-store
 ├── 0g/           # 0G architecture + rollout planning docs
 ├── context/      # Current-state handoff docs for future agents/contributors
 ├── bugs/         # Original bug audit
@@ -85,6 +85,19 @@ Two separate Next.js apps are deployed from the same repo:
 
 - [backend](/Users/emmanuel/Documents/schemalabs/coal/backend) runs the API, verification jobs, agent routes, and 0G services
 - [frontend](/Users/emmanuel/Documents/schemalabs/coal/frontend) runs the dashboard, docs, checkout UI, and public pages
+
+## Examples
+
+The repo also includes runnable integration examples under [examples](/Users/emmanuel/Documents/schemalabs/coal/examples):
+
+- [coal-react-checkout](/Users/emmanuel/Documents/schemalabs/coal/examples/coal-react-checkout)
+  A full Next.js checkout demo built on `@coal/react`, including hosted checkout launch, success handling, receipt verification, and an agent-style simulation flow.
+- [agentkit-action](/Users/emmanuel/Documents/schemalabs/coal/examples/agentkit-action)
+  A Coal action provider for AgentKit with checkout, receipt verification, paywall, merchant-memory, and policy-evaluation actions.
+- [demo-store](/Users/emmanuel/Documents/schemalabs/coal/examples/demo-store)
+  A storefront-style example that creates Coal sessions, receives webhooks, and now verifies receipts against the 0G proof trail.
+
+If you want the quickest demo path, start with [coal-react-checkout](/Users/emmanuel/Documents/schemalabs/coal/examples/coal-react-checkout) and [examples/coal-react-checkout/README.md](/Users/emmanuel/Documents/schemalabs/coal/examples/coal-react-checkout/README.md).
 
 ## Key Surfaces
 

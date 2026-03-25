@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { CHAIN_ID, getSettlementToken } from '@/lib/chain';
 import { getPaywallZeroGState } from '@/lib/0g/paywalls';
+import { buildPaymentRequirements } from '@/lib/x402';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.usecoal.xyz';
 
@@ -100,8 +101,16 @@ export async function getPaywallVerificationState(input: {
                 },
                 {
                     type: 'x402',
-                    facilitator: API_BASE_URL,
-                    paymentUrl: `${API_BASE_URL}/api/paywalls/${paywall.id}/pay`,
+                    scheme: 'exact',
+                    network: `eip155:${CHAIN_ID}`,
+                    requirements: buildPaymentRequirements({
+                        id: paywall.id,
+                        price: paywall.price,
+                        currency: paywall.currency,
+                        name: paywall.name,
+                        description: paywall.description,
+                        merchant: paywall.merchant,
+                    }),
                 },
             ],
             payment: {

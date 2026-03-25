@@ -24,5 +24,11 @@ export async function GET(req: NextRequest) {
   );
 
   const data = await res.json().catch(() => ({}));
-  return NextResponse.json(data, { status: res.status });
+  const headers: Record<string, string> = {};
+  const xPayment = res.headers.get('X-PAYMENT');
+  if (xPayment) {
+    headers['X-PAYMENT'] = xPayment;
+    headers['Access-Control-Expose-Headers'] = 'X-PAYMENT';
+  }
+  return NextResponse.json(data, { status: res.status, headers });
 }
