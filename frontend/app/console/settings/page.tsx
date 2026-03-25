@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, TickCircle, EmptyWallet, AddCircle, Trash } from 'iconsax-reactjs';
+import { User, TickCircle, EmptyWallet, AddCircle, Trash, Link21, Lock, Eye, EyeSlash, Refresh } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
-import { useApi } from '@/lib/api';
+import { useApi, apiFetch } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/api-errors';
@@ -21,13 +22,22 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function SettingsPage() {
     const { fetcher, request } = useApi();
+    const { getAccessToken } = useAuth();
     const toast = useToast();
-    const { data: user, error, isLoading } = useSWR('/api/console/settings', fetcher);
+    const { data: user, isLoading } = useSWR('/api/console/settings', fetcher);
     const { data: teamData, isLoading: teamLoading } = useSWR('/api/console/team', fetcher);
+
     const [name, setName] = useState('');
     const [payoutAddress, setPayoutAddress] = useState('');
+    const [webhookUrl, setWebhookUrl] = useState('');
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState(false);
+
+    // Webhook secret
+    const [webhookSecretMasked, setWebhookSecretMasked] = useState('');
+    const [revealedSecret, setRevealedSecret] = useState('');
+    const [showSecret, setShowSecret] = useState(false);
+    const [regenLoading, setRegenLoading] = useState(false);
 
     // Team invite form
     const [showInviteForm, setShowInviteForm] = useState(false);
@@ -40,6 +50,8 @@ export default function SettingsPage() {
         if (user) {
             setName(user.name || '');
             setPayoutAddress(user.payoutAddress || '');
+            setWebhookUrl(user.webhookUrl || '');
+            setWebhookSecretMasked(user.webhookSecretMasked || '');
         }
     }, [user]);
 
@@ -49,17 +61,35 @@ export default function SettingsPage() {
         try {
             await request('/api/console/settings', {
                 method: 'PUT',
-                body: JSON.stringify({ name, payoutAddress })
+                body: JSON.stringify({ name, payoutAddress, webhookUrl: webhookUrl || null })
             });
             mutate('/api/console/settings');
             setSuccess(true);
             toast('success', 'Settings saved');
             setTimeout(() => setSuccess(false), 3000);
         } catch (e) {
-            console.error(e);
             toast('error', getErrorMessage(e, 'Failed to save settings'));
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleRegenSecret = async () => {
+        if (regenLoading) return;
+        setRegenLoading(true);
+        try {
+            const res = await apiFetch('/api/console/settings/webhook-secret', { method: 'POST' }, getAccessToken);
+            if (res.ok) {
+                const data = await res.json();
+                setRevealedSecret(data.webhookSecret);
+                setShowSecret(true);
+                setWebhookSecretMasked(`${data.webhookSecret.slice(0, 10)}...${data.webhookSecret.slice(-4)}`);
+                toast('success', 'New secret generated — save it now');
+            } else {
+                toast('error', 'Failed to regenerate secret');
+            }
+        } finally {
+            setRegenLoading(false);
         }
     };
 
@@ -73,9 +103,7 @@ export default function SettingsPage() {
                 body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
             });
             mutate('/api/console/team');
-            const msg = res?.pending
-                ? `Invite sent to ${res.email}`
-                : 'Team member added';
+            const msg = res?.pending ? `Invite sent to ${res.email}` : 'Team member added';
             toast('success', msg);
             setInviteEmail('');
             setInviteRole('member');
@@ -95,7 +123,6 @@ export default function SettingsPage() {
             mutate('/api/console/team');
             toast('success', 'Team member removed');
         } catch (e) {
-            console.error(e);
             toast('error', getErrorMessage(e, 'Failed to remove team member'));
         }
     };
@@ -107,7 +134,7 @@ export default function SettingsPage() {
                 <Skeleton className="h-4 w-52 rounded-full" />
             </div>
             <div className="bg-white rounded-[40px] border-2 border-black/5 p-8 space-y-6">
-                {[1, 2].map((i) => (
+                {[1, 2, 3].map((i) => (
                     <div key={i} className="space-y-2">
                         <Skeleton className="h-4 w-32 rounded-full ml-4" />
                         <Skeleton className="h-14 w-full rounded-full" />
@@ -115,23 +142,10 @@ export default function SettingsPage() {
                 ))}
                 <Skeleton className="h-14 w-full rounded-full" />
             </div>
-            <div className="bg-white rounded-[40px] border-2 border-black/5 p-8 space-y-4">
-                <div className="flex items-center justify-between">
-                    <Skeleton className="h-6 w-24 rounded-lg" />
-                    <Skeleton className="h-9 w-32 rounded-full" />
-                </div>
-                {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between py-3 border-b border-black/5">
-                        <div className="space-y-1.5">
-                            <Skeleton className="h-4 w-28 rounded-full" />
-                            <Skeleton className="h-3 w-40 rounded-full" />
-                        </div>
-                        <Skeleton className="h-6 w-16 rounded-full" />
-                    </div>
-                ))}
-            </div>
         </div>
     );
+
+    const displaySecret = showSecret && revealedSecret ? revealedSecret : webhookSecretMasked;
 
     return (
         <div className="space-y-8 max-w-2xl mx-auto">
@@ -141,9 +155,10 @@ export default function SettingsPage() {
                 className="text-center md:text-left"
             >
                 <h1 className="text-3xl font-black text-[var(--color-brand-navy)] tracking-tight">Settings</h1>
-                <p className="text-[var(--color-text-secondary)] font-medium">Manage your profile and payouts.</p>
+                <p className="text-[var(--color-text-secondary)] font-medium">Manage your profile, payouts, and webhooks.</p>
             </motion.div>
 
+            {/* Profile & Payout */}
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -194,11 +209,94 @@ export default function SettingsPage() {
                                 }`}
                         >
                             {saving ? 'Saving...' : success ? (
-                                <>
-                                    <TickCircle size={20} variant="Bold" />
-                                    Saved!
-                                </>
+                                <><TickCircle size={20} variant="Bold" />Saved!</>
                             ) : 'Save Changes'}
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+
+            {/* Webhooks */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="bg-white rounded-[40px] border-2 border-black/5 p-8 shadow-sm"
+            >
+                <div className="mb-6">
+                    <h2 className="text-xl font-black text-[var(--color-brand-navy)]">Webhooks</h2>
+                    <p className="text-sm text-[var(--color-text-secondary)] font-medium">
+                        Receive real-time payment notifications on your server.
+                    </p>
+                </div>
+
+                <div className="space-y-6">
+                    {/* Webhook URL */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2 pl-4">
+                            <Link21 size={18} variant="Bold" className="text-[var(--color-brand-orange)]" />
+                            <label className="text-sm font-bold text-[var(--color-brand-navy)]">Webhook URL</label>
+                        </div>
+                        <input
+                            value={webhookUrl}
+                            onChange={e => setWebhookUrl(e.target.value)}
+                            className="w-full h-14 px-6 rounded-full bg-gray-100 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium text-[var(--color-brand-navy)] text-sm"
+                            placeholder="https://yoursite.com/webhooks/coal"
+                        />
+                        <p className="text-xs text-[var(--color-text-secondary)] pl-4 mt-2">
+                            Coal will POST a signed <code className="font-mono bg-gray-100 px-1 rounded">checkout.session.completed</code> event here when a payment is confirmed.
+                        </p>
+                    </div>
+
+                    {/* Webhook Secret */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2 pl-4">
+                            <Lock size={18} variant="Bold" className="text-[var(--color-brand-orange)]" />
+                            <label className="text-sm font-bold text-[var(--color-brand-navy)]">Signing Secret</label>
+                        </div>
+                        <div className="flex gap-3">
+                            <div className="flex-1 relative">
+                                <input
+                                    readOnly
+                                    value={showSecret && revealedSecret ? displaySecret : (webhookSecretMasked || '—')}
+                                    className="w-full h-14 px-6 pr-12 rounded-full bg-gray-100 border-2 border-transparent outline-none font-mono text-xs text-[var(--color-brand-navy)] select-all"
+                                />
+                                {revealedSecret && (
+                                    <button
+                                        onClick={() => setShowSecret(v => !v)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[var(--color-brand-navy)] transition-colors"
+                                    >
+                                        {showSecret ? <EyeSlash size={18} variant="Linear" /> : <Eye size={18} variant="Linear" />}
+                                    </button>
+                                )}
+                            </div>
+                            <button
+                                onClick={handleRegenSecret}
+                                disabled={regenLoading}
+                                title="Regenerate secret"
+                                className="h-14 px-5 rounded-full bg-gray-100 border-2 border-transparent hover:border-[var(--color-brand-orange)] text-[var(--color-brand-navy)] flex items-center gap-2 font-bold text-sm transition-all disabled:opacity-50"
+                            >
+                                <Refresh size={18} variant="Linear" className={regenLoading ? 'animate-spin' : ''} />
+                                Regenerate
+                            </button>
+                        </div>
+                        {showSecret && revealedSecret && (
+                            <p className="text-xs font-bold text-amber-600 pl-4 mt-2">
+                                Save this secret now — it won&apos;t be shown again after you leave this page.
+                            </p>
+                        )}
+                        <p className="text-xs text-[var(--color-text-secondary)] pl-4 mt-2">
+                            Verify the <code className="font-mono bg-gray-100 px-1 rounded">Coal-Signature</code> header on incoming webhooks using this secret.
+                        </p>
+                    </div>
+
+                    <div>
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="h-12 px-8 rounded-full font-bold bg-black text-white border-2 border-black shadow-[4px_4px_0px_0px_#FF5C16] hover:shadow-[2px_2px_0px_0px_#FF5C16] hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none transition-all text-sm"
+                        >
+                            {saving ? 'Saving...' : 'Save Webhook URL'}
                         </button>
                     </div>
                 </div>
@@ -215,7 +313,7 @@ export default function SettingsPage() {
                     <div>
                         <h2 className="text-xl font-black text-[var(--color-brand-navy)]">Team</h2>
                         <p className="text-sm text-[var(--color-text-secondary)] font-medium">
-                            Invite teammates to help manage your account.
+                            Invite teammates to help manage this workspace.
                         </p>
                     </div>
                     <button
@@ -227,7 +325,6 @@ export default function SettingsPage() {
                     </button>
                 </div>
 
-                {/* Invite Form */}
                 {showInviteForm && (
                     <div className="mb-6 p-6 bg-gray-50 rounded-3xl space-y-4">
                         <div className="flex flex-col sm:flex-row gap-3">
@@ -261,7 +358,6 @@ export default function SettingsPage() {
                     </div>
                 )}
 
-                {/* Members List */}
                 {teamLoading ? (
                     <div className="space-y-3">
                         {Array.from({ length: 3 }).map((_, i) => (
