@@ -164,6 +164,10 @@ export default function PaymentView({
     const amount = data.product ? data.product.price : (data.amount || '0.00');
     const currency = data.currency || getSettlementToken().symbol;
     const isRecurringProduct = data.product?.billingType === 'subscription';
+    const isRecurringRenewalCheckout =
+        isRecurringProduct &&
+        data.billingReason !== 'subscription_initial' &&
+        data.billingReason !== 'initial';
     const isDonation = !data.product && !data.amount;
     const [customAmount, setCustomAmount] = useState('');
     const sessionId = checkoutSessionId;
@@ -1212,7 +1216,7 @@ export default function PaymentView({
                     )}
 
                     {/* Divider + Card button */}
-                    {status !== 'verifying' && canUseFiatOnramp && !isRecurringProduct && (
+                    {status !== 'verifying' && canUseFiatOnramp && !isRecurringRenewalCheckout && (
                         <>
                             <div className="flex items-center gap-3 my-4">
                                 <div className="flex-1 h-px bg-gray-200" />
