@@ -50,6 +50,13 @@ Preview deployments should never silently point at the same production database 
 | `UPLOADTHING_APP_ID` | UploadThing app ID | UploadThing dashboard → app settings | Yes |
 | `UPLOADTHING_TOKEN` | UploadThing token | UploadThing dashboard → API keys | Yes |
 | `RESEND_API_KEY` | Resend API key for email | Resend dashboard → API keys | Yes |
+| `MOONPAY_PUBLISHABLE_KEY` | MoonPay publishable key used by backend URL signing | MoonPay dashboard → API keys | No |
+| `MOONPAY_SECRET_KEY` | MoonPay secret key used to sign buyer wallet funding URLs | MoonPay dashboard → API keys | No |
+| `MOONPAY_WEBHOOK_API_KEY` | MoonPay webhook signing key | MoonPay dashboard → Developers / webhooks | No |
+| `MOONPAY_ENV` | `sandbox` or `production` for the hosted MoonPay flow | Set manually | No |
+| `MOONPAY_BASE_CURRENCY_CODE` | Fiat base currency shown in the MoonPay flow | Usually `usd` | No |
+| `MOONPAY_CURRENCY_CODE` | Asset/network MoonPay should deliver in production | Example: `usdc_base` | No |
+| `MOONPAY_SANDBOX_CURRENCY_CODE` | Sandbox asset used only to validate the funding step | Example: `eth` | No |
 | `UPSTASH_REDIS_REST_URL` | Upstash Redis REST endpoint | Upstash console → database → REST API | No |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token | Upstash console → database → REST API | No |
 | `CHAIN_ENV` | Chain environment: `testnet` for Base Sepolia, empty for Base mainnet | Set manually | Yes |
@@ -244,14 +251,26 @@ MoonPay powers the fiat on-ramp (buy crypto with card).
 
 1. Create a developer account at [moonpay.com/business](https://www.moonpay.com/business).
 2. In the dashboard, navigate to **API Keys**.
-3. For testing, use the **Sandbox publishable key** and set `NEXT_PUBLIC_MOONPAY_ENV=sandbox`.
-4. Test the flow end-to-end using MoonPay's sandbox environment.
-5. When ready for production:
+3. Configure the backend keys:
+   - `MOONPAY_PUBLISHABLE_KEY`
+   - `MOONPAY_SECRET_KEY`
+   - `MOONPAY_WEBHOOK_API_KEY`
+   - `MOONPAY_ENV=sandbox`
+4. Mirror the publishable key in the frontend:
+   - `NEXT_PUBLIC_MOONPAY_API_KEY`
+   - `NEXT_PUBLIC_MOONPAY_ENV=sandbox`
+5. Add your frontend origin to MoonPay's allowed domains.
+6. Point MoonPay webhooks at `https://your-api-domain/api/webhooks/moonpay`.
+7. Test the card-funding flow end-to-end using MoonPay's sandbox environment.
+8. When ready for production:
    - Complete MoonPay's KYB (business verification) process.
-   - Switch to the **Live publishable key**.
-   - Set `NEXT_PUBLIC_MOONPAY_ENV=production`.
+   - Switch to the live publishable + secret keys.
+   - Set both `MOONPAY_ENV=production` and `NEXT_PUBLIC_MOONPAY_ENV=production`.
+   - Set `MOONPAY_CURRENCY_CODE` to the live asset/network you want MoonPay to deliver, e.g. `usdc_base`.
 
-> The frontend only uses the publishable key (`NEXT_PUBLIC_MOONPAY_API_KEY`). Never expose secret keys to the frontend.
+> Coal is non-custodial. MoonPay funds the payer wallet first, then Coal completes the actual payment only after the payer signs the onchain transfer. Coal should not pool or front user funds.
+>
+> The frontend only uses the publishable key (`NEXT_PUBLIC_MOONPAY_API_KEY`) to expose the card option. The backend signs the actual MoonPay URL with `MOONPAY_SECRET_KEY`. Never expose the secret or webhook key to the frontend.
 
 ---
 

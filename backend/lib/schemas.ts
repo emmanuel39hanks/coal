@@ -129,6 +129,11 @@ export const savePayerInfoSchema = z.object({
     payerInfo: payerInfoValuesSchema,
 });
 
+export const createFundingIntentSchema = z.object({
+    sessionId: z.string().min(1, 'Session ID required'),
+    walletAddress: evmAddress,
+});
+
 // ─── Console Keys ─────────────────────────────────────────────────────────────
 export const createKeySchema = z.object({
     name: z.string().max(100).optional(),

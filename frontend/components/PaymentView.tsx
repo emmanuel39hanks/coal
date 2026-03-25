@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Wallet, TickCircle, Copy, Verify, Money } from 'iconsax-reactjs';
 import { useAuth as usePrivy, useAuthWallets as useWallets } from '@/lib/auth';
@@ -82,6 +83,10 @@ export default function PaymentView({
     const [status, setStatus] = useState<'idle' | 'connecting' | 'processing' | 'verifying' | 'success' | 'failed'>('idle');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
+    const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(data.id ?? null);
+    const [fundingIntentId, setFundingIntentId] = useState<string | null>(null);
+    const [fundingStatus, setFundingStatus] = useState<'idle' | 'submitted' | 'processing' | 'funded' | 'failed'>('idle');
+    const [fundingMessage, setFundingMessage] = useState<string | null>(null);
     const [recurringConsentAccepted, setRecurringConsentAccepted] = useState(false);
     const payerInfoConfig = normalizePayerInfoConfig(data.payerInfoConfig);
     const [payerInfo, setPayerInfo] = useState(() => ({
@@ -92,6 +97,7 @@ export default function PaymentView({
     }));
     const [payerInfoErrors, setPayerInfoErrors] = useState<Partial<Record<PayerInfoField, string>>>({});
     const apiBaseUrl = getApiBaseUrl();
+    const searchParams = useSearchParams();
     const toast = useToast();
     const { login, authenticated } = usePrivy();
     const { wallets } = useWallets();
@@ -128,7 +134,7 @@ export default function PaymentView({
     const isRecurringProduct = data.product?.billingType === 'subscription';
     const isDonation = !data.product && !data.amount;
     const [customAmount, setCustomAmount] = useState('');
-    const sessionId = data.id ?? null;
+    const sessionId = checkoutSessionId;
     const parsedAmount = parseAmountInput(amount) ?? 0;
     const parsedCustomAmount = parseAmountInput(customAmount);
     const amountForQuote = isDonation ? (parsedCustomAmount ?? 0) : parsedAmount;
@@ -147,7 +153,7 @@ export default function PaymentView({
         selectedToken.address.toLowerCase() === USDC_BASE.address.toLowerCase() &&
         selectedToken.chainId === USDC_BASE.chainId;
     const isRoutePreviewSelection = !isDirectSettlementToken;
-    const canUseFiatOnramp = Boolean(process.env.NEXT_PUBLIC_MOONPAY_API_KEY && address);
+    const canUseFiatOnramp = Boolean(process.env.NEXT_PUBLIC_MOONPAY_API_KEY);
     const recurringLabel = isRecurringProduct
         ? `Every ${data.product?.billingIntervalCount && data.product.billingIntervalCount > 1 ? `${data.product.billingIntervalCount} ` : ''}${data.product?.billingInterval || 'month'}${data.product?.billingIntervalCount && data.product.billingIntervalCount > 1 ? 's' : ''}`
         : null;
@@ -161,6 +167,12 @@ export default function PaymentView({
         : {};
     const payerInfoValidationErrors = validatePayerInfo(payerInfoConfig, payerInfoPayload);
     const payerInfoValid = Object.keys(payerInfoValidationErrors).length === 0;
+    const cardFlowBlocked =
+        status !== 'idle' ||
+        (isDonation && (!customAmount || (parsedCustomAmount ?? 0) <= 0)) ||
+        (hasPayerInfoFields && !payerInfoValid) ||
+        (isRecurringProduct && !recurringConsentAccepted) ||
+        isRoutePreviewSelection;
 
     // Determine if using embedded wallet (gasless) vs external
     const isEmbeddedWallet = activeWallet?.walletClientType === 'privy';
@@ -233,6 +245,17 @@ export default function PaymentView({
             setStatus('idle');
         }
     }, [isConnected, status]);
+
+    useEffect(() => {
+        const resumedFundingIntentId = searchParams.get('fundingIntentId');
+        if (!resumedFundingIntentId || resumedFundingIntentId === fundingIntentId) {
+            return;
+        }
+
+        setFundingIntentId(resumedFundingIntentId);
+        setFundingStatus('processing');
+        setFundingMessage('Checking your card funding status…');
+    }, [fundingIntentId, searchParams]);
 
     // Fetch LiFi quote when a non-USDC token is selected
     useEffect(() => {
@@ -332,63 +355,208 @@ export default function PaymentView({
         return () => clearInterval(interval);
     };
 
+    const validateCheckoutReady = (mode: 'wallet' | 'card') => {
+        if (mode === 'card' && isRoutePreviewSelection) {
+            const message = `Card funding currently supports direct ${getSettlementToken().symbol} settlement only. Switch back to the direct settlement token before continuing.`;
+            setErrorMsg(message);
+            toast('error', message);
+            return false;
+        }
+
+        if (mode === 'wallet' && isRoutePreviewSelection) {
+            const message = 'Route previews are available, but live routed checkout execution is not enabled yet. Switch back to direct USDC settlement to complete payment.';
+            setErrorMsg(message);
+            toast('error', message);
+            return false;
+        }
+
+        if (isDonation && (!customAmount || (parsedCustomAmount ?? 0) <= 0)) {
+            const message = 'Enter an amount before continuing.';
+            setErrorMsg(message);
+            toast('error', message);
+            return false;
+        }
+
+        if (hasPayerInfoFields) {
+            const nextErrors = validatePayerInfo(payerInfoConfig, payerInfoPayload);
+            setPayerInfoErrors(nextErrors);
+            if (Object.keys(nextErrors).length > 0) {
+                const message = 'Please complete the required payer details before continuing.';
+                setErrorMsg(message);
+                toast('error', message);
+                return false;
+            }
+        }
+
+        if (isRecurringProduct && !recurringConsentAccepted) {
+            const message = 'Approve the recurring billing mandate before continuing.';
+            setErrorMsg(message);
+            toast('error', message);
+            return false;
+        }
+
+        return true;
+    };
+
+    const ensureCheckoutSession = async () => {
+        let currentSessionId = checkoutSessionId;
+
+        if (type === 'link' && !currentSessionId) {
+            const res = await fetch(`${apiBaseUrl}/api/pay/session`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    linkId: data.id,
+                    amount: isDonation ? customAmount : undefined,
+                    customerEmail: payerInfoPayload.email || undefined,
+                    subscriptionConsentAccepted: isRecurringProduct ? recurringConsentAccepted : undefined,
+                    payerInfo: hasPayerInfoFields ? payerInfoPayload : undefined,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error?.message || 'Failed to create payment session');
+            }
+            const json = await res.json();
+            currentSessionId = json.sessionId;
+            setCheckoutSessionId(currentSessionId);
+        }
+
+        if (!currentSessionId) {
+            throw new Error('Checkout session unavailable');
+        }
+
+        if (hasPayerInfoFields) {
+            const payerInfoRes = await fetch(`${apiBaseUrl}/api/pay/payer-info`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: currentSessionId,
+                    payerInfo: payerInfoPayload,
+                }),
+            });
+            if (!payerInfoRes.ok) {
+                const err = await payerInfoRes.json().catch(() => ({}));
+                throw new Error(err?.error?.message || 'Failed to save payer info');
+            }
+        }
+
+        return currentSessionId;
+    };
+
+    const createCardFundingIntent = async (walletAddress: string) => {
+        try {
+            setErrorMsg(null);
+
+            if (!validateCheckoutReady('card')) {
+                return null;
+            }
+
+            const currentSessionId = await ensureCheckoutSession();
+            const response = await fetch(`${apiBaseUrl}/api/pay/funding-intents`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: currentSessionId,
+                    walletAddress,
+                }),
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                const message = err?.error?.message || 'Failed to prepare card checkout';
+                setErrorMsg(message);
+                toast('error', message);
+                return null;
+            }
+
+            const json = await response.json();
+            setFundingIntentId(json.fundingIntentId);
+            setFundingMessage(json.testnetNotice || json.note || null);
+            return {
+                fundingIntentId: json.fundingIntentId as string,
+                url: json.url as string,
+                note: (json.note as string | undefined) ?? null,
+                testnetNotice: (json.testnetNotice as string | undefined) ?? null,
+            };
+        } catch (error) {
+            const message = (error as Error)?.message || 'Failed to prepare card checkout';
+            setErrorMsg(message);
+            toast('error', message);
+            return null;
+        }
+    };
+
+    useEffect(() => {
+        if (!fundingIntentId || (fundingStatus !== 'submitted' && fundingStatus !== 'processing')) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const pollFunding = async () => {
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/pay/funding-intents/${fundingIntentId}`);
+                if (!response.ok) {
+                    return;
+                }
+
+                const json = await response.json();
+                if (cancelled) {
+                    return;
+                }
+
+                if (json.status === 'funded') {
+                    setFundingStatus('funded');
+                    setFundingMessage(
+                        json.testnetNotice ||
+                            'Wallet funding confirmed. You still need to sign the onchain payment from this wallet to complete checkout.',
+                    );
+                    return;
+                }
+
+                if (json.status === 'failed' || json.status === 'cancelled') {
+                    setFundingStatus('failed');
+                    setFundingMessage(
+                        json.failureReason ||
+                            (json.status === 'cancelled'
+                                ? 'Card funding was cancelled before the wallet was funded.'
+                                : 'Card funding failed. Please try again or use wallet pay.'),
+                    );
+                    return;
+                }
+
+                setFundingStatus('processing');
+                setFundingMessage(
+                    json.testnetNotice ||
+                        'MoonPay is still processing the card purchase. Once funds arrive in your wallet, complete the onchain payment below.',
+                );
+            } catch {
+                // Keep the last visible state; polling will retry on the next tick.
+            }
+        };
+
+        void pollFunding();
+        const interval = setInterval(() => {
+            void pollFunding();
+        }, 4000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [apiBaseUrl, fundingIntentId, fundingStatus]);
+
     const processPayment = async () => {
         setStatus('processing');
         setErrorMsg(null);
         try {
-            if (isRoutePreviewSelection) {
-                const message = 'Route previews are available, but live routed checkout execution is not enabled yet. Switch back to direct USDC settlement to complete payment.';
+            if (!validateCheckoutReady('wallet')) {
                 setStatus('idle');
-                setErrorMsg(message);
-                toast('error', message);
                 return;
             }
 
-            let currentSessionId: string | undefined;
-            if (hasPayerInfoFields) {
-                const nextErrors = validatePayerInfo(payerInfoConfig, payerInfoPayload);
-                setPayerInfoErrors(nextErrors);
-                if (Object.keys(nextErrors).length > 0) {
-                    setStatus('idle');
-                    setErrorMsg('Please complete the required payer details before continuing.');
-                    toast('error', 'Please complete the required payer details before continuing.');
-                    return;
-                }
-            }
-
-            // 1. Create Session if Link
-            if (type === 'link') {
-                const res = await fetch(`${apiBaseUrl}/api/pay/session`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        linkId: data.id,
-                        amount: isDonation ? customAmount : undefined,
-                        customerEmail: payerInfoPayload.email || undefined,
-                        subscriptionConsentAccepted: isRecurringProduct ? recurringConsentAccepted : undefined,
-                        payerInfo: hasPayerInfoFields ? payerInfoPayload : undefined,
-                    })
-                });
-                if (!res.ok) throw new Error("Failed to create payment session");
-                const json = await res.json();
-                currentSessionId = json.sessionId;
-            } else {
-                currentSessionId = (data as any).id;
-                if (hasPayerInfoFields) {
-                    const payerInfoRes = await fetch(`${apiBaseUrl}/api/pay/payer-info`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            sessionId: currentSessionId,
-                            payerInfo: payerInfoPayload,
-                        }),
-                    });
-                    if (!payerInfoRes.ok) {
-                        const err = await payerInfoRes.json().catch(() => ({}));
-                        throw new Error(err?.error?.message || 'Failed to save payer info');
-                    }
-                }
-            }
+            const currentSessionId = await ensureCheckoutSession();
 
             // 2. Send ERC-20 transfer via Privy wallet
             const targetAddress = merchant.payoutAddress as `0x${string}`;
@@ -817,6 +985,44 @@ export default function PaymentView({
                         </div>
                     )}
 
+                    {status !== 'verifying' && fundingStatus !== 'idle' && (
+                        <div
+                            className={`mt-5 rounded-[24px] border p-4 ${
+                                fundingStatus === 'funded'
+                                    ? 'border-emerald-100 bg-emerald-50'
+                                    : fundingStatus === 'failed'
+                                        ? 'border-red-100 bg-red-50'
+                                        : 'border-blue-100 bg-blue-50'
+                            }`}
+                        >
+                            <div className="flex items-start gap-3">
+                                <span
+                                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                                        fundingStatus === 'funded'
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : fundingStatus === 'failed'
+                                                ? 'bg-red-100 text-red-600'
+                                                : 'bg-blue-100 text-blue-600'
+                                    }`}
+                                >
+                                    {fundingStatus === 'funded' ? '✓' : fundingStatus === 'failed' ? '!' : '…'}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-sm font-black text-[var(--color-brand-navy)]">
+                                        {fundingStatus === 'funded'
+                                            ? 'Wallet funded'
+                                            : fundingStatus === 'failed'
+                                                ? 'Card funding needs attention'
+                                                : 'Card funding in progress'}
+                                    </div>
+                                    <p className="mt-1 text-sm font-medium leading-relaxed text-[var(--color-text-secondary)]">
+                                        {fundingMessage}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Pay with Wallet */}
                     {status !== 'verifying' && (
                         <button
@@ -853,22 +1059,36 @@ export default function PaymentView({
                         </p>
                     )}
 
-                    {/* Divider + Card button — only show when a wallet is connected and MoonPay is configured */}
+                    {/* Divider + Card button */}
                     {status !== 'verifying' && canUseFiatOnramp && (
                         <>
                             <div className="flex items-center gap-3 my-4">
                                 <div className="flex-1 h-px bg-gray-200" />
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">or</span>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">or buy crypto with card</span>
                                 <div className="flex-1 h-px bg-gray-200" />
                             </div>
 
                             <FiatOnramp
-                                amount={isDonation ? customAmount : amount}
-                                walletAddress={address || ''}
-                                onSuccess={() => {
-                                    void processPayment();
+                                walletAddress={address || null}
+                                disabled={cardFlowBlocked}
+                                onRequireWallet={() => {
+                                    setFundingStatus('idle');
+                                    setFundingMessage('Connect or create a wallet first so the card purchase has somewhere to land.');
+                                    login();
+                                }}
+                                onCreateFundingIntent={createCardFundingIntent}
+                                onSuccess={({ fundingIntentId: nextFundingIntentId }) => {
+                                    if (nextFundingIntentId) {
+                                        setFundingIntentId(nextFundingIntentId);
+                                    }
+                                    setFundingStatus('submitted');
+                                    setFundingMessage('Card purchase submitted. Waiting for MoonPay to confirm the wallet funding.');
                                 }}
                             />
+
+                            <p className="mt-2 text-center text-[10px] font-medium leading-relaxed text-gray-400">
+                                Card funding tops up the payment asset only. The paying wallet still needs Base ETH for gas.
+                            </p>
                         </>
                     )}
 
