@@ -47,7 +47,7 @@ export default function FiatOnramp({
   const helperText = useMemo(() => {
     if (note) return note
     if (!walletAddress) return 'Coal will connect or create a wallet first, then MoonPay will fund it with card.'
-    return 'MoonPay funds your wallet first. Coal completes the actual payment only after you sign the onchain transfer from that wallet.'
+    return 'MoonPay funds your wallet first. Coal completes the actual payment only after you sign the onchain transfer from that wallet. First-time buyers may see an email verification and profile setup step before the quote appears.'
   }, [note, walletAddress])
 
   const closeWidget = useCallback(() => {
@@ -162,8 +162,8 @@ export default function FiatOnramp({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-white rounded-3xl overflow-hidden shadow-2xl w-full max-w-[420px] relative"
-              style={{ height: '680px' }}
+              className="relative w-full max-w-[440px] overflow-hidden rounded-3xl bg-white shadow-2xl"
+              style={{ height: 'min(780px, calc(100vh - 24px))' }}
             >
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <div className="flex items-center gap-2">
