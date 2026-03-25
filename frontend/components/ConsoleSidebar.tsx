@@ -23,6 +23,8 @@ import {
     Buildings2,
     TickCircle,
     Add,
+    Edit2,
+    Trash,
 } from 'iconsax-reactjs';
 
 export default function ConsoleSidebar() {
@@ -34,30 +36,42 @@ export default function ConsoleSidebar() {
 
     const [profileOpen, setProfileOpen] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
+
+    // New workspace
     const [newWsMode, setNewWsMode] = useState(false);
     const [newWsName, setNewWsName] = useState('');
     const [newWsLoading, setNewWsLoading] = useState(false);
 
-    // Fetch available workspaces (own + team memberships)
-    // Use a fetcher that bypasses workspace context so we always get the full list
-    const { data: wsData } = useSWR<{ data: { workspaces: Workspace[] } }>(
+    // Rename workspace
+    const [renamingWsId, setRenamingWsId] = useState<string | null>(null); // workspaceId (record id)
+    const [renameValue, setRenameValue] = useState('');
+    const [renameLoading, setRenameLoading] = useState(false);
+
+    // Delete workspace confirm
+    const [deletingWsId, setDeletingWsId] = useState<string | null>(null); // workspaceId (record id)
+    const [deleteLoading, setDeleteLoading] = useState(false);
+
+    // Fetch available workspaces — apiSuccess returns data as-is (no { data: } wrapper)
+    const { data: wsData } = useSWR<{ workspaces: Workspace[] }>(
         '/api/console/workspaces',
         fetcher
     );
 
     useEffect(() => {
-        if (wsData?.data?.workspaces) {
-            setWorkspaces(wsData.data.workspaces);
+        if (wsData?.workspaces) {
+            setWorkspaces(wsData.workspaces);
         }
     }, [wsData, setWorkspaces]);
 
-    const workspaces: Workspace[] = wsData?.data?.workspaces ?? [];
+    const workspaces: Workspace[] = wsData?.workspaces ?? [];
     const hasMultipleWorkspaces = workspaces.length > 1;
 
     useEffect(() => {
         function handleClick(e: MouseEvent) {
             if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
                 setProfileOpen(false);
+                setRenamingWsId(null);
+                setDeletingWsId(null);
             }
         }
         document.addEventListener('mousedown', handleClick);
@@ -78,10 +92,50 @@ export default function ConsoleSidebar() {
                 await mutate('/api/console/workspaces');
                 setNewWsMode(false);
                 setNewWsName('');
-                switchWorkspace(data.data?.id ?? null);
+                switchWorkspace(data.id ?? null);
             }
         } finally {
             setNewWsLoading(false);
+        }
+    };
+
+    const handleRenameWorkspace = async (workspaceId: string) => {
+        const name = renameValue.trim();
+        if (!name || renameLoading) return;
+        setRenameLoading(true);
+        try {
+            const res = await apiFetch(`/api/console/workspaces/${workspaceId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ name }),
+            }, getAccessToken);
+            if (res.ok) {
+                await mutate('/api/console/workspaces');
+                setRenamingWsId(null);
+                setRenameValue('');
+            }
+        } finally {
+            setRenameLoading(false);
+        }
+    };
+
+    const handleDeleteWorkspace = async (workspaceId: string, subUserId: string) => {
+        if (deleteLoading) return;
+        setDeleteLoading(true);
+        try {
+            const res = await apiFetch(`/api/console/workspaces/${workspaceId}`, {
+                method: 'DELETE',
+            }, getAccessToken);
+            if (res.ok) {
+                // If we were viewing this workspace, switch back to default
+                if (activeWorkspaceId === subUserId) {
+                    switchWorkspace(null);
+                } else {
+                    await mutate('/api/console/workspaces');
+                }
+                setDeletingWsId(null);
+            }
+        } finally {
+            setDeleteLoading(false);
         }
     };
 
@@ -164,37 +218,110 @@ export default function ConsoleSidebar() {
                             )}
                         </div>
 
-                        {/* Workspace switcher — always visible */}
+                        {/* Workspace switcher */}
                         <div className="p-1.5 border-b border-black/5">
                             <p className="px-3 pt-1.5 pb-1 text-[10px] font-black text-[var(--color-text-secondary)] uppercase tracking-wider">
                                 Workspaces
                             </p>
                             {workspaces.map((ws) => {
                                 const isActive = activeWorkspaceId === ws.id || (!activeWorkspaceId && ws.isDefault);
-                                return (
-                                    <button
-                                        key={ws.id}
-                                        onClick={() => {
-                                            setProfileOpen(false);
-                                            setNewWsMode(false);
-                                            // Switch to default workspace by clearing stored ID
-                                            switchWorkspace(ws.isDefault ? null : ws.id);
-                                        }}
-                                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all hover:bg-[var(--color-bg-base)]"
-                                    >
-                                        <div className="w-7 h-7 rounded-lg bg-[var(--color-brand-navy)] flex items-center justify-center shrink-0">
-                                            <span className="text-[11px] font-black text-white">{ws.name.charAt(0).toUpperCase()}</span>
+                                const isRenaming = renamingWsId === ws.workspaceId;
+                                const isDeleteConfirm = deletingWsId === ws.workspaceId;
+                                const canManage = ws.isOwn && !ws.isDefault && !!ws.workspaceId;
+
+                                if (isRenaming) {
+                                    return (
+                                        <div key={ws.id} className="flex items-center gap-1.5 px-2 py-1.5">
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                value={renameValue}
+                                                onChange={e => setRenameValue(e.target.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') handleRenameWorkspace(ws.workspaceId!);
+                                                    if (e.key === 'Escape') { setRenamingWsId(null); setRenameValue(''); }
+                                                }}
+                                                placeholder={ws.name}
+                                                className="flex-1 text-xs font-medium bg-[var(--color-bg-base)] rounded-lg px-2.5 py-1.5 outline-none border border-black/10 focus:border-[var(--color-brand-orange)] text-[var(--color-brand-navy)]"
+                                            />
+                                            <button
+                                                onClick={() => handleRenameWorkspace(ws.workspaceId!)}
+                                                disabled={!renameValue.trim() || renameLoading}
+                                                className="text-[10px] font-black text-[var(--color-brand-orange)] disabled:opacity-40 px-1 shrink-0"
+                                            >
+                                                {renameLoading ? '…' : 'Save'}
+                                            </button>
                                         </div>
-                                        <div className="flex-1 text-left min-w-0">
-                                            <p className="text-xs font-bold text-[var(--color-brand-navy)] truncate">{ws.name}</p>
-                                            <p className="text-[10px] font-medium text-[var(--color-text-secondary)] capitalize">
-                                                {ws.isOwn ? (ws.isDefault ? 'Default' : 'Owner') : ws.role}
+                                    );
+                                }
+
+                                if (isDeleteConfirm) {
+                                    return (
+                                        <div key={ws.id} className="px-3 py-2 rounded-xl bg-red-50">
+                                            <p className="text-[11px] font-bold text-red-600 mb-2">
+                                                Delete &quot;{ws.name}&quot;? All data will be lost.
                                             </p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleDeleteWorkspace(ws.workspaceId!, ws.id)}
+                                                    disabled={deleteLoading}
+                                                    className="flex-1 text-[11px] font-black text-white bg-red-500 rounded-lg py-1 disabled:opacity-50"
+                                                >
+                                                    {deleteLoading ? '…' : 'Delete'}
+                                                </button>
+                                                <button
+                                                    onClick={() => setDeletingWsId(null)}
+                                                    className="flex-1 text-[11px] font-bold text-[var(--color-text-secondary)] bg-white border border-black/10 rounded-lg py-1"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
                                         </div>
-                                        {isActive && (
-                                            <TickCircle size={16} variant="Bold" className="text-[var(--color-brand-orange)] shrink-0" />
+                                    );
+                                }
+
+                                return (
+                                    <div key={ws.id} className="group flex items-center rounded-xl hover:bg-[var(--color-bg-base)] transition-all">
+                                        <button
+                                            onClick={() => {
+                                                setProfileOpen(false);
+                                                setNewWsMode(false);
+                                                switchWorkspace(ws.isDefault ? null : ws.id);
+                                            }}
+                                            className="flex-1 flex items-center gap-2.5 px-3 py-2 text-sm min-w-0"
+                                        >
+                                            <div className="w-7 h-7 rounded-lg bg-[var(--color-brand-navy)] flex items-center justify-center shrink-0">
+                                                <span className="text-[11px] font-black text-white">{ws.name.charAt(0).toUpperCase()}</span>
+                                            </div>
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className="text-xs font-bold text-[var(--color-brand-navy)] truncate">{ws.name}</p>
+                                                <p className="text-[10px] font-medium text-[var(--color-text-secondary)] capitalize">
+                                                    {ws.isOwn ? (ws.isDefault ? 'Default' : 'Owner') : ws.role}
+                                                </p>
+                                            </div>
+                                            {isActive && (
+                                                <TickCircle size={16} variant="Bold" className="text-[var(--color-brand-orange)] shrink-0" />
+                                            )}
+                                        </button>
+                                        {canManage && (
+                                            <div className="hidden group-hover:flex items-center gap-0.5 pr-2 shrink-0">
+                                                <button
+                                                    onClick={e => { e.stopPropagation(); setRenamingWsId(ws.workspaceId!); setRenameValue(ws.name); setDeletingWsId(null); }}
+                                                    className="p-1 rounded-lg text-gray-400 hover:text-[var(--color-brand-navy)] hover:bg-black/5 transition-all"
+                                                    title="Rename"
+                                                >
+                                                    <Edit2 size={12} variant="Linear" />
+                                                </button>
+                                                <button
+                                                    onClick={e => { e.stopPropagation(); setDeletingWsId(ws.workspaceId!); setRenamingWsId(null); }}
+                                                    className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                                                    title="Delete"
+                                                >
+                                                    <Trash size={12} variant="Linear" />
+                                                </button>
+                                            </div>
                                         )}
-                                    </button>
+                                    </div>
                                 );
                             })}
 
