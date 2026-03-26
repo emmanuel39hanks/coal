@@ -202,6 +202,7 @@ model CheckoutSession {
   fundingIntents      FundingIntent[]
   merchant            User                 @relation(fields: [merchantId], references: [id])
   product             Product?             @relation(fields: [productId], references: [id])
+  refunds             Refund[]
   subscription        Subscription?        @relation(fields: [subscriptionId], references: [id])
   subscriptionInvoice SubscriptionInvoice? @relation("invoice_session")
   transactions        Transaction[]
@@ -506,6 +507,24 @@ model ChainAnchor {
 
   @@index([kind, localEntityType, localEntityId])
   @@map("chain_anchor")
+}
+
+model Refund {
+  id          String          @id @default(cuid())
+  checkoutId  String
+  merchantId  String
+  amount      Decimal         @db.Decimal(18, 6)
+  reason      String?
+  status      String          @default("pending")
+  txHash      String?         @unique
+  initiatedBy String
+  createdAt   DateTime        @default(now())
+  completedAt DateTime?
+  checkout    CheckoutSession @relation(fields: [checkoutId], references: [id])
+
+  @@index([checkoutId])
+  @@index([merchantId])
+  @@map("refund")
 }
 
 model ComputeJob {

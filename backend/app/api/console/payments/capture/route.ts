@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getAuthUser } from '@/lib/privy';
+import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import { capturePayment } from '@/lib/commerce-payments';
 import { errors, apiSuccess } from '@/lib/errors';
 import { z } from 'zod';
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
   try {
     const user = await getAuthUser(request);
     if (!user) return errors.unauthorized();
+    if (!hasWriteAccess(user)) return errors.forbidden();
 
     const body = await request.json().catch(() => ({}));
     const validated = validateBody(schema, body);
