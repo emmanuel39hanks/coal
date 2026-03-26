@@ -55,7 +55,58 @@ Coal has a complete DA integration (282 lines, gRPC client, 6 event types, TLS, 
 
 ### Architecture
 
-![Coal Architecture](plans/assets/architecture.svg)
+```mermaid
+flowchart TB
+    subgraph Actors
+        M["Merchant<br/><small>Console Dashboard</small>"]
+        C["Customer<br/><small>Browser / Wallet</small>"]
+        AG["AI Agent<br/><small>AgentKit / x402</small>"]
+    end
+
+    subgraph Coal["Coal Platform"]
+        direction TB
+        API["Console API<br/><small>Products, Links, Keys, Settings</small>"]
+        CHK["Checkout Engine<br/><small>Sessions, Payments, Verification</small>"]
+        PW["Paywall Gateway<br/><small>x402, Access Control, Manifests</small>"]
+        RP["Receipt Publisher<br/><small>Proof Generation, Anchoring</small>"]
+        ACI["Agent Commerce API<br/><small>Memory, Routing, Policy Eval</small>"]
+        SUB["Subscription Engine<br/><small>Recurring Billing, Renewals</small>"]
+        WH["Webhook Delivery<br/><small>Events, Retries, HMAC Signing</small>"]
+        DB[("Neon Postgres")]
+        AUTH["Privy Auth"]
+    end
+
+    subgraph ZG["0G Network"]
+        direction TB
+        ZGS["<b>1. 0G Storage</b><br/><small>Immutable receipt logs<br/>Merchant profiles<br/>Encrypted memory snapshots</small>"]
+        ZGC["<b>2. 0G Chain</b><br/><small>CoalReceiptAnchor contract<br/>SHA-256 proof hashes<br/>Tamper-proof verification</small>"]
+        ZGX["<b>3. 0G Compute</b><br/><small>AI commerce inference<br/>Memory query answering<br/>Policy evaluation</small>"]
+        ZGD["<b>4. 0G DA</b><br/><small>Data Availability layer<br/>6 event types, gRPC<br/>Feature-flagged &#40;ready&#41;</small>"]
+        ZGK["<b>0G KV</b><br/><small>Mutable merchant catalog<br/>Per-merchant stream IDs</small>"]
+    end
+
+    BASE["<b>Base (Coinbase L2)</b><br/><small>USDC Settlement via Alchemy RPC</small>"]
+
+    M -->|API| API
+    C -->|Checkout| CHK
+    AG -->|x402 / API| PW
+    AG -->|Commerce| ACI
+
+    RP -->|publish| ZGS
+    RP -->|anchor| ZGC
+    ACI -->|infer| ZGX
+    RP -.->|DA events| ZGD
+    API -->|mirror| ZGK
+
+    CHK --> BASE
+    API --> DB
+    API --> AUTH
+
+    style Coal fill:#1a1a2e,stroke:#334155,color:#e2e8f0
+    style ZG fill:#115e59,stroke:#2dd4bf,color:#ccfbf1
+    style BASE fill:#1d4ed8,stroke:#60a5fa,color:#bfdbfe
+    style Actors fill:#f8fafc,stroke:#cbd5e1,color:#1e293b
+```
 
 ## What Is Live
 
@@ -126,20 +177,6 @@ coal/
 ```
 
 ## System Architecture
-
-```mermaid
-flowchart LR
-    A["Merchant / App / Agent"] --> B["Coal Frontend"]
-    B --> C["Coal Backend"]
-    C --> D["Base RPC via Alchemy"]
-    C --> E["Postgres via Neon"]
-    C --> F["Webhook Delivery"]
-    C --> G["0G Storage"]
-    C --> H["0G Chain"]
-    C --> I["0G Compute"]
-```
-
-See [plans/assets/architecture.svg](plans/assets/architecture.svg) for the full architecture diagram.
 
 Two separate Next.js apps are deployed from the same repo:
 
