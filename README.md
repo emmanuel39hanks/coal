@@ -137,7 +137,7 @@ flowchart TB
 
 | Metric | Value |
 |--------|-------|
-| Test suite | 495 tests across 32 files |
+| Test suite | 512 tests across 33 files |
 | 0G components | 4 (Storage, Chain, Compute, DA) |
 | Network | Base mainnet (USDC) + 0G mainnet |
 | Live deployment | [usecoal.xyz](https://usecoal.xyz) |

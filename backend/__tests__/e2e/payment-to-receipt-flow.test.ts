@@ -73,6 +73,7 @@ vi.mock('@/lib/chain', () => ({
     EXPLORER_URL: 'https://basescan.org',
     publicClient: {
         getTransactionReceipt: vi.fn(),
+        getBlockNumber: vi.fn().mockResolvedValue(123460n),
     },
     getSettlementToken: () => ({
         address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
@@ -118,6 +119,10 @@ vi.mock('@/lib/subscriptions', () => ({
 
 vi.mock('@/lib/validation', () => ({
     amountsMatch: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock('@/lib/sanctions', () => ({
+    checkSanctions: vi.fn().mockResolvedValue({ sanctioned: false }),
 }));
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -219,7 +224,10 @@ describe('Payment-to-Receipt E2E Flow', () => {
         mockPrismaTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
             const txProxy = {
                 transaction: { upsert: mockTransactionUpsert },
-                checkoutSession: { update: mockCheckoutSessionUpdate },
+                checkoutSession: {
+                    update: mockCheckoutSessionUpdate,
+                    findUnique: vi.fn().mockResolvedValue({ status: 'verifying' }),
+                },
             };
             return fn(txProxy);
         });

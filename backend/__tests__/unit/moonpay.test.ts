@@ -71,7 +71,8 @@ describe('moonpay helpers', () => {
         status: 'completed',
       },
     });
-    const timestamp = '1711111111';
+    // Use current timestamp — the staleness check rejects timestamps older than 5 minutes
+    const timestamp = Math.floor(Date.now() / 1000).toString();
     const signature = crypto
       .createHmac('sha256', 'whsec_example')
       .update(`${timestamp}.${rawBody}`)
@@ -79,6 +80,14 @@ describe('moonpay helpers', () => {
 
     expect(verifyMoonPayWebhookSignature(rawBody, `t=${timestamp},s=${signature}`)).toBe(true);
     expect(verifyMoonPayWebhookSignature(rawBody, `t=${timestamp},s=deadbeef`)).toBe(false);
+
+    // Verify stale timestamps are rejected (replay protection)
+    const staleTimestamp = '1711111111';
+    const staleSig = crypto
+      .createHmac('sha256', 'whsec_example')
+      .update(`${staleTimestamp}.${rawBody}`)
+      .digest('hex');
+    expect(verifyMoonPayWebhookSignature(rawBody, `t=${staleTimestamp},s=${staleSig}`)).toBe(false);
   });
 
   it('normalizes funded and failed webhook payloads into Coal funding states', async () => {
