@@ -1,5 +1,10 @@
 # Coal
 
+> **0G APAC Hackathon 2026 — Track 3: Agentic Economy**
+>
+> Payment infrastructure for the AI agent economy, built on 0G.
+> Live at [usecoal.xyz](https://usecoal.xyz) | API at [api.usecoal.xyz](https://api.usecoal.xyz)
+
 **Coal by Schema Labs is a programmable commerce platform for hosted checkout, merchant APIs, payment links, paywalls, recurring billing, and agentic commerce flows.**
 
 Coal is built around a simple split:
@@ -16,6 +21,41 @@ This repo is an active product branch, not a tiny demo. The current codebase inc
 - widget/embed and SDK surfaces
 - docs site + OpenAPI playground
 - live 0G storage / chain / compute integration
+
+## 0G Integration — 4 Components
+
+Coal uses **four** 0G network components on mainnet:
+
+### 1. 0G Storage — Immutable Artifact Layer
+Every payment receipt, merchant profile, and encrypted memory snapshot is published to 0G Storage as an immutable artifact. AI agents and apps can discover merchants and verify payments by reading these artifacts directly from the decentralized storage network.
+
+- **Receipt payloads:** tx hash, amount, payer address, merchant, metadata
+- **Merchant profiles:** name, products, paywalls, supported tokens, API endpoints
+- **Encrypted memory:** AES-256-GCM encrypted full catalog + settings (only Coal can decrypt)
+- Explorer: [storagescan.0g.ai](https://storagescan.0g.ai)
+
+### 2. 0G Chain — Receipt Proof Anchoring
+After publishing a receipt to 0G Storage, Coal anchors a SHA-256 hash of the receipt payload on-chain via the `CoalReceiptAnchor` smart contract. This creates a tamper-proof, independently verifiable proof that a specific payment happened at a specific time.
+
+- Contract: `CoalReceiptAnchor` on 0G Chain (chain ID 16661)
+- Explorer: [chainscan.0g.ai](https://chainscan.0g.ai)
+
+### 3. 0G Compute — AI Commerce Inference
+Coal's agent-facing APIs use 0G Compute for AI inference:
+
+- **Memory query:** Natural language Q&A against merchant data ("What products does this merchant sell?")
+- **Commerce routing:** AI decides which merchant or product fits an agent's request
+- **Policy evaluation:** AI evaluates scenarios against merchant rules ("Can this customer get a refund?")
+- **Sealed inference:** Privacy-preserving inference where the model never sees raw merchant data
+
+### 4. 0G DA — Data Availability (Feature-Flagged)
+Coal has a complete DA integration (282 lines, gRPC client, 6 event types, TLS, health checks) that posts payment lifecycle events as DA blobs. Currently feature-flagged (`ZERO_G_DA_ENABLED=false`) pending public DA endpoint availability.
+
+- Event types: payment_confirmed, refund_issued, subscription_created, subscription_renewed, subscription_cancelled, merchant_updated
+
+### Architecture
+
+![Coal Architecture](plans/assets/architecture.svg)
 
 ## What Is Live
 
@@ -42,6 +82,24 @@ This repo is an active product branch, not a tiny demo. The current codebase inc
 - AI commerce APIs backed by 0G Compute
 - Console operator page at `/console/0g`
 
+## Project Stats
+
+| Metric | Value |
+|--------|-------|
+| Test suite | 495 tests across 32 files |
+| 0G components | 4 (Storage, Chain, Compute, DA) |
+| Network | Base mainnet (USDC) + 0G mainnet |
+| Live deployment | [usecoal.xyz](https://usecoal.xyz) |
+| API | [api.usecoal.xyz](https://api.usecoal.xyz) |
+
+## Quick Start for Judges
+
+1. **Try the live app:** Visit [usecoal.xyz](https://usecoal.xyz), sign in with Privy, explore the merchant console
+2. **See 0G integration:** Go to Console → 0G to see all 4 components with live mainnet status
+3. **Verify a receipt:** Visit `/verify/[session-id]` to see the full 0G proof trail for any payment
+4. **Run the example:** Clone the repo, `cd examples/coal-react-checkout`, `cp .env.example .env.local`, fill in your API key, `npm install && npm run dev`
+5. **Read the agent code:** See `examples/agentkit-action/coal-checkout-action.ts` for a complete AgentKit action provider with 7 actions
+
 ## Core Thesis
 
 Coal is not being replaced by 0G.
@@ -67,7 +125,7 @@ coal/
 └── security/     # Security review notes and hardening queue
 ```
 
-## Architecture
+## System Architecture
 
 ```mermaid
 flowchart LR
@@ -80,6 +138,8 @@ flowchart LR
     C --> H["0G Chain"]
     C --> I["0G Compute"]
 ```
+
+See [plans/assets/architecture.svg](plans/assets/architecture.svg) for the full architecture diagram.
 
 Two separate Next.js apps are deployed from the same repo:
 
