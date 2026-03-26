@@ -4,6 +4,7 @@ import { validateApiKey } from '@/lib/api-auth';
 import { errors, apiSuccess } from '@/lib/errors';
 import { checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 import { validateBody } from '@/lib/schemas';
+import { toPrismaJson } from '@/lib/prisma-json';
 import { getPaywallVerificationState } from '@/lib/paywall-verification';
 
 const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
@@ -65,15 +66,17 @@ export async function POST(
                 description: paywall.name,
                 redirectUrl: validated.data.redirectUrl || null,
                 callbackUrl: validated.data.callbackUrl || null,
-                metadata: {
+                metadata: toPrismaJson({
+                    // User-supplied metadata namespaced under "custom" to prevent
+                    // injection of system fields (paywallId, payerAddress, etc.)
+                    ...(validated.data.metadata ? { custom: validated.data.metadata } : {}),
                     paywallId: paywall.id,
                     pricingModel: paywall.pricingModel,
                     contentType: paywall.contentType,
                     ...(validated.data.subject?.walletAddress ? { payerAddress: validated.data.subject.walletAddress.toLowerCase() } : {}),
                     ...(validated.data.subject?.did ? { payerDid: validated.data.subject.did } : {}),
                     ...(validated.data.subject?.agentId ? { agentId: validated.data.subject.agentId } : {}),
-                    ...(validated.data.metadata ?? {}),
-                },
+                }),
                 expiresAt: new Date(Date.now() + 30 * 60 * 1000),
             },
         });

@@ -33,20 +33,41 @@ export async function GET(
         if (!verification) return errors.notFound('Paywall');
 
         if (verification.paid) {
-            // For per_call paywalls, increment the access count (fire-and-forget)
+            // For per_call paywalls, atomically check quota AND increment count.
+            // This prevents the race where N concurrent requests all read the same
+            // accessCount and slip through the quota check.
             if (verification.paywall.pricingModel === 'per_call' && address) {
-                void prisma.paywallAccess.update({
-                    where: {
-                        paywallId_address: {
-                            paywallId: id,
-                            address,
-                        },
-                    },
-                    data: {
-                        accessCount: { increment: 1 },
-                        lastAccessAt: new Date(),
-                    },
-                }).catch(() => null);
+                const quota = verification.paywall.callQuota;
+                if (quota) {
+                    const result = await prisma.$executeRawUnsafe(
+                        `UPDATE "paywall_access" SET "accessCount" = "accessCount" + 1, "lastAccessAt" = NOW() WHERE "paywallId" = $1 AND "address" = $2 AND "accessCount" < $3`,
+                        id,
+                        address.toLowerCase(),
+                        quota,
+                    );
+                    // If no row was updated, the quota has been reached
+                    if (result === 0) {
+                        // Re-fetch verification to return the quota-exceeded response
+                        const refreshed = await getPaywallVerificationState({ paywallId: id, address });
+                        if (refreshed && !refreshed.paid) {
+                            const x402Headers = buildX402Headers({
+                                id: refreshed.paywall.id,
+                                price: refreshed.paywall.price,
+                                currency: refreshed.paywall.currency,
+                                name: refreshed.paywall.name,
+                                description: refreshed.paywall.description,
+                                merchant: refreshed.paywall.merchant,
+                            });
+                            return NextResponse.json(refreshed.body, { status: 402, headers: x402Headers });
+                        }
+                    }
+                } else {
+                    // No quota set — increment normally
+                    await prisma.paywallAccess.update({
+                        where: { paywallId_address: { paywallId: id, address: address.toLowerCase() } },
+                        data: { accessCount: { increment: 1 }, lastAccessAt: new Date() },
+                    }).catch(() => null);
+                }
             }
             return apiSuccess(verification.body, 200);
         }
