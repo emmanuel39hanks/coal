@@ -40,6 +40,15 @@ export async function POST(request: Request) {
 
         if (!link || !link.active) return errors.notFound('Payment link');
 
+        // Enforce link expiration
+        if (link.expiresAt && link.expiresAt < new Date()) {
+            return errors.gone('This payment link has expired');
+        }
+        // Enforce usage limits
+        if (link.maxUses && link.useCount >= link.maxUses) {
+            return errors.gone('This payment link has reached its usage limit');
+        }
+
         let sessionAmount: number;
         if (link.product) {
             const p = validateAmount(link.product.price.toString());
@@ -63,6 +72,10 @@ export async function POST(request: Request) {
                 description: link.product?.name ?? (link.title ?? 'Payment'),
                 productId:   link.product?.id ?? null,
                 payerInfoConfig: toPrismaNullableJson(link.payerInfoConfig),
+                metadata: {
+                    linkId: link.id,
+                    ...(link.merchant?.payoutAddress ? { snapshotPayoutAddress: link.merchant.payoutAddress.toLowerCase() } : {}),
+                },
                 status:      'pending',
                 expiresAt:   new Date(Date.now() + 24 * 60 * 60 * 1000),
             },
@@ -73,7 +86,7 @@ export async function POST(request: Request) {
             amount:      sessionAmount,
             currency:    settlementToken.symbol,
             description: session.description,
-            merchant:    link.merchant,
+            merchant:    { name: link.merchant?.name || null },
             expiresAt:   session.expiresAt,
         });
 
