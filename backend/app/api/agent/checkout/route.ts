@@ -32,6 +32,9 @@ export async function POST(request: Request) {
     }
 
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 min
+    // Snapshot payout address at checkout creation time so the cron verifies
+    // against THIS address, not the merchant's current one (prevents TOCTOU).
+    const payoutAddress = apiKey.merchant.payoutAddress;
     const session = await prisma.checkoutSession.create({
       data: {
         merchantId: apiKey.merchantId,
@@ -42,6 +45,7 @@ export async function POST(request: Request) {
         metadata: toPrismaJson({
           ...(metadata ? { custom: metadata } : {}),
           ...(payerInfo ? { payerInfoConfig: payerInfo } : {}),
+          ...(payoutAddress ? { snapshotPayoutAddress: payoutAddress.toLowerCase() } : {}),
         }),
         redirectUrl,
         callbackUrl,

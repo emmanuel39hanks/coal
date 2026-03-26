@@ -139,6 +139,13 @@ export function verifyMoonPayWebhookSignature(rawBody: string, headerValue: stri
     return false;
   }
 
+  // Reject stale webhooks to prevent replay attacks (5 minute tolerance)
+  const MAX_AGE_SECONDS = 5 * 60;
+  const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
+  if (!Number.isFinite(age) || age > MAX_AGE_SECONDS) {
+    return false;
+  }
+
   const signedPayload = `${timestamp}.${rawBody}`;
   const expected = crypto
     .createHmac('sha256', moonPayConfig.webhookKey)

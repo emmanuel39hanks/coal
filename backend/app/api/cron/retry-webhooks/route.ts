@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { errors, apiSuccess } from '@/lib/errors';
+import { validateWebhookUrl } from '@/lib/ssrf';
 import crypto from 'crypto';
 
 async function attemptDelivery(eventId: string): Promise<void> {
@@ -14,6 +15,16 @@ async function attemptDelivery(eventId: string): Promise<void> {
         await prisma.webhookEvent.update({
             where: { id: eventId },
             data: { status: 'exhausted', errorMessage: 'No webhook secret configured' }
+        });
+        return;
+    }
+
+    // Re-validate URL at delivery time to defend against DNS rebinding
+    const urlCheck = await validateWebhookUrl(event.url);
+    if (!urlCheck.valid) {
+        await prisma.webhookEvent.update({
+            where: { id: eventId },
+            data: { status: 'exhausted', errorMessage: `URL blocked: ${urlCheck.reason}` }
         });
         return;
     }
@@ -74,7 +85,13 @@ async function attemptDelivery(eventId: string): Promise<void> {
 
 export async function POST(request: Request) {
     const cronSecret = process.env.CRON_SECRET;
-    if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+    const authHeader = request.headers.get('authorization');
+    if (!cronSecret || !authHeader) {
+        return errors.unauthorized();
+    }
+    const expected = Buffer.from(`Bearer ${cronSecret}`);
+    const actual = Buffer.from(authHeader);
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
         return errors.unauthorized();
     }
 

@@ -185,7 +185,7 @@ model CheckoutSession {
   callbackUrl         String?
   expiresAt           DateTime
   createdAt           DateTime             @default(now())
-  pendingTxHash       String?
+  pendingTxHash       String?              @unique
   metadata            Json?
   authExpiresAt       DateTime?
   authId              String?
