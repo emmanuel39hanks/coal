@@ -34,6 +34,7 @@ export async function POST(request: Request) {
 
         const { amount, currency, description, redirectUrl, payerInfo } = parsed.data;
         const merchant = keyRecord.merchant;
+        const payoutAddress = merchant.payoutAddress;
 
         const session = await prisma.checkoutSession.create({
             data: {
@@ -42,6 +43,9 @@ export async function POST(request: Request) {
                 currency,
                 description: description || 'Widget Checkout',
                 payerInfoConfig: toPrismaNullableJson(payerInfo),
+                metadata: {
+                    ...(payoutAddress ? { snapshotPayoutAddress: payoutAddress.toLowerCase() } : {}),
+                },
                 status: 'pending',
                 redirectUrl: redirectUrl || null,
                 expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),

@@ -22,7 +22,6 @@ export async function GET(request: Request) {
                 select: {
                     name: true,
                     image: true,
-                    payoutAddress: true
                 }
             }
         }

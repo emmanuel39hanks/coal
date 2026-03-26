@@ -54,6 +54,6 @@ export async function GET(request: Request) {
 
     } catch (error) {
         logger.error({ err: error }, 'Seed error');
-        return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+        return NextResponse.json({ error: 'Seed operation failed' }, { status: 500 });
     }
 }

@@ -73,12 +73,16 @@ export async function GET(request: Request) {
             const status = tx.status;
             const product = tx.checkout?.product?.name ?? 'Payment Link';
             const from = tx.from;
-            // Escape fields that may contain commas or quotes
-            const escape = (val: string) =>
-                val.includes(',') || val.includes('"') || val.includes('\n')
-                    ? `"${val.replace(/"/g, '""')}"`
-                    : val;
-            return [date, txHash, amount, currency, status, escape(product), from].join(',');
+            // Escape fields: prevent formula injection + handle commas/quotes
+            const escape = (val: string) => {
+                let escaped = val;
+                // Neutralize spreadsheet formula injection
+                if (/^[=+\-@\t\r]/.test(escaped)) escaped = `'${escaped}`;
+                return escaped.includes(',') || escaped.includes('"') || escaped.includes('\n')
+                    ? `"${escaped.replace(/"/g, '""')}"`
+                    : escaped;
+            };
+            return [escape(date), escape(txHash), escape(amount), escape(currency), escape(status), escape(product), escape(from)].join(',');
         });
 
         const csv = [headers.join(','), ...rows].join('\n');
