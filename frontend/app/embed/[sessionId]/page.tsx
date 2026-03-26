@@ -32,7 +32,11 @@ function postEmbedEvent(type: string, payload: Record<string, unknown> = {}) {
     return;
   }
 
-  window.parent.postMessage({ type, ...payload }, '*');
+  // Use referrer origin if available, otherwise restrict to same origin
+  const targetOrigin = document.referrer
+    ? new URL(document.referrer).origin
+    : window.location.origin;
+  window.parent.postMessage({ type, ...payload }, targetOrigin);
 }
 
 export default function EmbedPage() {

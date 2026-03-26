@@ -7,6 +7,7 @@ import {
     loadMerchantCommerceContext,
     normalizeStructuredStringList,
     runMerchantStructuredJob,
+    sanitizeForAIPrompt,
 } from '@/lib/0g/ai-commerce';
 
 const supportAnswerSchema = z.object({
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
             systemPrompt:
                 'You are Coal support orchestration for a merchant. Answer using only the provided merchant context. Return compact JSON with answer, citations, and recommendedActions.',
             userPayload: {
-                question: validated.data.question,
+                question: sanitizeForAIPrompt(validated.data.question),
                 merchant: context.merchant,
                 settings: context.settings,
                 products: context.products,

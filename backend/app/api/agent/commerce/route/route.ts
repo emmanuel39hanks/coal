@@ -6,6 +6,7 @@ import { validateBody } from '@/lib/schemas';
 import { isZeroGComputeConfigured, zeroGEnv } from '@/lib/0g/env';
 import { runStructuredInference } from '@/lib/0g/compute';
 import { getMerchantMemorySource } from '@/lib/0g/merchant';
+import { sanitizeForAIPrompt } from '@/lib/0g/ai-commerce';
 
 const commerceRouteSchema = z.object({
     goal: z.string().min(1).max(1000),
@@ -138,7 +139,7 @@ export async function POST(request: Request) {
                         {
                             role: 'user',
                             content: JSON.stringify({
-                                goal: validated.data.goal,
+                                goal: sanitizeForAIPrompt(validated.data.goal),
                                 products,
                                 paywalls,
                             }),

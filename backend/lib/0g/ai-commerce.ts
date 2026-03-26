@@ -21,6 +21,19 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
     });
 }
 
+/**
+ * Sanitize user-supplied text before embedding in AI prompts.
+ * Prevents prompt injection by stripping instruction-like patterns
+ * and bounding the input in clear delimiters.
+ */
+export function sanitizeForAIPrompt(input: string): string {
+    return input
+        .replace(/```/g, '')              // Strip code fences that could close prompt blocks
+        .replace(/\n{3,}/g, '\n\n')       // Collapse excessive newlines
+        .slice(0, 2000)                    // Hard length cap
+        .trim();
+}
+
 export function normalizeStructuredStringList(value: unknown): string[] {
     if (!Array.isArray(value)) {
         return [];

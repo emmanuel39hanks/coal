@@ -6,17 +6,27 @@ import { createLinkSchema, validateBody } from '@/lib/schemas';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { toPrismaNullableJson } from '@/lib/prisma-json';
+import { parsePaginationParams, paginatedMeta } from '@/lib/pagination';
 
 export async function GET(request: Request) {
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
 
-        const links = await prisma.paymentLink.findMany({
-            where: { merchantId: user.id, active: true },
-            include: { product: { select: { name: true, price: true, image: true } } },
-            orderBy: { createdAt: 'desc' }
-        });
+        const url = new URL(request.url);
+        const pagination = parsePaginationParams(url);
+        const where = { merchantId: user.id, active: true };
+
+        const [links, total] = await Promise.all([
+            prisma.paymentLink.findMany({
+                where,
+                include: { product: { select: { name: true, price: true, image: true } } },
+                orderBy: { createdAt: 'desc' },
+                skip: pagination.skip,
+                take: pagination.take,
+            }),
+            prisma.paymentLink.count({ where }),
+        ]);
 
         return apiSuccess({
             links: links.map(link => ({
@@ -37,7 +47,8 @@ export async function GET(request: Request) {
                 allowQuantity: link.allowQuantity,
                 minQuantity:  link.minQuantity,
                 maxQuantity:  link.maxQuantity,
-            }))
+            })),
+            pagination: paginatedMeta(total, pagination),
         });
     } catch {
         return errors.internal();

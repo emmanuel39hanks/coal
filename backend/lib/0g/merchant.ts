@@ -138,6 +138,7 @@ export async function buildMerchantProfileBundle(merchantId: string): Promise<Me
             id: product.id,
             name: product.name,
             price: product.price.toString(),
+            image: product.image,
         })),
         topPaywalls: merchant.paywalls.slice(0, 5).map((paywall) => ({
             id: paywall.id,
@@ -191,8 +192,8 @@ export async function buildMerchantMemorySnapshot(merchantId: string): Promise<M
         merchant: {
             name: merchant.name,
             email: merchant.email,
-            payoutAddress: merchant.payoutAddress,
-            webhookUrl: merchant.webhookUrl,
+            payoutConfigured: Boolean(merchant.payoutAddress),
+            webhookConfigured: Boolean(merchant.webhookUrl),
             onboardingComplete: merchant.onboardingComplete,
         },
         products: merchant.products.map((product) => ({
@@ -221,11 +222,11 @@ export async function buildMerchantMemorySnapshot(merchantId: string): Promise<M
             id: member.id,
             role: member.role,
             createdAt: member.createdAt.toISOString(),
-            user: member.user,
+            user: member.user ? { name: (member.user as { name?: string }).name || null } : null,
         })),
         settings: {
-            webhookUrl: merchant.webhookUrl,
-            payoutAddress: merchant.payoutAddress,
+            webhookConfigured: Boolean(merchant.webhookUrl && merchant.webhookSecret),
+            payoutConfigured: Boolean(merchant.payoutAddress),
             onboardingComplete: merchant.onboardingComplete,
         },
     };

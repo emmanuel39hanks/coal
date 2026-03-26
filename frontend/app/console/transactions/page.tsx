@@ -6,6 +6,7 @@ import { ExportSquare, FilterSearch, SearchNormal, CloseCircle } from 'iconsax-r
 import useSWR from 'swr';
 import { useApi } from '@/lib/api';
 import { Skeleton } from '@/components/Skeleton';
+import Pagination from '@/components/Pagination';
 import { formatAmount } from '@/lib/utils';
 import { EXPLORER_URL, getSettlementToken } from '@/lib/chain';
 
@@ -22,7 +23,9 @@ interface Transaction {
 
 export default function TransactionsPage() {
     const { fetcher } = useApi();
-    const { data, error, isLoading } = useSWR('/api/console/transactions', fetcher);
+    const [offset, setOffset] = useState(0);
+    const limit = 20;
+    const { data, error, isLoading } = useSWR(`/api/console/transactions?limit=${limit}&offset=${offset}`, fetcher);
 
     const allTransactions: Transaction[] = data?.transactions || [];
     const settlementSymbol = getSettlementToken().symbol;
@@ -266,6 +269,15 @@ export default function TransactionsPage() {
                     </table>
                 </div>
             </motion.div>
+
+            {data?.pagination && (
+                <Pagination
+                    total={data.pagination.total}
+                    limit={data.pagination.limit}
+                    offset={data.pagination.offset}
+                    onPageChange={setOffset}
+                />
+            )}
         </div>
     );
 }

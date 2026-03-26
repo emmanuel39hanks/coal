@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit, getIP } from '@/lib/rate-limit';
 import { validateBody } from '@/lib/schemas';
+
+const VALID_ID_PATTERN = /^[a-z0-9]{20,36}$/;
 
 const payPaywallSchema = z.object({
     address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid EVM address'),
@@ -21,51 +22,61 @@ export async function POST(
 
         const { id } = await params;
 
+        if (!VALID_ID_PATTERN.test(id)) {
+            return errors.notFound('Paywall');
+        }
+
         const body = await request.json().catch(() => ({}));
         const validated = validateBody(payPaywallSchema, body);
         if (!validated.success) return validated.error;
 
         const { address, txHash } = validated.data;
+        const normalizedTxHash = txHash.toLowerCase();
 
         const paywall = await prisma.paywall.findUnique({ where: { id } });
         if (!paywall || !paywall.active) {
             return errors.notFound('Paywall');
         }
 
-        // Check txHash not already claimed anywhere in Coal
-        const existingTx = await prisma.transaction.findUnique({
-            where: { txHash },
-        });
-        if (existingTx) {
-            return errors.conflict('TXHASH_ALREADY_USED', 'Transaction hash already used');
-        }
+        // Atomic txHash dedup check + session creation inside a transaction
+        // to prevent race conditions where two concurrent requests both pass
+        // the uniqueness check
+        const session = await prisma.$transaction(async (tx) => {
+            const existingTx = await tx.transaction.findUnique({
+                where: { txHash },
+                select: { id: true },
+            });
+            if (existingTx) {
+                throw new Error('TXHASH_ALREADY_USED');
+            }
 
-        const conflictingSession = await prisma.checkoutSession.findFirst({
-            where: {
-                OR: [{ pendingTxHash: txHash.toLowerCase() }, { txHash: txHash.toLowerCase() }],
-            },
-            select: { id: true },
-        });
-        if (conflictingSession) {
-            return errors.conflict('TXHASH_ALREADY_USED', 'Transaction hash already used');
-        }
-
-        const session = await prisma.checkoutSession.create({
-            data: {
-                merchantId: paywall.merchantId,
-                amount: paywall.price,
-                currency: paywall.currency,
-                description: paywall.name,
-                metadata: {
-                    paywallId: id,
-                    payerAddress: address,
-                    pricingModel: paywall.pricingModel,
-                    contentType: paywall.contentType,
+            const conflictingSession = await tx.checkoutSession.findFirst({
+                where: {
+                    OR: [{ pendingTxHash: normalizedTxHash }, { txHash: normalizedTxHash }],
                 },
-                pendingTxHash: txHash.toLowerCase(),
-                status: 'verifying',
-                expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-            },
+                select: { id: true },
+            });
+            if (conflictingSession) {
+                throw new Error('TXHASH_ALREADY_USED');
+            }
+
+            return tx.checkoutSession.create({
+                data: {
+                    merchantId: paywall.merchantId,
+                    amount: paywall.price,
+                    currency: paywall.currency,
+                    description: paywall.name,
+                    metadata: {
+                        paywallId: id,
+                        payerAddress: address,
+                        pricingModel: paywall.pricingModel,
+                        contentType: paywall.contentType,
+                    },
+                    pendingTxHash: normalizedTxHash,
+                    status: 'verifying',
+                    expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+                },
+            });
         });
 
         return apiSuccess({
@@ -74,7 +85,10 @@ export async function POST(
             sessionId: session.id,
             status: session.status,
         });
-    } catch {
+    } catch (error) {
+        if (error instanceof Error && error.message === 'TXHASH_ALREADY_USED') {
+            return errors.conflict('TXHASH_ALREADY_USED', 'Transaction hash already used');
+        }
         return errors.internal();
     }
 }

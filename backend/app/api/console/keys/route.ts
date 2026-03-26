@@ -5,16 +5,26 @@ import crypto from 'crypto';
 import { createKeySchema, validateBody } from '@/lib/schemas';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
+import { parsePaginationParams, paginatedMeta } from '@/lib/pagination';
 
 export async function GET(request: Request) {
     try {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
 
-        const keys = await prisma.apiKey.findMany({
-            where: { merchantId: user.id, revokedAt: null },
-            orderBy: { createdAt: 'desc' }
-        });
+        const url = new URL(request.url);
+        const pagination = parsePaginationParams(url);
+        const where = { merchantId: user.id, revokedAt: null };
+
+        const [keys, total] = await Promise.all([
+            prisma.apiKey.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: pagination.skip,
+                take: pagination.take,
+            }),
+            prisma.apiKey.count({ where }),
+        ]);
 
         return apiSuccess({
             keys: keys.map(k => ({
@@ -23,7 +33,8 @@ export async function GET(request: Request) {
                 prefix:    k.keyPrefix,
                 lastUsed:  k.lastUsed,
                 createdAt: k.createdAt,
-            }))
+            })),
+            pagination: paginatedMeta(total, pagination),
         });
     } catch {
         return errors.internal();

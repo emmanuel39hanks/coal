@@ -6,7 +6,7 @@ import { checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 import { getMerchantMemorySource } from '@/lib/0g/merchant';
 import { isZeroGComputeConfigured, zeroGEnv } from '@/lib/0g/env';
 import { isSealedInferenceEnabled, runStructuredInference } from '@/lib/0g/compute';
-import { normalizeStructuredStringList } from '@/lib/0g/ai-commerce';
+import { normalizeStructuredStringList, sanitizeForAIPrompt } from '@/lib/0g/ai-commerce';
 import { validateBody } from '@/lib/schemas';
 
 const memoryQuerySchema = z.object({
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
                         {
                             role: 'user',
                             content: JSON.stringify({
-                                query: validated.data.query,
+                                query: sanitizeForAIPrompt(validated.data.query),
                                 merchantContext: {
                                     merchantId,
                                     merchantName,

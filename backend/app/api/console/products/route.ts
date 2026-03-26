@@ -5,6 +5,7 @@ import { createProductSchema, validateBody } from '@/lib/schemas';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { syncMerchantArtifacts } from '@/lib/0g/merchant';
+import { parsePaginationParams, paginatedMeta } from '@/lib/pagination';
 
 export async function GET(request: Request) {
     try {
@@ -14,16 +15,22 @@ export async function GET(request: Request) {
         const url = new URL(request.url);
         const tagFilter = url.searchParams.get('tag');
         const statusFilter = url.searchParams.get('status');
+        const pagination = parsePaginationParams(url);
 
         const where: Record<string, unknown> = { merchantId: user.id, active: true };
         if (statusFilter) where.status = statusFilter;
         if (tagFilter) where.tags = { has: tagFilter };
 
-        const products = await prisma.product.findMany({
-            where,
-            orderBy: { createdAt: 'desc' },
-            include: { _count: { select: { checkoutSessions: true } } }
-        });
+        const [products, total] = await Promise.all([
+            prisma.product.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                include: { _count: { select: { checkoutSessions: true } } },
+                skip: pagination.skip,
+                take: pagination.take,
+            }),
+            prisma.product.count({ where }),
+        ]);
 
         return apiSuccess({
             products: products.map(p => ({
@@ -40,7 +47,8 @@ export async function GET(request: Request) {
                 billingInterval: p.billingInterval,
                 billingIntervalCount: p.billingIntervalCount,
                 sales:       p._count.checkoutSessions,
-            }))
+            })),
+            pagination: paginatedMeta(total, pagination),
         });
     } catch {
         return errors.internal();

@@ -2,6 +2,8 @@ import { errors, apiSuccess } from '@/lib/errors';
 import { getIP, checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 import { getPaywallZeroGState } from '@/lib/0g/paywalls';
 
+const VALID_ID_PATTERN = /^[a-z0-9]{20,36}$/;
+
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ id: string }> },
@@ -12,6 +14,7 @@ export async function GET(
         if (limited) return errors.rateLimited();
 
         const { id } = await params;
+        if (!VALID_ID_PATTERN.test(id)) return errors.notFound('Paywall manifest');
         const state = await getPaywallZeroGState(id).catch(() => null);
         if (!state?.manifest) return errors.notFound('Paywall manifest');
 
