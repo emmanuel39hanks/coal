@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
+import { parsePaginationParams, paginatedMeta } from '@/lib/pagination';
 
 export async function GET(
     request: Request,
@@ -15,27 +16,38 @@ export async function GET(
         if (limited) return errors.rateLimited();
 
         const { id } = await params;
+        const url = new URL(request.url);
+        const pagination = parsePaginationParams(url);
 
         const paywall = await prisma.paywall.findUnique({ where: { id } });
         if (!paywall || paywall.merchantId !== user.id) {
             return errors.notFound('Paywall');
         }
 
-        const accesses = await prisma.paywallAccess.findMany({
-            where: { paywallId: id },
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                address: true,
-                accessCount: true,
-                expiresAt: true,
-                revokedAt: true,
-                lastAccessAt: true,
-                createdAt: true,
-            },
-        });
+        const where = { paywallId: id };
+        const [accesses, total] = await Promise.all([
+            prisma.paywallAccess.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: pagination.skip,
+                take: pagination.take,
+                select: {
+                    id: true,
+                    address: true,
+                    accessCount: true,
+                    expiresAt: true,
+                    revokedAt: true,
+                    lastAccessAt: true,
+                    createdAt: true,
+                },
+            }),
+            prisma.paywallAccess.count({ where }),
+        ]);
 
-        return apiSuccess({ accesses });
+        return apiSuccess({
+            accesses,
+            pagination: paginatedMeta(total, pagination),
+        });
     } catch {
         return errors.internal();
     }

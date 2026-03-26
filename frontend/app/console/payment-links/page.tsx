@@ -9,6 +9,7 @@ import Modal from '@/components/Modal';
 import { useSearchParams } from 'next/navigation';
 import { useApi } from '@/lib/api';
 import { Skeleton } from '@/components/Skeleton';
+import Pagination from '@/components/Pagination';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/api-errors';
 import { PAYER_INFO_FIELD_META, PAYER_INFO_FIELDS, type PayerInfoField } from '@/lib/payer-info';
@@ -56,8 +57,10 @@ interface LinkBody {
 export default function PaymentLinksPage() {
     const { fetcher, request: apiRequest } = useApi();
     const toast = useToast();
-    const { data, error, isLoading } = useSWR('/api/console/links', fetcher);
-    const { data: productsData } = useSWR('/api/console/products', fetcher);
+    const [offset, setOffset] = useState(0);
+    const limit = 20;
+    const { data, error, isLoading } = useSWR(`/api/console/links?limit=${limit}&offset=${offset}`, fetcher);
+    const { data: productsData } = useSWR('/api/console/products?limit=100', fetcher);
 
     const searchParams = useSearchParams();
     const [isCreateOpen, setIsCreateOpen] = useState(searchParams.get('new') === 'true');
@@ -147,7 +150,7 @@ export default function PaymentLinksPage() {
 
             await apiRequest(url, { method, body: JSON.stringify(body) });
 
-            mutate('/api/console/links');
+            mutate(`/api/console/links?limit=${limit}&offset=${offset}`);
             toast('success', editingLink ? 'Link updated' : 'Payment link created');
             setIsCreateOpen(false);
             resetForm();
@@ -164,7 +167,7 @@ export default function PaymentLinksPage() {
             await apiRequest(`/api/console/links/${id}`, {
                 method: 'DELETE'
             });
-            mutate('/api/console/links');
+            mutate(`/api/console/links?limit=${limit}&offset=${offset}`);
             toast('success', 'Payment link deleted');
         } catch (e) {
             console.error(e);
@@ -376,6 +379,15 @@ export default function PaymentLinksPage() {
                     </table>
                 </div>
             </motion.div>
+
+            {data?.pagination && (
+                <Pagination
+                    total={data.pagination.total}
+                    limit={data.pagination.limit}
+                    offset={data.pagination.offset}
+                    onPageChange={setOffset}
+                />
+            )}
 
             {/* Create Modal */}
             <Modal

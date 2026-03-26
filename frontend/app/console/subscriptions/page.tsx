@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import useSWR, { mutate } from 'swr';
 import { useApi } from '@/lib/api';
@@ -7,6 +8,7 @@ import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/api-errors';
 import { getSettlementToken } from '@/lib/chain';
 import { Skeleton, StatCardSkeleton } from '@/components/Skeleton';
+import Pagination from '@/components/Pagination';
 import Link from 'next/link';
 
 type SubscriptionRow = {
@@ -45,6 +47,12 @@ type SubscriptionPayload = {
     scheduledRevenue: string;
   };
   subscriptions: SubscriptionRow[];
+  pagination?: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
 };
 
 const STATUS_META: Record<SubscriptionRow['status'], { label: string; className: string }> = {
@@ -91,7 +99,9 @@ function SubscriptionRowSkeleton() {
 export default function SubscriptionsPage() {
   const { fetcher, request } = useApi();
   const toast = useToast();
-  const { data, isLoading } = useSWR<SubscriptionPayload>('/api/console/subscriptions', fetcher);
+  const [offset, setOffset] = useState(0);
+  const limit = 20;
+  const { data, isLoading } = useSWR<SubscriptionPayload>(`/api/console/subscriptions?limit=${limit}&offset=${offset}`, fetcher);
 
   const handleAction = async (id: string, action: 'pause' | 'resume' | 'cancel') => {
     try {
@@ -99,7 +109,7 @@ export default function SubscriptionsPage() {
         method: 'PATCH',
         body: JSON.stringify({ action }),
       });
-      await mutate('/api/console/subscriptions');
+      await mutate(`/api/console/subscriptions?limit=${limit}&offset=${offset}`);
       toast('success', `Subscription ${action}d`);
     } catch (error) {
       toast('error', getErrorMessage(error, `Failed to ${action} subscription`));
@@ -323,6 +333,15 @@ export default function SubscriptionsPage() {
           </div>
         )}
       </motion.div>
+
+      {data?.pagination && (
+        <Pagination
+          total={data.pagination.total}
+          limit={data.pagination.limit}
+          offset={data.pagination.offset}
+          onPageChange={setOffset}
+        />
+      )}
     </div>
   );
 }

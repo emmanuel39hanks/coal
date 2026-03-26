@@ -7,6 +7,7 @@ import {
     loadMerchantCommerceContext,
     normalizeStructuredStringList,
     runMerchantStructuredJob,
+    sanitizeForAIPrompt,
 } from '@/lib/0g/ai-commerce';
 
 const recommendSchema = z.object({
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
             systemPrompt:
                 'Recommend the best Coal commerce surface for the merchant goal. Use only the supplied merchant context and return compact JSON with recommendedSurface, reason, items, and citations.',
             userPayload: {
-                goal: validated.data.goal,
+                goal: sanitizeForAIPrompt(validated.data.goal),
                 products: context.products,
                 paywalls: context.paywalls,
             },

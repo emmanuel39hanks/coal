@@ -7,6 +7,7 @@ import useSWR, { mutate } from 'swr';
 import Modal from '@/components/Modal';
 import { useApi } from '@/lib/api';
 import { Skeleton } from '@/components/Skeleton';
+import Pagination from '@/components/Pagination';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/api-errors';
 import { getSettlementToken } from '@/lib/chain';
@@ -57,7 +58,9 @@ interface Paywall {
 export default function PaywallsPage() {
     const { fetcher, request: apiRequest } = useApi();
     const toast = useToast();
-    const { data, isLoading, error } = useSWR('/api/console/paywalls', fetcher);
+    const [offset, setOffset] = useState(0);
+    const limit = 20;
+    const { data, isLoading, error } = useSWR(`/api/console/paywalls?limit=${limit}&offset=${offset}`, fetcher);
     const settlementSymbol = getSettlementToken().symbol;
     const apiBase = getApiBaseUrl();
 
@@ -132,7 +135,7 @@ export default function PaywallsPage() {
                     callQuota: pricingModel === 'per_call' && callQuota ? Number(callQuota) : undefined,
                 }),
             });
-            mutate('/api/console/paywalls');
+            mutate(`/api/console/paywalls?limit=${limit}&offset=${offset}`);
             toast('success', editingPaywall ? 'Paywall updated' : 'Paywall created and published to 0G');
             setIsCreateOpen(false);
             resetForm();
@@ -147,7 +150,7 @@ export default function PaywallsPage() {
         if (!confirm('Delete this paywall? It will be deactivated and the 0G manifest updated.')) return;
         try {
             await apiRequest(`/api/console/paywalls/${id}`, { method: 'DELETE' });
-            mutate('/api/console/paywalls');
+            mutate(`/api/console/paywalls?limit=${limit}&offset=${offset}`);
             toast('success', 'Paywall deleted');
         } catch (e) {
             toast('error', getErrorMessage(e, 'Failed to delete paywall'));
@@ -403,6 +406,15 @@ function PaywallGate({ address, children }) {
                     </div>
                 )}
             </motion.div>
+
+            {data?.pagination && (
+                <Pagination
+                    total={data.pagination.total}
+                    limit={data.pagination.limit}
+                    offset={data.pagination.offset}
+                    onPageChange={setOffset}
+                />
+            )}
 
             {/* x402 explainer */}
             {paywalls.length > 0 && (

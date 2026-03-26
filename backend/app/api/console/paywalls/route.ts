@@ -6,6 +6,7 @@ import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { validateBody, createPaywallSchema } from '@/lib/schemas';
 import { publishPaywallManifest } from '@/lib/0g/paywalls';
 import { syncMerchantArtifacts } from '@/lib/0g/merchant';
+import { parsePaginationParams, paginatedMeta } from '@/lib/pagination';
 
 export async function GET(request: Request) {
     try {
@@ -15,11 +16,20 @@ export async function GET(request: Request) {
         const { limited } = await checkRateLimit(rateLimiters.console, user.id);
         if (limited) return errors.rateLimited();
 
-        const paywalls = await prisma.paywall.findMany({
-            where: { merchantId: user.id, active: true },
-            orderBy: { createdAt: 'desc' },
-            include: { _count: { select: { accesses: true } } },
-        });
+        const url = new URL(request.url);
+        const pagination = parsePaginationParams(url);
+        const where = { merchantId: user.id, active: true };
+
+        const [paywalls, total] = await Promise.all([
+            prisma.paywall.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                include: { _count: { select: { accesses: true } } },
+                skip: pagination.skip,
+                take: pagination.take,
+            }),
+            prisma.paywall.count({ where }),
+        ]);
 
         return apiSuccess({
             paywalls: paywalls.map(p => ({
@@ -37,6 +47,7 @@ export async function GET(request: Request) {
                 createdAt:      p.createdAt,
                 _count:         { accesses: p._count.accesses },
             })),
+            pagination: paginatedMeta(total, pagination),
         });
     } catch {
         return errors.internal();

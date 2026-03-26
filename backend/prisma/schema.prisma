@@ -142,6 +142,7 @@ model ApiKey {
   revokedAt  DateTime?
   merchant   User      @relation(fields: [merchantId], references: [id])
 
+  @@index([secretHash])
   @@map("api_key")
 }
 
@@ -460,6 +461,7 @@ model WebhookEvent {
   createdAt      DateTime  @default(now())
   merchant       User      @relation(fields: [merchantId], references: [id])
 
+  @@index([merchantId, status, nextRetryAt])
   @@map("webhook_event")
 }
 

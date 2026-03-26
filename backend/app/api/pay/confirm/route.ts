@@ -90,33 +90,41 @@ export async function POST(request: Request) {
             return errors.gone('Checkout session has expired');
         }
 
-        const existingTx = await prisma.transaction.findUnique({ where: { txHash: normalizedHash } });
-        if (existingTx) return errors.conflict('TXHASH_ALREADY_USED', 'Transaction hash already used');
+        // Atomic txHash dedup + session update to prevent race conditions
+        try {
+            await prisma.$transaction(async (tx) => {
+                const existingTx = await tx.transaction.findUnique({ where: { txHash: normalizedHash } });
+                if (existingTx) throw new Error('TXHASH_ALREADY_USED');
 
-        const conflictingSession = await prisma.checkoutSession.findFirst({
-            where: { pendingTxHash: normalizedHash, id: { not: sessionId } }
-        });
-        if (conflictingSession) {
-            return errors.conflict('TXHASH_IN_ANOTHER_SESSION', 'Transaction hash already submitted to another session');
+                const conflictingSession = await tx.checkoutSession.findFirst({
+                    where: { pendingTxHash: normalizedHash, id: { not: sessionId } }
+                });
+                if (conflictingSession) throw new Error('TXHASH_IN_ANOTHER_SESSION');
+
+                await tx.checkoutSession.update({
+                    where: { id: sessionId },
+                    data: {
+                        pendingTxHash: normalizedHash,
+                        status: 'verifying',
+                        customerEmail: resolvedCustomerEmail,
+                        customerAddress: payerAddress?.toLowerCase() || session.customerAddress || null,
+                        payerInfo: toPrismaNullableJson(normalizedPayerInfo),
+                        metadata: {
+                            ...metadata,
+                            ...(resolvedCustomerEmail ? { customerEmail: resolvedCustomerEmail } : {}),
+                            ...(payerAddress ? { payerAddress: payerAddress.toLowerCase() } : {}),
+                            ...(normalizedPayerInfo ? { payerInfoValues: normalizedPayerInfo } : {}),
+                            ...(subscriptionConsentAccepted === true ? { subscriptionConsentAccepted: true } : {}),
+                        },
+                    }
+                });
+            });
+        } catch (txError) {
+            const msg = txError instanceof Error ? txError.message : '';
+            if (msg === 'TXHASH_ALREADY_USED') return errors.conflict('TXHASH_ALREADY_USED', 'Transaction hash already used');
+            if (msg === 'TXHASH_IN_ANOTHER_SESSION') return errors.conflict('TXHASH_IN_ANOTHER_SESSION', 'Transaction hash already submitted to another session');
+            throw txError;
         }
-
-        await prisma.checkoutSession.update({
-            where: { id: sessionId },
-            data: {
-                pendingTxHash: normalizedHash,
-                status: 'verifying',
-                customerEmail: resolvedCustomerEmail,
-                customerAddress: payerAddress?.toLowerCase() || session.customerAddress || null,
-                payerInfo: toPrismaNullableJson(normalizedPayerInfo),
-                metadata: {
-                    ...metadata,
-                    ...(resolvedCustomerEmail ? { customerEmail: resolvedCustomerEmail } : {}),
-                    ...(payerAddress ? { payerAddress: payerAddress.toLowerCase() } : {}),
-                    ...(normalizedPayerInfo ? { payerInfoValues: normalizedPayerInfo } : {}),
-                    ...(subscriptionConsentAccepted === true ? { subscriptionConsentAccepted: true } : {}),
-                },
-            }
-        });
 
         if (fundingIntentId) {
             await prisma.fundingIntent.updateMany({

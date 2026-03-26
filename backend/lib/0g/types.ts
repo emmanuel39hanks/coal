@@ -204,8 +204,8 @@ export interface MerchantMemorySnapshot {
     merchant: {
         name: string | null;
         email: string | null;
-        payoutAddress: string | null;
-        webhookUrl: string | null;
+        payoutConfigured: boolean;
+        webhookConfigured: boolean;
         onboardingComplete: boolean;
     };
     products: Array<Record<string, unknown>>;

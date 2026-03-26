@@ -5,6 +5,7 @@ import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { validateRecipients, SplitRecipient } from '@/lib/splits';
 import { z } from 'zod';
 import { validateBody } from '@/lib/schemas';
+import { parsePaginationParams, paginatedMeta } from '@/lib/pagination';
 
 const recipientSchema = z.object({
     address: z.string().min(1, 'Address required'),
@@ -22,10 +23,19 @@ export async function GET(request: Request) {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
 
-        const splits = await prisma.splitConfig.findMany({
-            where: { merchantId: user.id, active: true },
-            orderBy: { createdAt: 'desc' },
-        });
+        const url = new URL(request.url);
+        const pagination = parsePaginationParams(url);
+        const where = { merchantId: user.id, active: true };
+
+        const [splits, total] = await Promise.all([
+            prisma.splitConfig.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: pagination.skip,
+                take: pagination.take,
+            }),
+            prisma.splitConfig.count({ where }),
+        ]);
 
         return apiSuccess({
             splits: splits.map(s => ({
@@ -34,7 +44,8 @@ export async function GET(request: Request) {
                 recipients: s.recipients,
                 active:     s.active,
                 createdAt:  s.createdAt,
-            }))
+            })),
+            pagination: paginatedMeta(total, pagination),
         });
     } catch {
         return errors.internal();

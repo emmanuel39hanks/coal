@@ -1,6 +1,7 @@
 import { getAuthUser } from '@/lib/privy';
 import { prisma } from '@/lib/prisma';
 import { errors, apiSuccess } from '@/lib/errors';
+import { parsePaginationParams, paginatedMeta } from '@/lib/pagination';
 
 function cadenceLabel(interval: string, intervalCount: number) {
   const suffix = intervalCount === 1 ? interval : `${interval}s`;
@@ -12,42 +13,59 @@ export async function GET(request: Request) {
     const user = await getAuthUser(request);
     if (!user) return errors.unauthorized();
 
-    const subscriptions = await prisma.subscription.findMany({
-      where: { merchantId: user.id },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            billingType: true,
-            billingInterval: true,
-            billingIntervalCount: true,
-          },
-        },
-        mandate: {
-          select: {
-            id: true,
-            status: true,
-            acceptedAt: true,
-          },
-        },
-        latestInvoice: {
-          select: {
-            id: true,
-            status: true,
-            hostedUrl: true,
-            dueAt: true,
-            paidAt: true,
-            sequenceNumber: true,
-            amount: true,
-            currency: true,
-          },
-        },
-      },
-      orderBy: [{ updatedAt: 'desc' }],
-    });
+    const url = new URL(request.url);
+    const pagination = parsePaginationParams(url);
+    const statusFilter = url.searchParams.get('status');
 
-    const summary = subscriptions.reduce(
+    const where: Record<string, unknown> = { merchantId: user.id };
+    if (statusFilter) where.status = statusFilter;
+
+    const [subscriptions, total, summaryAgg] = await Promise.all([
+      prisma.subscription.findMany({
+        where,
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              billingType: true,
+              billingInterval: true,
+              billingIntervalCount: true,
+            },
+          },
+          mandate: {
+            select: {
+              id: true,
+              status: true,
+              acceptedAt: true,
+            },
+          },
+          latestInvoice: {
+            select: {
+              id: true,
+              status: true,
+              hostedUrl: true,
+              dueAt: true,
+              paidAt: true,
+              sequenceNumber: true,
+              amount: true,
+              currency: true,
+            },
+          },
+        },
+        orderBy: [{ updatedAt: 'desc' }],
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+      prisma.subscription.count({ where }),
+      // Summary always uses full dataset (not paginated)
+      prisma.subscription.findMany({
+        where: { merchantId: user.id },
+        select: { status: true, amount: true },
+      }),
+    ]);
+
+    const summary = summaryAgg.reduce(
       (acc, subscription) => {
         if (subscription.status === 'active') {
           acc.active += 1;
@@ -93,6 +111,7 @@ export async function GET(request: Request) {
             }
           : null,
       })),
+      pagination: paginatedMeta(total, pagination),
     });
   } catch {
     return errors.internal();

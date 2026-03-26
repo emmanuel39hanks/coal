@@ -8,6 +8,7 @@ import { UploadButton } from '@/utils/uploadthing';
 import Modal from '@/components/Modal';
 import { useApi } from '@/lib/api';
 import { ProductCardSkeleton } from '@/components/Skeleton';
+import Pagination from '@/components/Pagination';
 import { useToast } from '@/components/Toast';
 import { getErrorMessage } from '@/lib/api-errors';
 import { getSettlementToken } from '@/lib/chain';
@@ -41,7 +42,9 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
 export default function ProductsPage() {
     const { fetcher, request: apiRequest } = useApi();
     const toast = useToast();
-    const { data, error, isLoading } = useSWR('/api/console/products', fetcher);
+    const [offset, setOffset] = useState(0);
+    const limit = 20;
+    const { data, error, isLoading } = useSWR(`/api/console/products?limit=${limit}&offset=${offset}`, fetcher);
     const searchParams = useSearchParams();
     const [isCreateOpen, setIsCreateOpen] = useState(searchParams.get('new') === 'true');
     const [createLoading, setCreateLoading] = useState(false);
@@ -113,7 +116,7 @@ export default function ProductsPage() {
                 })
             });
 
-            mutate('/api/console/products'); // Refresh
+            mutate(`/api/console/products?limit=${limit}&offset=${offset}`); // Refresh
             toast('success', editingProduct ? 'Product updated' : 'Product created');
             setIsCreateOpen(false);
             setEditingProduct(null);
@@ -138,7 +141,7 @@ export default function ProductsPage() {
             await apiRequest(`/api/console/products/${id}`, {
                 method: 'DELETE'
             });
-            mutate('/api/console/products');
+            mutate(`/api/console/products?limit=${limit}&offset=${offset}`);
             toast('success', 'Product deleted');
         } catch (e) {
             console.error(e);
@@ -278,6 +281,15 @@ export default function ProductsPage() {
                     ))
                 )}
             </motion.div>
+
+            {data?.pagination && (
+                <Pagination
+                    total={data.pagination.total}
+                    limit={data.pagination.limit}
+                    offset={data.pagination.offset}
+                    onPageChange={setOffset}
+                />
+            )}
 
             {/* Create Modal */}
             <Modal

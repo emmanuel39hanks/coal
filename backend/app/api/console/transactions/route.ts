@@ -1,32 +1,36 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/privy';
-import { logger } from '@/lib/logger';
+import { errors, apiSuccess } from '@/lib/errors';
+import { parsePaginationParams, paginatedMeta } from '@/lib/pagination';
 
 export async function GET(request: Request) {
     try {
         const user = await getAuthUser(request);
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        if (!user) return errors.unauthorized();
 
-        const transactions = await prisma.transaction.findMany({
-            where: {
-                checkout: { merchantId: user.id }
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 50,
-            include: {
-                checkout: {
-                    select: {
-                        description: true,
-                        product: { select: { name: true } }
+        const url = new URL(request.url);
+        const pagination = parsePaginationParams(url);
+        const where = { checkout: { merchantId: user.id } };
+
+        const [transactions, total] = await Promise.all([
+            prisma.transaction.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: pagination.skip,
+                take: pagination.take,
+                include: {
+                    checkout: {
+                        select: {
+                            description: true,
+                            product: { select: { name: true } }
+                        }
                     }
                 }
-            }
-        });
+            }),
+            prisma.transaction.count({ where }),
+        ]);
 
-        return NextResponse.json({
+        return apiSuccess({
             transactions: transactions.map(tx => ({
                 id: tx.id,
                 txHash: tx.txHash,
@@ -36,11 +40,10 @@ export async function GET(request: Request) {
                 status: tx.status === 'confirmed' ? 'Confirmed' : 'Failed',
                 date: tx.createdAt,
                 description: tx.checkout?.product?.name || tx.checkout?.description || "Payment"
-            }))
+            })),
+            pagination: paginatedMeta(total, pagination),
         });
-
-    } catch (error) {
-        logger.error({ err: error }, 'Transactions error');
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    } catch {
+        return errors.internal();
     }
 }

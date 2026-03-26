@@ -26,11 +26,12 @@ export async function GET(request: Request) {
         const { limited } = await checkRateLimit(rateLimiters.console, user.id);
         if (limited) return errors.rateLimited();
 
-        const [members, pendingInvites] = await Promise.all([
+        const [members, pendingInvites, memberCount] = await Promise.all([
             prisma.teamMember.findMany({
                 where: { merchantId: user.id },
                 include: { user: { select: { id: true, name: true, email: true } } },
                 orderBy: { createdAt: 'asc' },
+                take: 100,
             }),
             prisma.verification.findMany({
                 where: {
@@ -38,7 +39,9 @@ export async function GET(request: Request) {
                     expiresAt: { gt: new Date() },
                 },
                 orderBy: { createdAt: 'asc' },
+                take: 50,
             }),
+            prisma.teamMember.count({ where: { merchantId: user.id } }),
         ]);
 
         return apiSuccess({
@@ -62,6 +65,7 @@ export async function GET(request: Request) {
                     };
                 }),
             ],
+            pagination: { total: memberCount + pendingInvites.length },
         });
     } catch {
         return errors.internal();

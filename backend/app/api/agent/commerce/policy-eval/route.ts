@@ -7,6 +7,7 @@ import {
     loadMerchantCommerceContext,
     normalizeStructuredStringList,
     runMerchantStructuredJob,
+    sanitizeForAIPrompt,
 } from '@/lib/0g/ai-commerce';
 
 const policyEvalSchema = z.object({
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
             systemPrompt:
                 'You evaluate commerce policy decisions for Coal merchants. Use only the supplied merchant context and return compact JSON with decision, rationale, citations, and nextActions.',
             userPayload: {
-                scenario: validated.data.scenario,
+                scenario: sanitizeForAIPrompt(validated.data.scenario),
                 merchant: context.merchant,
                 settings: context.settings,
                 products: context.products,
