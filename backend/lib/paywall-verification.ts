@@ -38,7 +38,7 @@ export async function getPaywallVerificationState(input: {
             where: {
                 paywallId_address: {
                     paywallId: input.paywallId,
-                    address: input.address,
+                    address: input.address.toLowerCase(),
                 },
             },
         });

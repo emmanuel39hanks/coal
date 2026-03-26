@@ -285,35 +285,50 @@ export async function POST(request: Request) {
             const payerAddress = typeof metadata?.payerAddress === 'string' ? metadata.payerAddress : null;
 
             if (paywallId && payerAddress) {
-                // Look up the paywall's accessDuration for expiration
-                const paywall = await prisma.paywall.findUnique({
-                    where: { id: paywallId },
-                    select: { accessDuration: true },
-                });
-                const expiresAt = paywall?.accessDuration
-                    ? new Date(Date.now() + paywall.accessDuration * 1000)
-                    : null;
+                // Verify the on-chain sender matches the claimed payer address
+                // to prevent txHash theft (someone submitting another user's tx)
+                const normalizedPayer = payerAddress.toLowerCase();
+                if (transferFrom.toLowerCase() !== normalizedPayer) {
+                    paymentLogger.warn(
+                        { sessionId: session.id, txHash, claimed: normalizedPayer, actual: transferFrom },
+                        'Sender mismatch: on-chain sender does not match claimed payer address',
+                    );
+                    // Still confirm the payment (merchant got paid) but do NOT grant
+                    // paywall access to the wrong address
+                } else {
+                    // Look up the paywall's accessDuration for expiration
+                    const paywall = await prisma.paywall.findUnique({
+                        where: { id: paywallId },
+                        select: { accessDuration: true },
+                    });
+                    const expiresAt = paywall?.accessDuration
+                        ? new Date(Date.now() + paywall.accessDuration * 1000)
+                        : null;
 
-                await prisma.paywallAccess.upsert({
-                    where: {
-                        paywallId_address: {
-                            paywallId,
-                            address: payerAddress,
+                    await prisma.paywallAccess.upsert({
+                        where: {
+                            paywallId_address: {
+                                paywallId,
+                                address: normalizedPayer,
+                            },
                         },
-                    },
-                    update: {
-                        accessCount: { increment: 1 },
-                        txHash,
-                        ...(expiresAt && { expiresAt }),
-                    },
-                    create: {
-                        paywallId,
-                        address: payerAddress,
-                        txHash,
-                        accessCount: 1,
-                        expiresAt,
-                    },
-                });
+                        update: {
+                            accessCount: { increment: 1 },
+                            txHash,
+                            // Clear any prior revocation — the user paid again legitimately
+                            revokedAt: null,
+                            revokedReason: null,
+                            ...(expiresAt && { expiresAt }),
+                        },
+                        create: {
+                            paywallId,
+                            address: normalizedPayer,
+                            txHash,
+                            accessCount: 1,
+                            expiresAt,
+                        },
+                    });
+                }
             }
 
             // Increment payment link useCount if this session came from a link

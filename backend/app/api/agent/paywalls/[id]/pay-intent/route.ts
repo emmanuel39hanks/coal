@@ -69,7 +69,7 @@ export async function POST(
                     paywallId: paywall.id,
                     pricingModel: paywall.pricingModel,
                     contentType: paywall.contentType,
-                    ...(validated.data.subject?.walletAddress ? { payerAddress: validated.data.subject.walletAddress } : {}),
+                    ...(validated.data.subject?.walletAddress ? { payerAddress: validated.data.subject.walletAddress.toLowerCase() } : {}),
                     ...(validated.data.subject?.did ? { payerDid: validated.data.subject.did } : {}),
                     ...(validated.data.subject?.agentId ? { agentId: validated.data.subject.agentId } : {}),
                     ...(validated.data.metadata ?? {}),
