@@ -25,6 +25,15 @@ export async function POST(request: Request) {
             include: { product: true }
         });
         if (!link || !link.active) return errors.notFound('Link');
+
+        // Check link expiration and usage limits
+        if (link.expiresAt && link.expiresAt < new Date()) {
+            return errors.gone('This payment link has expired');
+        }
+        if (link.maxUses && link.useCount >= link.maxUses) {
+            return errors.gone('This payment link has reached its usage limit');
+        }
+
         const payerInfoConfig = normalizePayerInfoConfig(link.payerInfoConfig);
 
         let sessionAmount: number;
@@ -62,8 +71,10 @@ export async function POST(request: Request) {
                 payerInfoConfig: toPrismaNullableJson(payerInfoConfig),
                 payerInfo: toPrismaNullableJson(normalizedPayerInfo),
                 billingReason: link.product?.billingType === 'subscription' ? 'subscription_initial' : 'one_time',
+                redirectUrl: link.redirectUrl || null,
                 metadata: link.product
                     ? {
+                        linkId: link.id,
                         productId: link.product.id,
                         productName: link.product.name,
                         productDescription: link.product.description,
@@ -76,6 +87,7 @@ export async function POST(request: Request) {
                         subscriptionConsentAccepted: subscriptionConsentAccepted === true,
                     }
                     : {
+                        linkId: link.id,
                         customerEmail: resolvedCustomerEmail,
                         payerInfoValues: normalizedPayerInfo,
                     },

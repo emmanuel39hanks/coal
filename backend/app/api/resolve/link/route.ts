@@ -32,5 +32,21 @@ export async function GET(request: Request) {
         return errors.notFound("Link");
     }
 
+    // Check if link has expired
+    if (link.expiresAt && link.expiresAt < new Date()) {
+        return errors.gone('This payment link has expired');
+    }
+
+    // Check if link has reached max uses
+    if (link.maxUses && link.useCount >= link.maxUses) {
+        return errors.gone('This payment link has reached its usage limit');
+    }
+
+    // Increment view count (fire-and-forget)
+    void prisma.paymentLink.update({
+        where: { id: link.id },
+        data: { viewCount: { increment: 1 } },
+    }).catch(() => null);
+
     return apiSuccess(link);
 }

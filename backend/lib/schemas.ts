@@ -82,6 +82,10 @@ export const createProductSchema = z.object({
     billingType: billingTypeField,
     billingInterval: billingIntervalField,
     billingIntervalCount: z.coerce.number().int().min(1).max(12).optional(),
+    sku: z.string().max(100).optional(),
+    tags: z.array(z.string().max(50)).max(10).optional(),
+    status: z.enum(['draft', 'active', 'archived']).optional(),
+    images: z.array(z.string().url()).max(6).optional(),
 }).superRefine((data, ctx) => {
     if (data.billingType === 'subscription' && !data.billingInterval) {
         ctx.addIssue({
@@ -100,6 +104,10 @@ export const updateProductSchema = z.object({
     billingType: billingTypeField.optional(),
     billingInterval: billingIntervalField.or(z.literal('')).optional(),
     billingIntervalCount: z.coerce.number().int().min(1).max(12).optional(),
+    sku: z.string().max(100).optional(),
+    tags: z.array(z.string().max(50)).max(10).optional(),
+    status: z.enum(['draft', 'active', 'archived']).optional(),
+    images: z.array(z.string().url()).max(6).optional(),
 }).superRefine((data, ctx) => {
     const billingType = data.billingType;
     const billingInterval =
@@ -123,6 +131,27 @@ export const createLinkSchema = z.object({
     title: z.string().max(200).optional(),
     description: z.string().max(500).optional(),
     payerInfo: payerInfoConfigSchema.optional(),
+    expiresAt: z.coerce.date().optional().refine(d => !d || d > new Date(), { message: 'Expiration must be in the future' }),
+    maxUses: z.coerce.number().int().positive().optional(),
+    redirectUrl: z.string().url().optional().or(z.literal('')),
+    allowQuantity: z.boolean().optional(),
+    minQuantity: z.coerce.number().int().min(1).max(100).optional(),
+    maxQuantity: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export const updateLinkSchema = z.object({
+    productId: z.string().optional(),
+    slug: z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/, 'Slug must be alphanumeric, hyphens or underscores').optional(),
+    title: z.string().max(200).optional(),
+    description: z.string().max(500).optional(),
+    payerInfo: payerInfoConfigSchema.optional(),
+    expiresAt: z.coerce.date().optional().refine(d => !d || d > new Date(), { message: 'Expiration must be in the future' }),
+    maxUses: z.coerce.number().int().positive().optional(),
+    redirectUrl: z.string().url().optional().or(z.literal('')),
+    allowQuantity: z.boolean().optional(),
+    minQuantity: z.coerce.number().int().min(1).max(100).optional(),
+    maxQuantity: z.coerce.number().int().min(1).max(100).optional(),
+    active: z.boolean().optional(),
 });
 
 export const savePayerInfoSchema = z.object({
@@ -139,6 +168,32 @@ export const createFundingIntentSchema = z.object({
 // ─── Console Keys ─────────────────────────────────────────────────────────────
 export const createKeySchema = z.object({
     name: z.string().max(100).optional(),
+});
+
+// ─── Console Paywalls ────────────────────────────────────────────────────────
+export const createPaywallSchema = z.object({
+    name: z.string().min(1, 'Name required').max(200),
+    price: amountField,
+    currency: z.string().default('USDC'),
+    description: z.string().max(2000).optional(),
+    contentType: z.string().default('api'),
+    contentData: z.record(z.string(), z.unknown()).optional(),
+    contentUrl: z.string().url('Must be a valid URL').optional().or(z.literal('')),
+    pricingModel: z.string().default('one_time'),
+    accessDuration: z.coerce.number().int().positive().optional(),
+    callQuota: z.coerce.number().int().positive().optional(),
+});
+
+export const updatePaywallSchema = z.object({
+    name:           z.string().min(1).max(200).optional(),
+    description:    z.string().max(2000).optional(),
+    price:          amountField.optional(),
+    contentData:    z.record(z.string(), z.unknown()).optional(),
+    contentUrl:     z.string().url('Must be a valid URL').optional().or(z.literal('')),
+    active:         z.boolean().optional(),
+    pricingModel:   z.string().optional(),
+    accessDuration: z.coerce.number().int().positive().optional().or(z.literal(null)),
+    callQuota:      z.coerce.number().int().positive().optional().or(z.literal(null)),
 });
 
 // ─── Console Settings ─────────────────────────────────────────────────────────

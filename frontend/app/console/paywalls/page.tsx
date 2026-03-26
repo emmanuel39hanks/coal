@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Add, Copy, TickCircle, Lock, Trash, SearchNormal1, ExportSquare, Flash } from 'iconsax-reactjs';
+import { Add, Copy, TickCircle, Lock, Trash, SearchNormal1, ExportSquare, Flash, Edit2, Code1 } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
 import Modal from '@/components/Modal';
 import { useApi } from '@/lib/api';
@@ -23,6 +23,21 @@ const PRICING_MODEL_LABELS: Record<string, string> = {
     per_call: 'Per call',
 };
 
+const ACCESS_DURATION_OPTIONS = [
+    { label: 'Permanent', value: '' },
+    { label: '1 hour', value: '3600' },
+    { label: '24 hours', value: '86400' },
+    { label: '7 days', value: '604800' },
+    { label: '30 days', value: '2592000' },
+];
+
+const ACCESS_DURATION_LABELS: Record<number, string> = {
+    3600: '1-hour access',
+    86400: '24-hour access',
+    604800: '7-day access',
+    2592000: '30-day access',
+};
+
 interface Paywall {
     id: string;
     name: string;
@@ -32,6 +47,8 @@ interface Paywall {
     contentType: string;
     contentUrl: string | null;
     pricingModel: string;
+    accessDuration: number | null;
+    callQuota: number | null;
     _count: {
         accesses: number;
     } | null;
@@ -42,11 +59,16 @@ export default function PaywallsPage() {
     const toast = useToast();
     const { data, isLoading, error } = useSWR('/api/console/paywalls', fetcher);
     const settlementSymbol = getSettlementToken().symbol;
+    const apiBase = getApiBaseUrl();
 
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [editingPaywall, setEditingPaywall] = useState<Paywall | null>(null);
+    const [codePaywall, setCodePaywall] = useState<Paywall | null>(null);
+    const [codeTab, setCodeTab] = useState<'curl' | 'javascript' | 'react'>('curl');
+    const [codeCopied, setCodeCopied] = useState(false);
 
     // Form state
     const [name, setName] = useState('');
@@ -55,6 +77,8 @@ export default function PaywallsPage() {
     const [contentType, setContentType] = useState<'api' | 'content' | 'download'>('api');
     const [contentUrl, setContentUrl] = useState('');
     const [pricingModel, setPricingModel] = useState<'one_time' | 'per_call'>('one_time');
+    const [accessDuration, setAccessDuration] = useState('');
+    const [callQuota, setCallQuota] = useState('');
 
     const resetForm = () => {
         setName('');
@@ -63,14 +87,40 @@ export default function PaywallsPage() {
         setContentType('api');
         setContentUrl('');
         setPricingModel('one_time');
+        setAccessDuration('');
+        setCallQuota('');
+        setEditingPaywall(null);
     };
 
-    const handleCreate = async () => {
+    const handleOpenCreate = () => {
+        resetForm();
+        setIsCreateOpen(true);
+    };
+
+    const handleOpenEdit = (paywall: Paywall) => {
+        setEditingPaywall(paywall);
+        setName(paywall.name);
+        setDescription(paywall.description || '');
+        setPrice(paywall.price);
+        setContentType((paywall.contentType as 'api' | 'content' | 'download') || 'api');
+        setContentUrl(paywall.contentUrl || '');
+        setPricingModel((paywall.pricingModel as 'one_time' | 'per_call') || 'one_time');
+        setAccessDuration(paywall.accessDuration ? String(paywall.accessDuration) : '');
+        setCallQuota(paywall.callQuota ? String(paywall.callQuota) : '');
+        setIsCreateOpen(true);
+    };
+
+    const handleSubmit = async () => {
         if (!name.trim() || !price) return;
         setCreateLoading(true);
         try {
-            await apiRequest('/api/console/paywalls', {
-                method: 'POST',
+            const url = editingPaywall
+                ? `/api/console/paywalls/${editingPaywall.id}`
+                : '/api/console/paywalls';
+            const method = editingPaywall ? 'PUT' : 'POST';
+
+            await apiRequest(url, {
+                method,
                 body: JSON.stringify({
                     name: name.trim(),
                     description: description.trim() || undefined,
@@ -78,14 +128,16 @@ export default function PaywallsPage() {
                     contentType,
                     contentUrl: contentUrl.trim() || undefined,
                     pricingModel,
+                    accessDuration: accessDuration ? Number(accessDuration) : undefined,
+                    callQuota: pricingModel === 'per_call' && callQuota ? Number(callQuota) : undefined,
                 }),
             });
             mutate('/api/console/paywalls');
-            toast('success', 'Paywall created and published to 0G');
+            toast('success', editingPaywall ? 'Paywall updated' : 'Paywall created and published to 0G');
             setIsCreateOpen(false);
             resetForm();
         } catch (e) {
-            toast('error', getErrorMessage(e, 'Failed to create paywall'));
+            toast('error', getErrorMessage(e, editingPaywall ? 'Failed to update paywall' : 'Failed to create paywall'));
         } finally {
             setCreateLoading(false);
         }
@@ -103,10 +155,73 @@ export default function PaywallsPage() {
     };
 
     const copyVerifyUrl = (id: string) => {
-        const url = `${getApiBaseUrl()}/api/paywalls/${id}/verify`;
+        const url = `${apiBase}/api/paywalls/${id}/verify`;
         navigator.clipboard.writeText(url);
         setCopiedId(id);
         setTimeout(() => setCopiedId(null), 2000);
+    };
+
+    const getCodeSnippet = (pw: Paywall): string => {
+        const verifyUrl = `${apiBase}/api/paywalls/${pw.id}/verify`;
+        const payUrl = `${apiBase}/api/paywalls/${pw.id}/pay`;
+
+        if (codeTab === 'curl') {
+            return `# Check access (replace YOUR_WALLET_ADDRESS)
+curl "${verifyUrl}?address=YOUR_WALLET_ADDRESS"
+
+# If 402 returned, pay via:
+curl -X POST ${payUrl} \\
+  -H "Content-Type: application/json" \\
+  -d '{"address": "YOUR_WALLET_ADDRESS", "txHash": "0x..."}'`;
+        }
+        if (codeTab === 'javascript') {
+            return `const VERIFY_URL = "${verifyUrl}";
+const PAY_URL = "${payUrl}";
+
+async function checkAccess(address) {
+  const res = await fetch(\`\${VERIFY_URL}?address=\${address}\`);
+  const data = await res.json();
+
+  if (data.paid) {
+    // Access granted
+    return data;
+  }
+
+  // HTTP 402 - payment required
+  // data.paymentMethods contains payment options
+  return data;
+}`;
+        }
+        // react
+        return `import { useState, useEffect } from 'react';
+
+function PaywallGate({ address, children }) {
+  const [access, setAccess] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("${verifyUrl}?address=" + address)
+      .then(r => r.json())
+      .then(data => { setAccess(data); setLoading(false); });
+  }, [address]);
+
+  if (loading) return <div>Checking access...</div>;
+  if (!access?.paid) {
+    return (
+      <div>
+        <p>Payment required: ${pw.price} ${pw.currency}</p>
+        <a href="${payUrl}">Pay now</a>
+      </div>
+    );
+  }
+  return children;
+}`;
+    };
+
+    const copyCode = (pw: Paywall) => {
+        navigator.clipboard.writeText(getCodeSnippet(pw));
+        setCodeCopied(true);
+        setTimeout(() => setCodeCopied(false), 2000);
     };
 
     const paywalls: Paywall[] = data?.paywalls ?? [];
@@ -129,7 +244,7 @@ export default function PaywallsPage() {
                     </p>
                 </div>
                 <button
-                    onClick={() => setIsCreateOpen(true)}
+                    onClick={handleOpenCreate}
                     className="inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white shadow-[4px_4px_0px_0px_#FF5C16] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#FF5C16]"
                 >
                     <Add size={18} variant="Linear" />
@@ -144,7 +259,7 @@ export default function PaywallsPage() {
                     <input
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Search paywalls…"
+                        placeholder="Search paywalls..."
                         className="w-full rounded-2xl border-2 border-black/5 bg-white pl-10 pr-4 py-2.5 text-sm font-medium focus:outline-none focus:border-[var(--color-brand-orange)]/30"
                     />
                 </div>
@@ -176,7 +291,7 @@ export default function PaywallsPage() {
                             Create a paywall to gate any URL or API endpoint. Each paywall gets an x402-compatible verify endpoint and is published to 0G Storage so AI agents can discover it.
                         </p>
                         <button
-                            onClick={() => setIsCreateOpen(true)}
+                            onClick={handleOpenCreate}
                             className="inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white shadow-[4px_4px_0px_0px_#FF5C16] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#FF5C16]"
                         >
                             <Add size={16} variant="Linear" />
@@ -203,6 +318,15 @@ export default function PaywallsPage() {
                                         <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
                                             {CONTENT_TYPE_LABELS[paywall.contentType] ?? paywall.contentType}
                                         </span>
+                                        {paywall.accessDuration ? (
+                                            <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">
+                                                {ACCESS_DURATION_LABELS[paywall.accessDuration] ?? `${paywall.accessDuration}s access`}
+                                            </span>
+                                        ) : (
+                                            <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider bg-green-50 text-green-600 px-2 py-0.5 rounded-full">
+                                                Permanent
+                                            </span>
+                                        )}
                                     </div>
                                     {paywall.description && (
                                         <p className="text-xs text-[var(--color-text-secondary)] truncate font-medium mb-1">{paywall.description}</p>
@@ -215,6 +339,14 @@ export default function PaywallsPage() {
                                         <span className="text-xs font-medium text-[var(--color-text-secondary)]">
                                             {paywall._count?.accesses ?? 0} access{paywall._count?.accesses === 1 ? '' : 'es'}
                                         </span>
+                                        {paywall.pricingModel === 'per_call' && paywall.callQuota && (
+                                            <>
+                                                <span className="text-xs text-[var(--color-text-secondary)]">·</span>
+                                                <span className="text-xs font-medium text-[var(--color-text-secondary)]">
+                                                    Quota: {paywall.callQuota} calls
+                                                </span>
+                                            </>
+                                        )}
                                         <span className="flex items-center gap-1 text-[10px] font-bold text-green-600">
                                             <Flash size={10} variant="Bold" />
                                             0G
@@ -235,8 +367,23 @@ export default function PaywallsPage() {
                                         )}
                                         {copiedId === paywall.id ? 'Copied' : 'Verify URL'}
                                     </button>
+                                    <button
+                                        onClick={() => { setCodePaywall(paywall); setCodeTab('curl'); setCodeCopied(false); }}
+                                        className="flex items-center gap-1.5 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-brand-navy)] transition-colors px-3 py-2 rounded-xl hover:bg-[var(--color-bg-base)]"
+                                        title="Get integration code"
+                                    >
+                                        <Code1 size={14} variant="Linear" />
+                                        Code
+                                    </button>
+                                    <button
+                                        onClick={() => handleOpenEdit(paywall)}
+                                        className="p-2 rounded-xl text-[var(--color-text-secondary)] hover:text-[var(--color-brand-navy)] hover:bg-[var(--color-bg-base)] transition-all opacity-0 group-hover:opacity-100"
+                                        title="Edit paywall"
+                                    >
+                                        <Edit2 size={16} variant="Linear" />
+                                    </button>
                                     <a
-                                        href={`${getApiBaseUrl()}/api/paywalls/${paywall.id}/verify`}
+                                        href={`${apiBase}/api/paywalls/${paywall.id}/verify`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="flex items-center gap-1.5 text-xs font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-brand-navy)] transition-colors px-3 py-2 rounded-xl hover:bg-[var(--color-bg-base)]"
@@ -286,8 +433,8 @@ export default function PaywallsPage() {
                 </motion.div>
             )}
 
-            {/* Create modal */}
-            <Modal isOpen={isCreateOpen} onClose={() => { setIsCreateOpen(false); resetForm(); }} title="New Paywall">
+            {/* Create/Edit modal */}
+            <Modal isOpen={isCreateOpen} onClose={() => { setIsCreateOpen(false); resetForm(); }} title={editingPaywall ? 'Edit Paywall' : 'New Paywall'}>
                 <div className="space-y-4">
                     <div>
                         <label className="block text-xs font-bold text-[var(--color-brand-navy)] mb-1.5">Name *</label>
@@ -335,6 +482,35 @@ export default function PaywallsPage() {
                         </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-bold text-[var(--color-brand-navy)] mb-1.5">Access duration</label>
+                            <select
+                                value={accessDuration}
+                                onChange={(e) => setAccessDuration(e.target.value)}
+                                className="w-full rounded-2xl border-2 border-black/8 bg-[var(--color-bg-base)] px-4 py-3 text-sm font-medium focus:outline-none focus:border-[var(--color-brand-orange)]/40"
+                            >
+                                {ACCESS_DURATION_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {pricingModel === 'per_call' && (
+                            <div>
+                                <label className="block text-xs font-bold text-[var(--color-brand-navy)] mb-1.5">Call quota</label>
+                                <input
+                                    type="number"
+                                    value={callQuota}
+                                    onChange={(e) => setCallQuota(e.target.value)}
+                                    placeholder="Unlimited"
+                                    min="1"
+                                    step="1"
+                                    className="w-full rounded-2xl border-2 border-black/8 bg-[var(--color-bg-base)] px-4 py-3 text-sm font-medium focus:outline-none focus:border-[var(--color-brand-orange)]/40"
+                                />
+                            </div>
+                        )}
+                    </div>
+
                     <div>
                         <label className="block text-xs font-bold text-[var(--color-brand-navy)] mb-1.5">Content type</label>
                         <div className="grid grid-cols-3 gap-2">
@@ -375,14 +551,52 @@ export default function PaywallsPage() {
                             Cancel
                         </button>
                         <button
-                            onClick={handleCreate}
+                            onClick={handleSubmit}
                             disabled={createLoading || !name.trim() || !price}
                             className="flex-1 rounded-full bg-black py-3 text-sm font-bold text-white shadow-[4px_4px_0px_0px_#FF5C16] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#FF5C16] disabled:opacity-50 disabled:shadow-none disabled:translate-x-0 disabled:translate-y-0"
                         >
-                            {createLoading ? 'Creating…' : 'Create Paywall'}
+                            {createLoading ? (editingPaywall ? 'Saving...' : 'Creating...') : (editingPaywall ? 'Save Changes' : 'Create Paywall')}
                         </button>
                     </div>
                 </div>
+            </Modal>
+
+            {/* Get Code modal */}
+            <Modal isOpen={!!codePaywall} onClose={() => setCodePaywall(null)} title="Integration Code">
+                {codePaywall && (
+                    <div className="space-y-4">
+                        <div className="flex gap-1 bg-[var(--color-bg-base)] rounded-xl p-1">
+                            {(['curl', 'javascript', 'react'] as const).map((tab) => (
+                                <button
+                                    key={tab}
+                                    onClick={() => { setCodeTab(tab); setCodeCopied(false); }}
+                                    className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                                        codeTab === tab
+                                            ? 'bg-black text-white'
+                                            : 'text-[var(--color-text-secondary)] hover:text-[var(--color-brand-navy)]'
+                                    }`}
+                                >
+                                    {tab === 'curl' ? 'cURL' : tab === 'javascript' ? 'JavaScript' : 'React'}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="relative">
+                            <pre className="bg-[#1a1a2e] text-green-400 text-xs p-4 rounded-2xl overflow-x-auto leading-relaxed font-mono whitespace-pre-wrap break-all">
+                                {getCodeSnippet(codePaywall)}
+                            </pre>
+                            <button
+                                onClick={() => copyCode(codePaywall)}
+                                className="absolute top-3 right-3 flex items-center gap-1.5 text-xs font-bold text-white/60 hover:text-white bg-white/10 hover:bg-white/20 px-2.5 py-1.5 rounded-lg transition-all"
+                            >
+                                {codeCopied ? (
+                                    <><TickCircle size={12} variant="Bold" className="text-green-400" /> Copied</>
+                                ) : (
+                                    <><Copy size={12} variant="Linear" /> Copy</>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );

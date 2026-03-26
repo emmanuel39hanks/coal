@@ -285,6 +285,15 @@ export async function POST(request: Request) {
             const payerAddress = typeof metadata?.payerAddress === 'string' ? metadata.payerAddress : null;
 
             if (paywallId && payerAddress) {
+                // Look up the paywall's accessDuration for expiration
+                const paywall = await prisma.paywall.findUnique({
+                    where: { id: paywallId },
+                    select: { accessDuration: true },
+                });
+                const expiresAt = paywall?.accessDuration
+                    ? new Date(Date.now() + paywall.accessDuration * 1000)
+                    : null;
+
                 await prisma.paywallAccess.upsert({
                     where: {
                         paywallId_address: {
@@ -295,14 +304,25 @@ export async function POST(request: Request) {
                     update: {
                         accessCount: { increment: 1 },
                         txHash,
+                        ...(expiresAt && { expiresAt }),
                     },
                     create: {
                         paywallId,
                         address: payerAddress,
                         txHash,
                         accessCount: 1,
+                        expiresAt,
                     },
                 });
+            }
+
+            // Increment payment link useCount if this session came from a link
+            const paymentLinkId = typeof metadata?.linkId === 'string' ? metadata.linkId : null;
+            if (paymentLinkId) {
+                await prisma.paymentLink.update({
+                    where: { id: paymentLinkId },
+                    data: { useCount: { increment: 1 } },
+                }).catch(() => null);
             }
 
             try {

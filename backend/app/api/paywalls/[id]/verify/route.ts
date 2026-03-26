@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit, getIP } from '@/lib/rate-limit';
 import { getPaywallVerificationState } from '@/lib/paywall-verification';
@@ -32,6 +33,21 @@ export async function GET(
         if (!verification) return errors.notFound('Paywall');
 
         if (verification.paid) {
+            // For per_call paywalls, increment the access count (fire-and-forget)
+            if (verification.paywall.pricingModel === 'per_call' && address) {
+                void prisma.paywallAccess.update({
+                    where: {
+                        paywallId_address: {
+                            paywallId: id,
+                            address,
+                        },
+                    },
+                    data: {
+                        accessCount: { increment: 1 },
+                        lastAccessAt: new Date(),
+                    },
+                }).catch(() => null);
+            }
             return apiSuccess(verification.body, 200);
         }
 
