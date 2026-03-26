@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { getCallerUser } from '@/lib/privy';
 import { errors, apiSuccess, apiError } from '@/lib/errors';
@@ -27,7 +28,9 @@ export async function POST(request: Request) {
         const invite = invites.find(i => {
             try {
                 const val = JSON.parse(i.value);
-                return val.token === token;
+                const expected = Buffer.from(val.token ?? '');
+                const actual = Buffer.from(token);
+                return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
             } catch {
                 return false;
             }

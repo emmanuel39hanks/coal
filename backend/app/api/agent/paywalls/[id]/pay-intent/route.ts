@@ -6,6 +6,7 @@ import { checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 import { validateBody } from '@/lib/schemas';
 import { toPrismaJson } from '@/lib/prisma-json';
 import { getPaywallVerificationState } from '@/lib/paywall-verification';
+import { validateWebhookUrl } from '@/lib/ssrf';
 
 const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -57,6 +58,14 @@ export async function POST(
         const body = await request.json().catch(() => ({}));
         const validated = validateBody(payIntentSchema, body);
         if (!validated.success) return validated.error;
+
+        // SSRF validation on callbackUrl before storing
+        if (validated.data.callbackUrl) {
+            const urlCheck = await validateWebhookUrl(validated.data.callbackUrl);
+            if (!urlCheck.valid) {
+                return errors.validation({ callbackUrl: [urlCheck.reason || 'Invalid callback URL'] });
+            }
+        }
 
         const session = await prisma.checkoutSession.create({
             data: {

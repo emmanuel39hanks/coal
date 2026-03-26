@@ -77,7 +77,7 @@ export async function PUT(request: Request) {
             where: { id: user.id },
             data: {
                 name:         name         !== undefined ? name         : undefined,
-                payoutAddress: payoutAddress !== undefined ? payoutAddress : undefined,
+                payoutAddress: payoutAddress !== undefined ? payoutAddress?.toLowerCase() : undefined,
                 webhookUrl:   webhookUrl   !== undefined ? (webhookUrl || null) : undefined,
             },
             select: { name: true, email: true, payoutAddress: true, webhookUrl: true }

@@ -12,6 +12,7 @@ export function validateRecipients(recipients: SplitRecipient[]): string | null 
   if (recipients.length > 10) return 'Maximum 10 recipients';
   for (const r of recipients) {
     if (!isAddress(r.address)) return `Invalid address: ${r.address}`;
+    if (!Number.isInteger(r.percent)) return 'Percent must be an integer';
     if (r.percent < 1) return 'Minimum split is 1%';
     if (r.percent > 99) return 'Maximum split per recipient is 99%';
   }
