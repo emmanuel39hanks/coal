@@ -31,11 +31,21 @@ export async function POST(
         if (!validated.success) return validated.error;
 
         const { address, txHash } = validated.data;
+        const normalizedAddress = address.toLowerCase();
         const normalizedTxHash = txHash.toLowerCase();
 
         const paywall = await prisma.paywall.findUnique({ where: { id } });
         if (!paywall || !paywall.active) {
             return errors.notFound('Paywall');
+        }
+
+        // Reject payment if this address has been revoked for this paywall
+        const existingAccess = await prisma.paywallAccess.findUnique({
+            where: { paywallId_address: { paywallId: id, address: normalizedAddress } },
+            select: { revokedAt: true },
+        });
+        if (existingAccess?.revokedAt) {
+            return errors.forbidden('Access has been revoked by the merchant');
         }
 
         // Atomic txHash dedup check + session creation inside a transaction
@@ -68,7 +78,7 @@ export async function POST(
                     description: paywall.name,
                     metadata: {
                         paywallId: id,
-                        payerAddress: address,
+                        payerAddress: normalizedAddress,
                         pricingModel: paywall.pricingModel,
                         contentType: paywall.contentType,
                     },
