@@ -17,6 +17,7 @@ import {
     markSubscriptionInvoicePastDueBySessionId,
     syncSubscriptionAfterConfirmedPayment,
 } from '@/lib/subscriptions';
+import { checkSanctions } from '@/lib/sanctions';
 
 // ─── Chain / Contract config ─────────────────────────────────────────────────
 const ERC20_TRANSFER_ABI = parseAbi([
@@ -192,6 +193,25 @@ export async function POST(request: Request) {
             const transferFrom = (decoded.args as any).from as string;
             const transferTo   = (decoded.args as any).to as string;
             const transferAmount = (decoded.args as any).value as bigint;
+
+            // Sanctions screening — reject if either party is sanctioned
+            const sanctionsResult = await checkSanctions([transferFrom, transferTo].filter(Boolean));
+            if (sanctionsResult.sanctioned) {
+                await prisma.checkoutSession.update({
+                    where: { id: session.id },
+                    data: { status: "failed" }
+                });
+                if (session.paymentMode === 'fund_then_pay') {
+                    await updateFundingIntentResumeState(session.id, 'funded_but_unsettled');
+                }
+                await markSubscriptionInvoicePastDueBySessionId(session.id).catch(() => null);
+                results.failed++;
+                paymentLogger.warn(
+                    { sessionId: session.id, txHash, sanctionedAddress: sanctionsResult.address, reason: 'sanctioned_address' },
+                    'Payment blocked: sanctioned address detected',
+                );
+                continue;
+            }
 
             // Verify recipient — prefer the snapshot taken at checkout creation
             // to prevent TOCTOU if the merchant changes their payout address mid-flight
