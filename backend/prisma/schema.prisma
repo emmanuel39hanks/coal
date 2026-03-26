@@ -119,6 +119,9 @@ model Product {
   billingInterval      String?
   billingIntervalCount Int               @default(1)
   billingType          String            @default("one_time")
+  status               String            @default("active")
+  tags                 String[]          @default([])
+  images               String[]          @default([])
   billingMandates      BillingMandate[]
   checkoutSessions     CheckoutSession[]
   paymentLinks         PaymentLink[]
@@ -143,18 +146,26 @@ model ApiKey {
 }
 
 model PaymentLink {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   merchantId      String
   productId       String?
-  slug            String   @unique
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  slug            String    @unique
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   description     String?
   title           String?
   payerInfoConfig Json?
-  merchant        User     @relation(fields: [merchantId], references: [id])
-  product         Product? @relation(fields: [productId], references: [id])
+  expiresAt       DateTime?
+  maxUses         Int?
+  useCount        Int       @default(0)
+  viewCount       Int       @default(0)
+  redirectUrl     String?
+  allowQuantity   Boolean   @default(false)
+  minQuantity     Int       @default(1)
+  maxQuantity     Int       @default(1)
+  merchant        User      @relation(fields: [merchantId], references: [id])
+  product         Product?  @relation(fields: [productId], references: [id])
 
   @@map("payment_link")
 }
@@ -287,34 +298,39 @@ model TeamMember {
 }
 
 model Paywall {
-  id           String          @id @default(cuid())
-  merchantId   String
-  name         String
-  description  String?
-  price        Decimal         @db.Decimal(18, 6)
-  currency     String          @default("USDC")
-  contentType  String          @default("api")
-  contentUrl   String?
-  contentData  Json?
-  pricingModel String          @default("one_time")
-  active       Boolean         @default(true)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  merchant     User            @relation(fields: [merchantId], references: [id])
-  accesses     PaywallAccess[]
+  id              String          @id @default(cuid())
+  merchantId      String
+  name            String
+  description     String?
+  price           Decimal         @db.Decimal(18, 6)
+  currency        String          @default("USDC")
+  contentType     String          @default("api")
+  contentUrl      String?
+  contentData     Json?
+  pricingModel    String          @default("one_time")
+  active          Boolean         @default(true)
+  accessDuration  Int?
+  callQuota       Int?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  merchant        User            @relation(fields: [merchantId], references: [id])
+  accesses        PaywallAccess[]
 
   @@map("paywall")
 }
 
 model PaywallAccess {
-  id          String    @id @default(cuid())
-  paywallId   String
-  address     String
-  txHash      String
-  accessCount Int       @default(1)
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
-  paywall     Paywall   @relation(fields: [paywallId], references: [id])
+  id            String    @id @default(cuid())
+  paywallId     String
+  address       String
+  txHash        String
+  accessCount   Int       @default(1)
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  lastAccessAt  DateTime?
+  createdAt     DateTime  @default(now())
+  paywall       Paywall   @relation(fields: [paywallId], references: [id])
 
   @@unique([paywallId, address])
   @@map("paywall_access")

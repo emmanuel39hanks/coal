@@ -1,23 +1,11 @@
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
-import { validateBody, amountField } from '@/lib/schemas';
+import { validateBody, updatePaywallSchema } from '@/lib/schemas';
 import { publishPaywallManifest } from '@/lib/0g/paywalls';
 import { syncMerchantArtifacts } from '@/lib/0g/merchant';
-
-const updatePaywallSchema = z.object({
-    name:         z.string().min(1).max(200).optional(),
-    description:  z.string().max(2000).optional(),
-    price:        amountField.optional(),
-    contentData:  z.record(z.string(), z.unknown()).optional(),
-    contentUrl:   z.string().url('Must be a valid URL').optional().or(z.literal('')),
-    active:       z.boolean().optional(),
-    pricingModel: z.string().optional(),
-});
 
 export async function PUT(
     request: Request,
@@ -41,18 +29,20 @@ export async function PUT(
             return errors.notFound('Paywall');
         }
 
-        const { name, description, price, contentData, contentUrl, active, pricingModel } = validated.data;
+        const { name, description, price, contentData, contentUrl, active, pricingModel, accessDuration, callQuota } = validated.data;
 
         const updated = await prisma.paywall.update({
             where: { id },
             data: {
-                ...(name         !== undefined && { name }),
-                ...(description  !== undefined && { description }),
-                ...(price        !== undefined && { price }),
-                ...(contentData  !== undefined && { contentData: contentData as Prisma.InputJsonValue }),
-                ...(contentUrl   !== undefined && { contentUrl: contentUrl || null }),
-                ...(active       !== undefined && { active }),
-                ...(pricingModel !== undefined && { pricingModel }),
+                ...(name           !== undefined && { name }),
+                ...(description    !== undefined && { description }),
+                ...(price          !== undefined && { price }),
+                ...(contentData    !== undefined && { contentData: contentData as Prisma.InputJsonValue }),
+                ...(contentUrl     !== undefined && { contentUrl: contentUrl || null }),
+                ...(active         !== undefined && { active }),
+                ...(pricingModel   !== undefined && { pricingModel }),
+                ...(accessDuration !== undefined && { accessDuration: accessDuration }),
+                ...(callQuota      !== undefined && { callQuota: callQuota }),
             },
         });
 

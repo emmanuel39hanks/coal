@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Add, Copy, TickCircle, Global, Money, Box, SearchNormal1, Trash } from 'iconsax-reactjs';
+import { Add, Copy, TickCircle, Global, Money, Box, SearchNormal1, Trash, Edit2 } from 'iconsax-reactjs';
 import useSWR, { mutate } from 'swr';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
@@ -26,6 +26,11 @@ interface PaymentLink {
         required: boolean;
         fields: string[];
     } | null;
+    expiresAt: string | null;
+    maxUses: number | null;
+    useCount: number;
+    viewCount: number;
+    redirectUrl: string | null;
 }
 
 interface ProductOption {
@@ -34,7 +39,7 @@ interface ProductOption {
     price: string;
 }
 
-interface CreateLinkBody {
+interface LinkBody {
     slug?: string;
     productId?: string;
     title?: string;
@@ -43,6 +48,9 @@ interface CreateLinkBody {
         required: boolean;
         fields: PayerInfoField[];
     };
+    expiresAt?: string;
+    maxUses?: number;
+    redirectUrl?: string;
 }
 
 export default function PaymentLinksPage() {
@@ -66,6 +74,12 @@ export default function PaymentLinksPage() {
     const [requirePayerInfo, setRequirePayerInfo] = useState(false);
     const [payerInfoFields, setPayerInfoFields] = useState<PayerInfoField[]>([]);
 
+    // New production fields
+    const [expiresAt, setExpiresAt] = useState('');
+    const [maxUses, setMaxUses] = useState('');
+    const [redirectUrl, setRedirectUrl] = useState('');
+    const [editingLink, setEditingLink] = useState<PaymentLink | null>(null);
+
     // Copy State
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -73,15 +87,48 @@ export default function PaymentLinksPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const settlementSymbol = getSettlementToken().symbol;
 
+    const resetForm = () => {
+        setSelectedProduct('');
+        setCustomSlug('');
+        setCustomTitle('');
+        setCustomDesc('');
+        setLinkType('product');
+        setRequirePayerInfo(false);
+        setPayerInfoFields([]);
+        setExpiresAt('');
+        setMaxUses('');
+        setRedirectUrl('');
+        setEditingLink(null);
+    };
+
+    const handleOpenEdit = (link: PaymentLink) => {
+        setEditingLink(link);
+        setCustomSlug(link.slug);
+        setExpiresAt(link.expiresAt ? new Date(link.expiresAt).toISOString().slice(0, 16) : '');
+        setMaxUses(link.maxUses ? String(link.maxUses) : '');
+        setRedirectUrl(link.redirectUrl || '');
+        if (link.payerInfoConfig?.fields) {
+            setPayerInfoFields(link.payerInfoConfig.fields as PayerInfoField[]);
+            setRequirePayerInfo(link.payerInfoConfig.required);
+        } else {
+            setPayerInfoFields([]);
+            setRequirePayerInfo(false);
+        }
+        setIsCreateOpen(true);
+    };
+
     const handleCreate = async () => {
         setCreateLoading(true);
         try {
-            const body: CreateLinkBody = { slug: customSlug || undefined };
-            if (linkType === 'product') {
-                body.productId = selectedProduct;
-            } else {
-                body.title = customTitle;
-                body.description = customDesc;
+            const body: LinkBody = { slug: customSlug || undefined };
+
+            if (!editingLink) {
+                if (linkType === 'product') {
+                    body.productId = selectedProduct;
+                } else {
+                    body.title = customTitle;
+                    body.description = customDesc;
+                }
             }
             if (payerInfoFields.length > 0) {
                 body.payerInfo = {
@@ -89,25 +136,23 @@ export default function PaymentLinksPage() {
                     fields: payerInfoFields,
                 };
             }
+            if (expiresAt) body.expiresAt = new Date(expiresAt).toISOString();
+            if (maxUses) body.maxUses = Number(maxUses);
+            if (redirectUrl) body.redirectUrl = redirectUrl;
 
-            await apiRequest('/api/console/links', {
-                method: 'POST',
-                body: JSON.stringify(body)
-            });
+            const url = editingLink
+                ? `/api/console/links/${editingLink.id}`
+                : '/api/console/links';
+            const method = editingLink ? 'PUT' : 'POST';
+
+            await apiRequest(url, { method, body: JSON.stringify(body) });
 
             mutate('/api/console/links');
-            toast('success', 'Payment link created');
+            toast('success', editingLink ? 'Link updated' : 'Payment link created');
             setIsCreateOpen(false);
-            setSelectedProduct('');
-            setCustomSlug('');
-            setCustomTitle('');
-            setCustomDesc('');
-            setLinkType('product');
-            setRequirePayerInfo(false);
-            setPayerInfoFields([]);
+            resetForm();
         } catch (e: unknown) {
-            console.error(e);
-            toast('error', getErrorMessage(e, 'Failed to create link. Slug might be taken.'));
+            toast('error', getErrorMessage(e, editingLink ? 'Failed to update link' : 'Failed to create link. Slug might be taken.'));
         } finally {
             setCreateLoading(false);
         }
@@ -196,7 +241,7 @@ export default function PaymentLinksPage() {
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Price</th>
-                                <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Payer Info</th>
+                                <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Usage</th>
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="text-right py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
@@ -264,27 +309,29 @@ export default function PaymentLinksPage() {
                                         {link.price === 'Flexible' ? 'Any Amount' : `${link.price} ${settlementSymbol}`}
                                     </td>
                                     <td className="py-4 px-6">
-                                        {link.payerInfoConfig?.fields?.length ? (
-                                            <div className="flex flex-wrap gap-2">
-                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold ${
-                                                    link.payerInfoConfig.required
-                                                        ? 'bg-amber-100 text-amber-700'
-                                                        : 'bg-slate-100 text-slate-700'
-                                                }`}>
-                                                    {link.payerInfoConfig.required ? 'Required' : 'Optional'}
-                                                </span>
-                                                <span className="text-xs font-medium text-gray-500">
-                                                    {link.payerInfoConfig.fields.length} field{link.payerInfoConfig.fields.length > 1 ? 's' : ''}
-                                                </span>
+                                        <div className="space-y-1">
+                                            <div className="text-xs font-bold text-[var(--color-brand-navy)]">
+                                                {link.useCount}{link.maxUses ? ` / ${link.maxUses}` : ''} sold
                                             </div>
-                                        ) : (
-                                            <span className="text-xs font-medium text-gray-400">None</span>
-                                        )}
+                                            <div className="text-[10px] text-gray-400">{link.viewCount} views</div>
+                                            {link.expiresAt && (
+                                                <div className={`text-[10px] font-bold ${new Date(link.expiresAt) < new Date() ? 'text-red-500' : 'text-gray-400'}`}>
+                                                    {new Date(link.expiresAt) < new Date() ? 'Expired' : `Expires ${new Date(link.expiresAt).toLocaleDateString()}`}
+                                                </div>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="py-4 px-6">
                                         <span className={`inline-flex w-2 h-2 rounded-full ${link.active ? 'bg-green-500' : 'bg-gray-300'}`} />
                                     </td>
                                     <td className="py-4 px-6 text-right flex items-center justify-end gap-2">
+                                        <button
+                                            onClick={() => handleOpenEdit(link)}
+                                            className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[var(--color-brand-navy)] hover:shadow-sm"
+                                            title="Edit Link"
+                                        >
+                                            <Edit2 size={18} variant="Linear" />
+                                        </button>
                                         <button
                                             onClick={() => copyToClipboard(link.url, link.id)}
                                             className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[var(--color-brand-navy)] hover:shadow-sm"
@@ -333,12 +380,13 @@ export default function PaymentLinksPage() {
             {/* Create Modal */}
             <Modal
                 isOpen={isCreateOpen}
-                onClose={() => setIsCreateOpen(false)}
-                title="Create Payment Link"
+                onClose={() => { setIsCreateOpen(false); resetForm(); }}
+                title={editingLink ? "Edit Payment Link" : "Create Payment Link"}
                 maxWidth="max-w-lg"
             >
                 <div className="space-y-6">
-                    {/* Link Type Selector */}
+                    {/* Link Type Selector (hidden when editing) */}
+                    {!editingLink && (
                     <div className="flex p-1 bg-gray-100 rounded-xl">
                         <button
                             onClick={() => setLinkType('product')}
@@ -355,8 +403,9 @@ export default function PaymentLinksPage() {
                             Flexible Amount
                         </button>
                     </div>
+                    )}
 
-                    {linkType === 'product' && (
+                    {!editingLink && linkType === 'product' && (
                         <div className="space-y-2">
                             <label className="block text-sm font-bold text-[var(--color-brand-navy)] pl-1">Select Product</label>
                             <select
@@ -371,7 +420,7 @@ export default function PaymentLinksPage() {
                         </div>
                     )}
 
-                    {linkType === 'flexible' && (
+                    {!editingLink && linkType === 'flexible' && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                             <div className="p-4 rounded-2xl border border-indigo-100/50 text-indigo-900 text-sm font-medium flex items-start gap-3">
                                 <div className="p-2 bg-white rounded-lg text-black-600">
@@ -415,6 +464,40 @@ export default function PaymentLinksPage() {
                                 placeholder="my-cool-link"
                             />
                         </div>
+                    </div>
+
+                    {/* Expiration & Limits */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="block text-sm font-bold text-[var(--color-brand-navy)] pl-1">Expires At</label>
+                            <input
+                                type="datetime-local"
+                                value={expiresAt}
+                                onChange={e => setExpiresAt(e.target.value)}
+                                className="w-full h-12 px-4 rounded-xl bg-gray-50 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium text-sm"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="block text-sm font-bold text-[var(--color-brand-navy)] pl-1">Max Uses</label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={maxUses}
+                                onChange={e => setMaxUses(e.target.value)}
+                                className="w-full h-12 px-4 rounded-xl bg-gray-50 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
+                                placeholder="Unlimited"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="block text-sm font-bold text-[var(--color-brand-navy)] pl-1">Redirect URL (after payment)</label>
+                        <input
+                            value={redirectUrl}
+                            onChange={e => setRedirectUrl(e.target.value)}
+                            className="w-full h-12 px-4 rounded-xl bg-gray-50 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
+                            placeholder="https://your-site.com/thank-you"
+                        />
                     </div>
 
                     <div className="rounded-[24px] border border-black/5 bg-[var(--color-bg-base)]/70 p-5">
@@ -475,7 +558,7 @@ export default function PaymentLinksPage() {
                         disabled={createLoading}
                         className="w-full h-14 bg-black text-white rounded-full font-bold text-lg flex items-center justify-center gap-2 shadow-[4px_4px_0px_0px_#FF5C16] hover:shadow-[2px_2px_0px_0px_#FF5C16] hover:translate-x-[2px] hover:translate-y-[2px] transition-all active:shadow-none active:translate-x-[4px] active:translate-y-[4px]"
                     >
-                        {createLoading ? 'Creating...' : 'Create Link'}
+                        {createLoading ? (editingLink ? 'Saving...' : 'Creating...') : (editingLink ? 'Save Changes' : 'Create Link')}
                     </button>
                 </div>
             </Modal>

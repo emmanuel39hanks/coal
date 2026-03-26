@@ -29,6 +29,14 @@ export async function GET(request: Request) {
                 payerInfoConfig: link.payerInfoConfig,
                 active:       link.active,
                 createdAt:    link.createdAt,
+                expiresAt:    link.expiresAt,
+                maxUses:      link.maxUses,
+                useCount:     link.useCount,
+                viewCount:    link.viewCount,
+                redirectUrl:  link.redirectUrl,
+                allowQuantity: link.allowQuantity,
+                minQuantity:  link.minQuantity,
+                maxQuantity:  link.maxQuantity,
             }))
         });
     } catch {
@@ -49,7 +57,7 @@ export async function POST(request: Request) {
         const validated = validateBody(createLinkSchema, body);
         if (!validated.success) return validated.error;
 
-        const { productId, slug, title, description, payerInfo } = validated.data;
+        const { productId, slug, title, description, payerInfo, expiresAt, maxUses, redirectUrl, allowQuantity, minQuantity, maxQuantity } = validated.data;
 
         // Verify product ownership before linking
         if (productId) {
@@ -80,6 +88,12 @@ export async function POST(request: Request) {
                 title:       title || null,
                 description: description || null,
                 payerInfoConfig: toPrismaNullableJson(payerInfo),
+                expiresAt:     expiresAt ?? null,
+                maxUses:       maxUses ?? null,
+                redirectUrl:   redirectUrl || null,
+                allowQuantity: allowQuantity ?? false,
+                minQuantity:   minQuantity ?? 1,
+                maxQuantity:   maxQuantity ?? 1,
             }
         });
 

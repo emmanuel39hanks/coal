@@ -11,8 +11,16 @@ export async function GET(request: Request) {
         const user = await getAuthUser(request);
         if (!user) return errors.unauthorized();
 
+        const url = new URL(request.url);
+        const tagFilter = url.searchParams.get('tag');
+        const statusFilter = url.searchParams.get('status');
+
+        const where: Record<string, unknown> = { merchantId: user.id, active: true };
+        if (statusFilter) where.status = statusFilter;
+        if (tagFilter) where.tags = { has: tagFilter };
+
         const products = await prisma.product.findMany({
-            where: { merchantId: user.id, active: true },
+            where,
             orderBy: { createdAt: 'desc' },
             include: { _count: { select: { checkoutSessions: true } } }
         });
@@ -24,6 +32,10 @@ export async function GET(request: Request) {
                 description: p.description,
                 price:       p.price.toString(),
                 image:       p.image,
+                sku:         p.sku,
+                status:      p.status,
+                tags:        p.tags,
+                images:      p.images,
                 billingType: p.billingType,
                 billingInterval: p.billingInterval,
                 billingIntervalCount: p.billingIntervalCount,
@@ -53,6 +65,10 @@ export async function POST(request: Request) {
             description,
             price,
             image,
+            sku,
+            tags,
+            status,
+            images,
             billingType,
             billingInterval,
             billingIntervalCount,
@@ -65,6 +81,10 @@ export async function POST(request: Request) {
                 description,
                 price,
                 image: image || null,
+                sku: sku || null,
+                tags: tags || [],
+                status: status || 'active',
+                images: images || [],
                 billingType,
                 billingInterval: billingType === 'subscription' ? billingInterval || null : null,
                 billingIntervalCount: billingType === 'subscription' ? billingIntervalCount || 1 : 1,

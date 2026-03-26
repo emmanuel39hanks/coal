@@ -20,11 +20,23 @@ interface Product {
     description: string | null;
     price: string;
     image: string | null;
+    sku: string | null;
+    status: 'draft' | 'active' | 'archived';
+    tags: string[];
+    images: string[];
     billingType: 'one_time' | 'subscription';
     billingInterval: 'day' | 'week' | 'month' | 'year';
     billingIntervalCount: number;
     sales: number;
 }
+
+type StatusFilter = 'all' | 'active' | 'draft' | 'archived';
+
+const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+    active:   { bg: 'bg-green-100', text: 'text-green-800', label: 'Active' },
+    draft:    { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Draft' },
+    archived: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Archived' },
+};
 
 export default function ProductsPage() {
     const { fetcher, request: apiRequest } = useApi();
@@ -39,15 +51,21 @@ export default function ProductsPage() {
     const [description, setDescription] = useState('');
     const [price, setPrice] = useState('');
     const [image, setImage] = useState('');
+    const [sku, setSku] = useState('');
+    const [tagsInput, setTagsInput] = useState('');
     const [billingType, setBillingType] = useState<'one_time' | 'subscription'>('one_time');
     const [billingInterval, setBillingInterval] = useState<'day' | 'week' | 'month' | 'year'>('month');
     const [billingIntervalCount, setBillingIntervalCount] = useState('1');
+    const [productStatus, setProductStatus] = useState<'draft' | 'active'>('active');
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const settlementSymbol = getSettlementToken().symbol;
 
     const handleOpenCreate = () => {
         setEditingProduct(null);
         setName(''); setDescription(''); setPrice(''); setImage('');
+        setSku(''); setTagsInput('');
+        setProductStatus('active');
         setBillingType('one_time');
         setBillingInterval('month');
         setBillingIntervalCount('1');
@@ -60,6 +78,9 @@ export default function ProductsPage() {
         setDescription(product.description || '');
         setPrice(product.price);
         setImage(product.image || '');
+        setSku(product.sku || '');
+        setTagsInput((product.tags || []).join(', '));
+        setProductStatus(product.status === 'archived' ? 'active' : product.status);
         setBillingType(product.billingType || 'one_time');
         setBillingInterval(product.billingInterval || 'month');
         setBillingIntervalCount(String(product.billingIntervalCount || 1));
@@ -75,6 +96,7 @@ export default function ProductsPage() {
 
             const method = editingProduct ? 'PUT' : 'POST';
 
+            const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
             await apiRequest(url, {
                 method,
                 body: JSON.stringify({
@@ -82,6 +104,9 @@ export default function ProductsPage() {
                     description,
                     price,
                     image,
+                    sku: sku || undefined,
+                    tags: tags.length > 0 ? tags : undefined,
+                    status: productStatus,
                     billingType,
                     billingInterval: billingType === 'subscription' ? billingInterval : undefined,
                     billingIntervalCount: billingType === 'subscription' ? Number(billingIntervalCount || 1) : undefined,
@@ -94,6 +119,8 @@ export default function ProductsPage() {
             setEditingProduct(null);
             // Reset
             setName(''); setDescription(''); setPrice(''); setImage('');
+            setSku(''); setTagsInput('');
+            setProductStatus('active');
             setBillingType('one_time');
             setBillingInterval('month');
             setBillingIntervalCount('1');
@@ -119,7 +146,17 @@ export default function ProductsPage() {
         }
     };
 
-    const products: Product[] = data?.products || [];
+    const allProducts: Product[] = data?.products || [];
+    const products = statusFilter === 'all'
+        ? allProducts
+        : allProducts.filter(p => p.status === statusFilter);
+
+    const FILTER_TABS: { key: StatusFilter; label: string; count: number }[] = [
+        { key: 'all', label: 'All', count: allProducts.length },
+        { key: 'active', label: 'Active', count: allProducts.filter(p => p.status === 'active').length },
+        { key: 'draft', label: 'Draft', count: allProducts.filter(p => p.status === 'draft').length },
+        { key: 'archived', label: 'Archived', count: allProducts.filter(p => p.status === 'archived').length },
+    ];
 
     return (
         <div className="space-y-8">
@@ -142,6 +179,23 @@ export default function ProductsPage() {
                     </button>
                 </div>
             </motion.div>
+
+            {/* Filter Tabs */}
+            <div className="flex gap-2">
+                {FILTER_TABS.map(tab => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setStatusFilter(tab.key)}
+                        className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                            statusFilter === tab.key
+                                ? 'bg-[var(--color-brand-navy)] text-white'
+                                : 'bg-gray-100 text-[var(--color-text-secondary)] hover:bg-gray-200'
+                        }`}
+                    >
+                        {tab.label} {tab.count > 0 && <span className="ml-1 opacity-60">{tab.count}</span>}
+                    </button>
+                ))}
+            </div>
 
             {/* List */}
             <motion.div
@@ -183,8 +237,18 @@ export default function ProductsPage() {
                                 )}
                             </div>
                             <div className="flex justify-between items-start mb-2">
-                                <div>
-                                    <h3 className="font-bold text-lg text-[var(--color-brand-navy)]">{product.name}</h3>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h3 className="font-bold text-lg text-[var(--color-brand-navy)] truncate">{product.name}</h3>
+                                        {STATUS_STYLES[product.status] && (
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${STATUS_STYLES[product.status].bg} ${STATUS_STYLES[product.status].text} shrink-0`}>
+                                                {STATUS_STYLES[product.status].label}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {product.sku && (
+                                        <p className="text-xs font-mono text-gray-400 mb-1">SKU: {product.sku}</p>
+                                    )}
                                     <div className="mt-2 flex flex-wrap gap-2">
                                         <span className="px-3 py-1 bg-gray-100 rounded-lg text-sm font-bold">{product.price} {settlementSymbol}</span>
                                         {product.billingType === 'subscription' && (
@@ -196,7 +260,16 @@ export default function ProductsPage() {
                                     </div>
                                 </div>
                             </div>
-                            <p className="text-sm text-[var(--color-text-secondary)] mb-4 line-clamp-2">{product.description}</p>
+                            <p className="text-sm text-[var(--color-text-secondary)] mb-3 line-clamp-2">{product.description}</p>
+                            {product.tags && product.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-3">
+                                    {product.tags.map(tag => (
+                                        <span key={tag} className="px-2.5 py-0.5 bg-[var(--color-brand-navy)]/5 text-[var(--color-brand-navy)] rounded-full text-[11px] font-bold">
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                             <div className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-secondary)]">
                                 <Box size={14} variant="Bold" className="text-[var(--color-brand-orange)]" />
                                 {product.sales} Sales
@@ -238,6 +311,40 @@ export default function ProductsPage() {
                             className="w-full h-12 px-6 rounded-full bg-gray-100 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
                             placeholder="0.00"
                         />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Status</label>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setProductStatus('active')}
+                                className={`flex-1 h-12 rounded-full font-bold text-sm transition-all ${productStatus === 'active' ? 'bg-green-100 text-green-800 border-2 border-green-300' : 'bg-gray-100 text-gray-500 border-2 border-transparent'}`}>
+                                Active
+                            </button>
+                            <button type="button" onClick={() => setProductStatus('draft')}
+                                className={`flex-1 h-12 rounded-full font-bold text-sm transition-all ${productStatus === 'draft' ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-300' : 'bg-gray-100 text-gray-500 border-2 border-transparent'}`}>
+                                Draft
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">SKU</label>
+                            <input
+                                value={sku} onChange={e => setSku(e.target.value)}
+                                className="w-full h-12 px-6 rounded-full bg-gray-100 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
+                                placeholder="PROD-001"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-[var(--color-brand-navy)] mb-2 pl-4">Tags</label>
+                            <input
+                                value={tagsInput} onChange={e => setTagsInput(e.target.value)}
+                                className="w-full h-12 px-6 rounded-full bg-gray-100 border-2 border-transparent focus:border-[var(--color-brand-orange)] outline-none font-medium"
+                                placeholder="digital, premium"
+                            />
+                            <p className="mt-1 pl-4 text-xs text-gray-400">Comma-separated</p>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

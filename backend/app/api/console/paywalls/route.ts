@@ -1,24 +1,11 @@
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser, hasWriteAccess } from '@/lib/privy';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
-import { validateBody, amountField } from '@/lib/schemas';
+import { validateBody, createPaywallSchema } from '@/lib/schemas';
 import { publishPaywallManifest } from '@/lib/0g/paywalls';
 import { syncMerchantArtifacts } from '@/lib/0g/merchant';
-
-const createPaywallSchema = z.object({
-    name: z.string().min(1, 'Name required').max(200),
-    price: amountField,
-    currency: z.string().default('USDC'),
-    description: z.string().max(2000).optional(),
-    contentType: z.string().default('api'),
-    contentData: z.record(z.string(), z.unknown()).optional(),
-    contentUrl: z.string().url('Must be a valid URL').optional().or(z.literal('')),
-    pricingModel: z.string().default('one_time'),
-});
 
 export async function GET(request: Request) {
     try {
@@ -36,16 +23,19 @@ export async function GET(request: Request) {
 
         return apiSuccess({
             paywalls: paywalls.map(p => ({
-                id:           p.id,
-                name:         p.name,
-                description:  p.description,
-                price:        p.price.toString(),
-                currency:     p.currency,
-                contentType:  p.contentType,
-                pricingModel: p.pricingModel,
-                active:       p.active,
-                createdAt:    p.createdAt,
-                _count:       { accesses: p._count.accesses },
+                id:             p.id,
+                name:           p.name,
+                description:    p.description,
+                price:          p.price.toString(),
+                currency:       p.currency,
+                contentType:    p.contentType,
+                contentUrl:     p.contentUrl,
+                pricingModel:   p.pricingModel,
+                accessDuration: p.accessDuration,
+                callQuota:      p.callQuota,
+                active:         p.active,
+                createdAt:      p.createdAt,
+                _count:         { accesses: p._count.accesses },
             })),
         });
     } catch {
@@ -66,19 +56,21 @@ export async function POST(request: Request) {
         const validated = validateBody(createPaywallSchema, body);
         if (!validated.success) return validated.error;
 
-        const { name, price, currency, description, contentType, contentData, contentUrl, pricingModel } = validated.data;
+        const { name, price, currency, description, contentType, contentData, contentUrl, pricingModel, accessDuration, callQuota } = validated.data;
 
         const paywall = await prisma.paywall.create({
             data: {
-                merchantId:   user.id,
+                merchantId:     user.id,
                 name,
                 price,
                 currency,
-                description:  description ?? null,
+                description:    description ?? null,
                 contentType,
-                contentData:  contentData !== undefined ? (contentData as Prisma.InputJsonValue) : Prisma.JsonNull,
-                contentUrl:   contentUrl || null,
+                contentData:    contentData !== undefined ? (contentData as Prisma.InputJsonValue) : Prisma.JsonNull,
+                contentUrl:     contentUrl || null,
                 pricingModel,
+                accessDuration: accessDuration ?? null,
+                callQuota:      callQuota ?? null,
             },
         });
 

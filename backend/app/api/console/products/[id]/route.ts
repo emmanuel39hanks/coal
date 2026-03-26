@@ -29,6 +29,10 @@ export async function PUT(
             description,
             price,
             image,
+            sku,
+            tags,
+            status,
+            images,
             billingType,
             billingInterval,
             billingIntervalCount,
@@ -40,6 +44,10 @@ export async function PUT(
                 ...(description !== undefined && { description }),
                 ...(price       !== undefined && { price }),
                 ...(image       !== undefined && { image: image || null }),
+                ...(sku         !== undefined && { sku: sku || null }),
+                ...(tags        !== undefined && { tags }),
+                ...(status      !== undefined && { status }),
+                ...(images      !== undefined && { images }),
                 ...(billingType !== undefined && {
                     billingType,
                     billingInterval: billingType === 'subscription'
@@ -84,7 +92,7 @@ export async function DELETE(
             return errors.notFound('Product');
         }
 
-        const deleted = await prisma.product.update({ where: { id }, data: { active: false } });
+        const deleted = await prisma.product.update({ where: { id }, data: { active: false, status: 'archived' } });
         const zeroG = await syncMerchantArtifacts(user.id).catch(() => null);
 
         return apiSuccess({
