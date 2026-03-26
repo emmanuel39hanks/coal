@@ -90,7 +90,9 @@ export async function POST(request: Request) {
             return errors.gone('Checkout session has expired');
         }
 
-        // Atomic txHash dedup + session update to prevent race conditions
+        // Atomic txHash dedup + session update to prevent race conditions.
+        // Re-checks status and expiry inside the transaction to close the
+        // TOCTOU window between the checks above and the actual update.
         try {
             await prisma.$transaction(async (tx) => {
                 const existingTx = await tx.transaction.findUnique({ where: { txHash: normalizedHash } });
@@ -100,6 +102,14 @@ export async function POST(request: Request) {
                     where: { pendingTxHash: normalizedHash, id: { not: sessionId } }
                 });
                 if (conflictingSession) throw new Error('TXHASH_IN_ANOTHER_SESSION');
+
+                // Optimistic re-check: ensure session is still pending and not expired
+                const fresh = await tx.checkoutSession.findUnique({
+                    where: { id: sessionId },
+                    select: { status: true, expiresAt: true },
+                });
+                if (!fresh || fresh.status !== 'pending') throw new Error('SESSION_ALREADY_CONFIRMED');
+                if (fresh.expiresAt < new Date()) throw new Error('SESSION_EXPIRED');
 
                 await tx.checkoutSession.update({
                     where: { id: sessionId },
@@ -123,6 +133,8 @@ export async function POST(request: Request) {
             const msg = txError instanceof Error ? txError.message : '';
             if (msg === 'TXHASH_ALREADY_USED') return errors.conflict('TXHASH_ALREADY_USED', 'Transaction hash already used');
             if (msg === 'TXHASH_IN_ANOTHER_SESSION') return errors.conflict('TXHASH_IN_ANOTHER_SESSION', 'Transaction hash already submitted to another session');
+            if (msg === 'SESSION_ALREADY_CONFIRMED') return errors.conflict('SESSION_ALREADY_CONFIRMED', 'Session is no longer pending');
+            if (msg === 'SESSION_EXPIRED') return errors.gone('Checkout session has expired');
             throw txError;
         }
 

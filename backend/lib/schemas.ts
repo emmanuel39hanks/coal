@@ -47,7 +47,10 @@ export const createCheckoutSchema = z.object({
     description: z.string().max(500).optional(),
     redirectUrl: optionalUrl,
     callbackUrl: optionalUrl,
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional().refine(
+        (val) => !val || JSON.stringify(val).length <= 4096,
+        'Metadata must be 4KB or less when serialized',
+    ),
     splitConfigId: z.string().optional(),
     payerInfo: payerInfoConfigSchema.optional(),
 });
