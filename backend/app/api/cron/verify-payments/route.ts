@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { prisma } from "@/lib/prisma";
 import { sendWebhook } from "@/lib/webhooks";
 import { amountsMatch } from "@/lib/validation";
@@ -36,15 +37,23 @@ export async function POST(request: Request) {
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
 
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || !authHeader) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // Timing-safe comparison to prevent secret leakage via timing side-channel
+    const expected = Buffer.from(`Bearer ${cronSecret}`);
+    const actual = Buffer.from(authHeader);
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const now = new Date();
 
-    // Load all sessions currently awaiting verification
+    // Load sessions awaiting verification (bounded to prevent DoS via session flooding)
     const pending = await prisma.checkoutSession.findMany({
         where: { status: "verifying" },
+        take: 200,
+        orderBy: { createdAt: 'asc' },
         include: {
             product: {
                 select: {
@@ -115,6 +124,19 @@ export async function POST(request: Request) {
                 continue;
             }
 
+            // Require minimum block confirmations to protect against chain reorgs.
+            // Base (OP Stack L2) is safe after ~2 blocks for most amounts.
+            const MIN_CONFIRMATIONS = 2;
+            const currentBlock = await publicClient.getBlockNumber().catch(() => null);
+            if (currentBlock && receipt.blockNumber + BigInt(MIN_CONFIRMATIONS) > currentBlock) {
+                results.pending++;
+                paymentLogger.info(
+                    { sessionId: session.id, txHash, txBlock: Number(receipt.blockNumber), currentBlock: Number(currentBlock) },
+                    'Tx needs more confirmations, skipping',
+                );
+                continue;
+            }
+
             // Transaction reverted
             if (receipt.status !== 'success') {
                 await prisma.checkoutSession.update({
@@ -171,8 +193,15 @@ export async function POST(request: Request) {
             const transferTo   = (decoded.args as any).to as string;
             const transferAmount = (decoded.args as any).value as bigint;
 
-            // Verify recipient
-            const expectedRecipient = session.merchant.payoutAddress?.toLowerCase();
+            // Verify recipient — prefer the snapshot taken at checkout creation
+            // to prevent TOCTOU if the merchant changes their payout address mid-flight
+            const sessionMetadata = session.metadata && typeof session.metadata === 'object'
+                ? (session.metadata as Record<string, unknown>)
+                : null;
+            const snapshotAddress = typeof sessionMetadata?.snapshotPayoutAddress === 'string'
+                ? sessionMetadata.snapshotPayoutAddress
+                : null;
+            const expectedRecipient = (snapshotAddress || session.merchant.payoutAddress)?.toLowerCase();
             if (!expectedRecipient || transferTo.toLowerCase() !== expectedRecipient) {
                 await prisma.checkoutSession.update({
                     where: { id: session.id },
@@ -206,7 +235,17 @@ export async function POST(request: Request) {
             const confirmedAt = new Date();
 
             // All checks passed — confirm the session and upsert the transaction atomically.
+            // Optimistic lock: only proceed if the session is still "verifying" to
+            // prevent double-processing if two cron invocations overlap.
             await prisma.$transaction(async (tx) => {
+                const fresh = await tx.checkoutSession.findUnique({
+                    where: { id: session.id },
+                    select: { status: true },
+                });
+                if (fresh?.status !== 'verifying') {
+                    throw new Error('SESSION_ALREADY_PROCESSED');
+                }
+
                 await tx.transaction.upsert({
                     where: { txHash },
                     update: {
@@ -403,6 +442,10 @@ export async function POST(request: Request) {
             paymentLogger.info({ sessionId: session.id, txHash, amount: formattedAmount }, 'Payment confirmed');
 
         } catch (err) {
+            if (err instanceof Error && err.message === 'SESSION_ALREADY_PROCESSED') {
+                paymentLogger.info({ sessionId: session.id }, 'Session already processed by another cron run, skipping');
+                continue;
+            }
             paymentLogger.error({ err, sessionId: session.id }, 'Error processing session');
             results.pending++; // Leave as verifying, retry next run
         }

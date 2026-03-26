@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { webhookLogger } from '@/lib/logger';
+import { validateWebhookUrl } from '@/lib/ssrf';
 
 export async function sendWebhook(
     url: string,
@@ -8,6 +9,14 @@ export async function sendWebhook(
     secret: string,
     merchantId?: string
 ): Promise<boolean> {
+    // Re-validate URL at delivery time to defend against DNS rebinding attacks.
+    // The URL was validated when set, but DNS could have changed since then.
+    const urlCheck = await validateWebhookUrl(url);
+    if (!urlCheck.valid) {
+        webhookLogger.warn({ url, reason: urlCheck.reason }, 'Webhook URL blocked by SSRF check at delivery time');
+        return false;
+    }
+
     // Create event record for delivery tracking (only if merchantId provided)
     let eventId: string | null = null;
     if (merchantId) {

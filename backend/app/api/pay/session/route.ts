@@ -22,7 +22,10 @@ export async function POST(request: Request) {
 
         const link = await prisma.paymentLink.findUnique({
             where: { id: linkId },
-            include: { product: true }
+            include: {
+                product: true,
+                merchant: { select: { payoutAddress: true } },
+            }
         });
         if (!link || !link.active) return errors.notFound('Link');
 
@@ -85,11 +88,13 @@ export async function POST(request: Request) {
                         customerEmail: resolvedCustomerEmail,
                         payerInfoValues: normalizedPayerInfo,
                         subscriptionConsentAccepted: subscriptionConsentAccepted === true,
+                        ...(link.merchant?.payoutAddress ? { snapshotPayoutAddress: link.merchant.payoutAddress.toLowerCase() } : {}),
                     }
                     : {
                         linkId: link.id,
                         customerEmail: resolvedCustomerEmail,
                         payerInfoValues: normalizedPayerInfo,
+                        ...(link.merchant?.payoutAddress ? { snapshotPayoutAddress: link.merchant.payoutAddress.toLowerCase() } : {}),
                     },
                 status:      'pending',
                 expiresAt:   new Date(Date.now() + 24 * 60 * 60 * 1000),

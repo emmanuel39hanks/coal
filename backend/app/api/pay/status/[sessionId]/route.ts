@@ -1,13 +1,26 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { logger } from '@/lib/logger';
+import { getIP, checkRateLimit, rateLimiters } from '@/lib/rate-limit';
+
+const VALID_SESSION_ID = /^[a-z0-9]{20,36}$/;
 
 export async function GET(
-    _request: Request,
+    request: Request,
     { params }: { params: Promise<{ sessionId: string }> }
 ) {
     try {
+        const ip = getIP(request);
+        const { limited } = await checkRateLimit(rateLimiters.public, ip);
+        if (limited) {
+            return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+        }
+
         const { sessionId } = await params;
+
+        if (!VALID_SESSION_ID.test(sessionId)) {
+            return NextResponse.json({ error: "Session not found" }, { status: 404 });
+        }
 
         const session = await prisma.checkoutSession.findUnique({
             where: { id: sessionId },

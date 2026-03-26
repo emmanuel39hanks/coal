@@ -34,7 +34,10 @@ export async function POST(
         const normalizedAddress = address.toLowerCase();
         const normalizedTxHash = txHash.toLowerCase();
 
-        const paywall = await prisma.paywall.findUnique({ where: { id } });
+        const paywall = await prisma.paywall.findUnique({
+            where: { id },
+            include: { merchant: { select: { payoutAddress: true } } },
+        });
         if (!paywall || !paywall.active) {
             return errors.notFound('Paywall');
         }
@@ -81,6 +84,7 @@ export async function POST(
                         payerAddress: normalizedAddress,
                         pricingModel: paywall.pricingModel,
                         contentType: paywall.contentType,
+                        ...(paywall.merchant?.payoutAddress ? { snapshotPayoutAddress: paywall.merchant.payoutAddress.toLowerCase() } : {}),
                     },
                     pendingTxHash: normalizedTxHash,
                     status: 'verifying',
