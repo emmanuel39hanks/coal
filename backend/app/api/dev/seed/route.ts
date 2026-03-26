@@ -9,13 +9,14 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Dev only' }, { status: 403 });
     }
 
-    // Require DEV_SEED_SECRET if set (additional safeguard for staging)
+    // Require DEV_SEED_SECRET unconditionally — block access if not configured
     const seedSecret = process.env.DEV_SEED_SECRET;
-    if (seedSecret) {
-        const authHeader = request.headers.get('authorization');
-        if (authHeader !== `Bearer ${seedSecret}`) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!seedSecret) {
+        return NextResponse.json({ error: 'DEV_SEED_SECRET not configured' }, { status: 403 });
+    }
+    const authHeader = request.headers.get('authorization');
+    if (authHeader !== `Bearer ${seedSecret}`) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
