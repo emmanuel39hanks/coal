@@ -74,7 +74,7 @@ type ZeroGData = {
         storage: { ok: boolean };
         chain: { ok: boolean };
         compute: { ok: boolean };
-        da: { ok: boolean };
+        da: { ok: boolean; details?: { enabled: boolean; connected: boolean } };
     };
 };
 
@@ -185,24 +185,31 @@ export default function ZeroGConsolePage() {
                         )}
                         {['Storage', 'Chain', 'Compute', 'DA'].map((label) => {
                             const key = label.toLowerCase() as 'storage' | 'chain' | 'compute' | 'da';
-                            const ok = data?.checks[key]?.ok;
+                            const check = data?.checks[key];
+                            const ok = check?.ok;
+                            // DA: show "Off" in gray when intentionally disabled, not red
+                            const isDaOff = key === 'da' && check && 'details' in check && !(check as { details?: { enabled: boolean } }).details?.enabled;
+                            const badgeBg = isLoading
+                                ? 'bg-black/5 text-[var(--color-text-secondary)]'
+                                : isDaOff
+                                ? 'bg-black/5 text-[var(--color-text-secondary)]'
+                                : ok
+                                ? 'bg-green-50 text-green-700'
+                                : 'bg-red-50 text-red-600';
+                            const dotBg = isLoading
+                                ? 'bg-current opacity-30'
+                                : isDaOff
+                                ? 'bg-gray-400'
+                                : ok
+                                ? 'bg-green-500'
+                                : 'bg-red-500';
                             return (
                                 <span
                                     key={label}
-                                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${
-                                        isLoading
-                                            ? 'bg-black/5 text-[var(--color-text-secondary)]'
-                                            : ok
-                                            ? 'bg-green-50 text-green-700'
-                                            : 'bg-red-50 text-red-600'
-                                    }`}
+                                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${badgeBg}`}
                                 >
-                                    <span
-                                        className={`h-1.5 w-1.5 rounded-full ${
-                                            isLoading ? 'bg-current opacity-30' : ok ? 'bg-green-500' : 'bg-red-500'
-                                        }`}
-                                    />
-                                    {label}
+                                    <span className={`h-1.5 w-1.5 rounded-full ${dotBg}`} />
+                                    {isDaOff ? `${label} Off` : label}
                                 </span>
                             );
                         })}
@@ -229,7 +236,7 @@ export default function ZeroGConsolePage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 }}
-                className="grid grid-cols-1 md:grid-cols-4 gap-4"
+                className="grid grid-cols-2 md:grid-cols-5 gap-4"
             >
                 {isLoading ? (
                     <>
@@ -237,9 +244,17 @@ export default function ZeroGConsolePage() {
                         <StatCardSkeleton />
                         <StatCardSkeleton />
                         <StatCardSkeleton />
+                        <StatCardSkeleton />
                     </>
                 ) : (
                     <>
+                        <StatCard
+                            icon={Flash}
+                            iconBg="bg-[var(--color-brand-orange)]/10"
+                            iconColor="text-[var(--color-brand-orange)]"
+                            label="Payments"
+                            value={stats?.confirmedPayments ?? 0}
+                        />
                         <StatCard
                             icon={ReceiptItem}
                             iconBg="bg-green-50"
