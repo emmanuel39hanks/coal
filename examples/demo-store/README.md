@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Coal Demo Store
 
-## Getting Started
+A storefront example showing how to integrate Coal payments into a Next.js e-commerce app. Creates checkout sessions via server actions and handles payment webhooks.
 
-First, run the development server:
+## What it does
+
+1. Displays a product grid (6 items) with images and prices
+2. "Buy with Coal" triggers a server action that creates a Coal checkout session
+3. Redirects the customer to the hosted Coal checkout page
+4. Receives a webhook on payment confirmation
+5. Redirects to a success page after payment
+
+## Setup
 
 ```bash
+cp .env.example .env.local
+# Fill in COAL_API_KEY with your key from https://usecoal.xyz/console
+
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Open http://localhost:3002
 ```
 
-Open [https://demo.usecoal.xyz](https://demo.usecoal.xyz) with your browser to see the result.
+## Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Required | Description |
+|---|---|---|
+| `COAL_API_KEY` | Yes | Your Coal API key (`coal_live_...`) |
+| `COAL_API_URL` | No | Defaults to `http://localhost:3001/api/checkouts` |
+| `NEXT_PUBLIC_APP_URL` | No | Defaults to `http://localhost:3002` |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How it works
 
-## Learn More
+### Server action (`app/actions.ts`)
 
-To learn more about Next.js, take a look at the following resources:
+```typescript
+const response = await fetch(COAL_API_URL, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': API_KEY,
+  },
+  body: JSON.stringify({
+    amount: 0.02,
+    currency: 'MNEE',
+    productId: 'prod_coffee',
+    productName: 'Super Coffee',
+    redirectUrl: `${APP_URL}/success`,
+    callbackUrl: `${APP_URL}/api/webhook`,
+  }),
+});
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Receipt verification
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+After payment confirmation, verify the receipt and its 0G proof trail:
 
-## Deploy on Vercel
+```typescript
+const receipt = await fetch(`https://api.usecoal.xyz/api/receipts/${sessionId}`);
+const { proofTrail } = await receipt.json();
+// proofTrail.storage → 0G Storage proof (immutable receipt)
+// proofTrail.chain   → 0G Chain anchor (tamper-proof verification)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## File structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+app/
+  layout.tsx          # Root layout
+  page.tsx            # Product grid with checkout forms
+  actions.ts          # Server action: creates Coal checkout session
+  success/
+    page.tsx          # Post-payment success page
+  api/
+    webhook/
+      route.ts        # Webhook handler for payment events
+```
