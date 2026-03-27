@@ -12,6 +12,7 @@ import {
   Link21,
   Notification,
   Code1,
+  ExportSquare,
 } from "iconsax-reactjs";
 
 // ─── Feature card ────────────────────────────────────────────────────────────
@@ -29,12 +30,12 @@ function FeatureCard({
 }) {
   return (
     <BlurReveal delay={delay}>
-      <div className="p-8 bg-white rounded-[32px] border-2 border-black/8 hover:border-[var(--color-brand-orange)] hover:-translate-y-1 transition-all duration-300 h-full shadow-sm hover:shadow-[4px_4px_0px_0px_var(--color-brand-orange)]">
-        <div className="w-12 h-12 rounded-2xl bg-[var(--color-bg-base)] flex items-center justify-center mb-5 border border-black/8">
-          <Icon size={24} variant="Bold" className="text-[var(--color-brand-navy)]" />
+      <div className="p-6 md:p-8 bg-white rounded-[24px] md:rounded-[32px] border-2 border-black/8 hover:border-[var(--color-brand-orange)] hover:-translate-y-1 transition-all duration-300 h-full shadow-sm hover:shadow-[4px_4px_0px_0px_var(--color-brand-orange)]">
+        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[var(--color-bg-base)] flex items-center justify-center mb-4 md:mb-5 border border-black/8">
+          <Icon size={20} variant="Bold" className="text-[var(--color-brand-navy)] md:[&]:w-6 md:[&]:h-6" />
         </div>
-        <h3 className="text-lg font-bold mb-2 text-[var(--color-brand-navy)] tracking-tight">{title}</h3>
-        <p className="text-[var(--color-text-secondary)] text-sm leading-relaxed font-medium">{description}</p>
+        <h3 className="text-base md:text-lg font-bold mb-2 text-[var(--color-brand-navy)] tracking-tight">{title}</h3>
+        <p className="text-[var(--color-text-secondary)] text-xs md:text-sm leading-relaxed font-medium">{description}</p>
       </div>
     </BlurReveal>
   );
@@ -97,13 +98,13 @@ export default function Home() {
         </section>
       </div>
 
-      <section id="how-it-works" className="py-24 bg-[var(--color-bg-base)]">
-        <div className="container mx-auto px-6">
+      <section id="how-it-works" className="py-16 md:py-24 bg-[var(--color-bg-base)]">
+        <div className="container mx-auto px-4 md:px-6">
           <BlurReveal>
-            <div className="inline-block mb-4 px-3 py-1 rounded-full bg-white text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-black/8">
+            <div className="inline-block mb-3 md:mb-4 px-3 py-1 rounded-full bg-white text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-black/8">
               The Flow
             </div>
-            <h2 className="text-4xl md:text-5xl font-bold mb-16 text-[var(--color-brand-navy)] tracking-tighter max-w-xl">
+            <h2 className="text-3xl md:text-5xl font-bold mb-10 md:mb-16 text-[var(--color-brand-navy)] tracking-tighter max-w-xl">
               Up and running in 3 steps
             </h2>
           </BlurReveal>
@@ -160,13 +161,13 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="features" className="py-24 bg-white">
-        <div className="container mx-auto px-6">
+      <section id="features" className="py-16 md:py-24 bg-white">
+        <div className="container mx-auto px-4 md:px-6">
           <BlurReveal>
-            <div className="inline-block mb-4 px-3 py-1 rounded-full bg-[var(--color-bg-base)] text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase">
+            <div className="inline-block mb-3 md:mb-4 px-3 py-1 rounded-full bg-[var(--color-bg-base)] text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase">
               Why Coal
             </div>
-            <h2 className="text-4xl md:text-5xl font-bold mb-16 text-[var(--color-brand-navy)] tracking-tighter max-w-xl">
+            <h2 className="text-3xl md:text-5xl font-bold mb-10 md:mb-16 text-[var(--color-brand-navy)] tracking-tighter max-w-xl">
               Everything you need, nothing you don't
             </h2>
           </BlurReveal>
@@ -212,32 +213,32 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="pricing" className="py-24 bg-[var(--color-bg-base)]">
-        <div className="container mx-auto px-6">
+      <section id="pricing" className="py-16 md:py-24 bg-[var(--color-bg-base)]">
+        <div className="container mx-auto px-4 md:px-6">
 
           {/* Header */}
           <BlurReveal>
-            <div className="inline-block mb-4 px-3 py-1 rounded-full bg-white text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-black/8">
+            <div className="inline-block mb-3 md:mb-4 px-3 py-1 rounded-full bg-white text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-black/8">
               Pricing
             </div>
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-[var(--color-brand-navy)] tracking-tighter">
-              Stripe charges 2.9%.<br />Coal doesn't.
+            <h2 className="text-3xl md:text-5xl font-bold mb-3 md:mb-4 text-[var(--color-brand-navy)] tracking-tighter">
+              Stripe charges 2.9%.<br />Coal doesn&apos;t.
             </h2>
-            <p className="text-[var(--color-text-secondary)] text-lg font-medium mb-16 max-w-xl">
+            <p className="text-[var(--color-text-secondary)] text-base md:text-lg font-medium mb-10 md:mb-16 max-w-xl">
               No transaction fees. Ever. You only pay gas — less than $0.01 per payment on Base.
             </p>
           </BlurReveal>
 
           {/* Plan cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-10 md:mb-16">
 
             {/* Starter */}
             <BlurReveal delay={0.05}>
-              <div className="flex flex-col p-8 rounded-[32px] bg-white border-2 border-black/8 h-full hover:border-black/20 transition-all">
-                <div className="mb-6">
+              <div className="flex flex-col p-6 md:p-8 rounded-[24px] md:rounded-[32px] bg-white border-2 border-black/8 h-full hover:border-black/20 transition-all">
+                <div className="mb-4 md:mb-6">
                   <p className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-widest mb-2">Starter</p>
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-5xl font-black text-[var(--color-brand-navy)] tracking-tighter">Free</span>
+                    <span className="text-4xl md:text-5xl font-black text-[var(--color-brand-navy)] tracking-tighter">Free</span>
                   </div>
                   <p className="text-sm text-[var(--color-text-secondary)] font-medium">Forever. No credit card required.</p>
                 </div>
@@ -265,14 +266,14 @@ export default function Home() {
 
             {/* Pro — highlighted, coming soon */}
             <BlurReveal delay={0.1}>
-              <div className="flex flex-col p-8 rounded-[32px] bg-[var(--color-brand-navy)] border-2 border-[var(--color-brand-navy)] shadow-[6px_6px_0px_0px_var(--color-brand-orange)] h-full relative opacity-90">
+              <div className="flex flex-col p-6 md:p-8 rounded-[24px] md:rounded-[32px] bg-[var(--color-brand-navy)] border-2 border-[var(--color-brand-navy)] shadow-[4px_4px_0px_0px_var(--color-brand-orange)] md:shadow-[6px_6px_0px_0px_var(--color-brand-orange)] h-full relative opacity-90">
                 <div className="absolute top-6 right-6 flex flex-col items-end gap-1.5">
                   <span className="px-3 py-1 rounded-full bg-[var(--color-brand-orange)] text-white text-[10px] font-black uppercase tracking-wider">Coming soon</span>
                 </div>
-                <div className="mb-6">
+                <div className="mb-4 md:mb-6">
                   <p className="text-xs font-bold text-white/50 uppercase tracking-widest mb-2">Pro</p>
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-5xl font-black text-white tracking-tighter">$29</span>
+                    <span className="text-4xl md:text-5xl font-black text-white tracking-tighter">$29</span>
                     <span className="text-white/50 font-medium">/month</span>
                   </div>
                   <p className="text-sm text-white/50 font-medium">Billed monthly. Cancel anytime.</p>
@@ -301,14 +302,14 @@ export default function Home() {
 
             {/* Enterprise — coming soon */}
             <BlurReveal delay={0.15}>
-              <div className="flex flex-col p-8 rounded-[32px] bg-white border-2 border-black/8 h-full relative opacity-75">
-                <div className="absolute top-6 right-6">
+              <div className="flex flex-col p-6 md:p-8 rounded-[24px] md:rounded-[32px] bg-white border-2 border-black/8 h-full relative opacity-75">
+                <div className="absolute top-5 right-5 md:top-6 md:right-6">
                   <span className="px-3 py-1 rounded-full bg-black/5 text-[var(--color-text-secondary)] text-[10px] font-black uppercase tracking-wider border border-black/8">Coming soon</span>
                 </div>
-                <div className="mb-6">
+                <div className="mb-4 md:mb-6">
                   <p className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-widest mb-2">Enterprise</p>
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-5xl font-black text-[var(--color-brand-navy)] tracking-tighter">Custom</span>
+                    <span className="text-4xl md:text-5xl font-black text-[var(--color-brand-navy)] tracking-tighter">Custom</span>
                   </div>
                   <p className="text-sm text-[var(--color-text-secondary)] font-medium">Volume pricing. Dedicated SLA.</p>
                 </div>
@@ -395,20 +396,101 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="py-24 bg-[var(--color-brand-navy)] relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[var(--color-brand-orange)]/10 rounded-full blur-[120px] translate-x-1/3 -translate-y-1/3 pointer-events-none" />
+      {/* Examples / Demos section */}
+      <section id="examples" className="py-16 md:py-24 bg-white">
+        <div className="container mx-auto px-4 md:px-6">
+          <BlurReveal>
+            <div className="inline-block mb-3 md:mb-4 px-3 py-1 rounded-full bg-[var(--color-bg-base)] text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase">
+              Examples
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold mb-3 md:mb-4 text-[var(--color-brand-navy)] tracking-tighter max-w-xl">
+              See it in action
+            </h2>
+            <p className="text-[var(--color-text-secondary)] text-sm md:text-lg font-medium mb-10 md:mb-14 max-w-xl">
+              Working example apps you can explore, fork, and deploy.
+            </p>
+          </BlurReveal>
 
-        <div className="container mx-auto px-6 relative z-10">
-          <div className="flex flex-col lg:flex-row items-start gap-16">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            <BlurReveal delay={0.05}>
+              <a href="https://coal-react-checkout.vercel.app" target="_blank" rel="noopener noreferrer" className="group block h-full">
+                <div className="p-6 md:p-8 bg-[var(--color-bg-base)] rounded-[24px] md:rounded-[32px] border-2 border-black/5 hover:border-[var(--color-brand-orange)] hover:-translate-y-1 transition-all duration-300 h-full shadow-sm hover:shadow-[4px_4px_0px_0px_var(--color-brand-orange)]">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[var(--color-brand-orange)] flex items-center justify-center mb-4 md:mb-5 shadow-[3px_3px_0px_0px_#180D43]">
+                    <Card size={20} variant="Bold" className="text-white" />
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-base md:text-lg font-bold text-[var(--color-brand-navy)] tracking-tight">React Checkout</h3>
+                    <ExportSquare size={14} className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-brand-orange)] transition-colors" />
+                  </div>
+                  <p className="text-[var(--color-text-secondary)] text-xs md:text-sm leading-relaxed font-medium mb-4">
+                    Full Next.js checkout page with product selection, Coal widget integration, and payment confirmation.
+                  </p>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--color-brand-orange)]">
+                    Live demo
+                    <ExportSquare size={12} />
+                  </span>
+                </div>
+              </a>
+            </BlurReveal>
+
+            <BlurReveal delay={0.1}>
+              <a href="https://coal-agent.vercel.app" target="_blank" rel="noopener noreferrer" className="group block h-full">
+                <div className="p-6 md:p-8 bg-[var(--color-bg-base)] rounded-[24px] md:rounded-[32px] border-2 border-black/5 hover:border-[var(--color-brand-blue)] hover:-translate-y-1 transition-all duration-300 h-full shadow-sm hover:shadow-[4px_4px_0px_0px_var(--color-brand-blue)]">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[var(--color-brand-blue)] flex items-center justify-center mb-4 md:mb-5 shadow-[3px_3px_0px_0px_#180D43]">
+                    <Flash size={20} variant="Bold" className="text-white" />
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-base md:text-lg font-bold text-[var(--color-brand-navy)] tracking-tight">AI Agent Chat</h3>
+                    <ExportSquare size={14} className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-brand-blue)] transition-colors" />
+                  </div>
+                  <p className="text-[var(--color-text-secondary)] text-xs md:text-sm leading-relaxed font-medium mb-4">
+                    GPT-4o agent with 10 tools — discovers merchants on 0G, creates checkouts, verifies receipts with proof trails.
+                  </p>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--color-brand-blue)]">
+                    Live demo
+                    <ExportSquare size={12} />
+                  </span>
+                </div>
+              </a>
+            </BlurReveal>
+
+            <BlurReveal delay={0.15}>
+              <a href="/demo" className="group block h-full">
+                <div className="p-6 md:p-8 bg-[var(--color-bg-base)] rounded-[24px] md:rounded-[32px] border-2 border-black/5 hover:border-[var(--color-brand-lavender)] hover:-translate-y-1 transition-all duration-300 h-full shadow-sm hover:shadow-[4px_4px_0px_0px_var(--color-brand-lavender)]">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[var(--color-brand-lavender)] flex items-center justify-center mb-4 md:mb-5 shadow-[3px_3px_0px_0px_#180D43]">
+                    <Lock size={20} variant="Bold" className="text-white" />
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-base md:text-lg font-bold text-[var(--color-brand-navy)] tracking-tight">Interactive Demos</h3>
+                  </div>
+                  <p className="text-[var(--color-text-secondary)] text-xs md:text-sm leading-relaxed font-medium mb-4">
+                    Try paywalls, checkouts, and revenue splits live — no signup or wallet required.
+                  </p>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--color-brand-lavender)]">
+                    Try it live
+                    <ExportSquare size={12} />
+                  </span>
+                </div>
+              </a>
+            </BlurReveal>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 md:py-24 bg-[var(--color-brand-navy)] relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-[300px] md:w-[500px] h-[300px] md:h-[500px] bg-[var(--color-brand-orange)]/10 rounded-full blur-[120px] translate-x-1/3 -translate-y-1/3 pointer-events-none" />
+
+        <div className="container mx-auto px-4 md:px-6 relative z-10">
+          <div className="flex flex-col lg:flex-row items-start gap-10 md:gap-16">
             <div className="lg:w-2/5">
               <BlurReveal>
-                <div className="inline-block mb-4 px-3 py-1 rounded-full bg-white/10 text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-white/10">
+                <div className="inline-block mb-3 md:mb-4 px-3 py-1 rounded-full bg-white/10 text-xs font-bold text-[var(--color-brand-orange)] tracking-wide uppercase border border-white/10">
                   Integration
                 </div>
-                <h2 className="text-4xl md:text-5xl font-bold mb-6 text-white tracking-tighter">
-                  One API call.<br />That's it.
+                <h2 className="text-3xl md:text-5xl font-bold mb-4 md:mb-6 text-white tracking-tighter">
+                  One API call.<br />That&apos;s it.
                 </h2>
-                <p className="text-white/60 text-lg leading-relaxed font-medium mb-8">
+                <p className="text-white/60 text-base md:text-lg leading-relaxed font-medium mb-6 md:mb-8">
                   POST one endpoint. Get back a hosted checkout URL. Redirect your customer.
                   Webhooks are available when you need fulfillment hooks, and you can skip SDKs at launch.
                 </p>

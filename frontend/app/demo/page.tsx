@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import BlurReveal from '@/components/BlurReveal';
-import { Lock, ArrowRight, Flash, Hierarchy } from 'iconsax-reactjs';
+import { Lock, ArrowRight, Flash, Hierarchy, Card, ExportSquare } from 'iconsax-reactjs';
 
 // ── Revenue split data ────────────────────────────────────────────────────────
 const splits = [
@@ -153,27 +153,56 @@ export default function DemoPage() {
       <Navbar />
 
       {/* Hero */}
-      <section className="relative pt-32 pb-16 overflow-hidden">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[var(--color-brand-orange)]/15 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/4 pointer-events-none" />
-        <div className="container mx-auto px-6 text-center relative z-10">
+      <section className="relative pt-24 md:pt-32 pb-12 md:pb-16 overflow-hidden">
+        <div className="absolute top-0 right-0 w-[300px] md:w-[500px] h-[300px] md:h-[500px] bg-[var(--color-brand-orange)]/15 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+        <div className="container mx-auto px-4 md:px-6 text-center relative z-10">
           <BlurReveal>
-            <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-[var(--color-brand-navy)] text-white text-xs font-bold tracking-wide uppercase border border-white/10 shadow-[3px_3px_0px_0px_var(--color-brand-orange)]">
+            <div className="inline-flex items-center gap-2 mb-4 md:mb-6 px-4 py-2 rounded-full bg-[var(--color-brand-navy)] text-white text-xs font-bold tracking-wide uppercase border border-white/10 shadow-[3px_3px_0px_0px_var(--color-brand-orange)]">
               <Flash size={12} variant="Bold" className="text-[var(--color-brand-orange)]" />
-              Live Demo
+              Live Demos
             </div>
-            <h1 className="text-4xl md:text-6xl font-bold text-[var(--color-brand-navy)] tracking-tighter mb-4">
+            <h1 className="text-3xl md:text-6xl font-bold text-[var(--color-brand-navy)] tracking-tighter mb-3 md:mb-4">
               Try Coal Live
             </h1>
-            <p className="text-lg md:text-xl text-[var(--color-text-secondary)] max-w-xl mx-auto font-medium">
+            <p className="text-base md:text-xl text-[var(--color-text-secondary)] max-w-xl mx-auto font-medium mb-8 md:mb-10">
               Test a real checkout, paywall, and revenue split — no signup required.
             </p>
+          </BlurReveal>
+
+          {/* Example app links */}
+          <BlurReveal delay={0.1}>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 max-w-2xl mx-auto">
+              <a href="https://coal-react-checkout.vercel.app" target="_blank" rel="noopener noreferrer"
+                className="group w-full sm:w-auto flex items-center gap-3 px-5 py-3 rounded-2xl bg-white border-2 border-black/5 hover:border-[var(--color-brand-orange)] shadow-sm hover:shadow-[3px_3px_0px_0px_var(--color-brand-orange)] transition-all">
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-brand-orange)] flex items-center justify-center shrink-0">
+                  <Card size={16} variant="Bold" className="text-white" />
+                </div>
+                <div className="text-left flex-1">
+                  <p className="text-sm font-bold text-[var(--color-brand-navy)]">React Checkout</p>
+                  <p className="text-xs text-[var(--color-text-secondary)]">Full checkout flow</p>
+                </div>
+                <ExportSquare size={16} className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-brand-orange)] transition-colors shrink-0" />
+              </a>
+
+              <a href="https://coal-agent.vercel.app" target="_blank" rel="noopener noreferrer"
+                className="group w-full sm:w-auto flex items-center gap-3 px-5 py-3 rounded-2xl bg-white border-2 border-black/5 hover:border-[var(--color-brand-blue)] shadow-sm hover:shadow-[3px_3px_0px_0px_var(--color-brand-blue)] transition-all">
+                <div className="w-8 h-8 rounded-lg bg-[var(--color-brand-blue)] flex items-center justify-center shrink-0">
+                  <Flash size={16} variant="Bold" className="text-white" />
+                </div>
+                <div className="text-left flex-1">
+                  <p className="text-sm font-bold text-[var(--color-brand-navy)]">AI Agent Chat</p>
+                  <p className="text-xs text-[var(--color-text-secondary)]">Coal + 0G agent</p>
+                </div>
+                <ExportSquare size={16} className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-brand-blue)] transition-colors shrink-0" />
+              </a>
+            </div>
           </BlurReveal>
         </div>
       </section>
 
       {/* Section 2: Paywall Demo */}
-      <section className="py-16 bg-white">
-        <div className="container mx-auto px-6 max-w-3xl">
+      <section className="py-12 md:py-16 bg-white">
+        <div className="container mx-auto px-4 md:px-6 max-w-3xl">
           <BlurReveal>
             <div className="flex items-center gap-3 mb-8">
               <div className="w-10 h-10 rounded-xl bg-[var(--color-brand-orange)] flex items-center justify-center shadow-[3px_3px_0px_0px_#180D43]">
@@ -189,8 +218,8 @@ export default function DemoPage() {
       </section>
 
       {/* Section 3: Checkout Demo */}
-      <section className="py-16 bg-[var(--color-bg-base)]">
-        <div className="container mx-auto px-6 max-w-3xl">
+      <section className="py-12 md:py-16 bg-[var(--color-bg-base)]">
+        <div className="container mx-auto px-4 md:px-6 max-w-3xl">
           <BlurReveal>
             <div className="flex items-center gap-3 mb-8">
               <div className="w-10 h-10 rounded-xl bg-[var(--color-brand-blue)] flex items-center justify-center shadow-[3px_3px_0px_0px_#180D43]">
@@ -222,8 +251,8 @@ export default function DemoPage() {
       </section>
 
       {/* Section 4: Revenue Split Demo */}
-      <section className="py-16 bg-white">
-        <div className="container mx-auto px-6 max-w-3xl">
+      <section className="py-12 md:py-16 bg-white">
+        <div className="container mx-auto px-4 md:px-6 max-w-3xl">
           <BlurReveal>
             <div className="flex items-center gap-3 mb-8">
               <div className="w-10 h-10 rounded-xl bg-[var(--color-brand-lavender)] flex items-center justify-center shadow-[3px_3px_0px_0px_#180D43]">
@@ -251,10 +280,10 @@ export default function DemoPage() {
       </section>
 
       {/* Section 5: CTA */}
-      <section className="py-24 bg-[var(--color-brand-navy)] text-white">
-        <div className="container mx-auto px-6 max-w-2xl text-center">
+      <section className="py-16 md:py-24 bg-[var(--color-brand-navy)] text-white">
+        <div className="container mx-auto px-4 md:px-6 max-w-2xl text-center">
           <BlurReveal>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tighter mb-4">Start building</h2>
+            <h2 className="text-2xl md:text-4xl font-bold tracking-tighter mb-4">Start building</h2>
             <p className="text-white/60 mb-10 font-medium">No credit card required. Testnet payments are free.</p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link href="/docs">

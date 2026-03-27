@@ -9,8 +9,8 @@ export default function Hero() {
     const { authenticated } = usePrivy();
 
     return (
-        <section className="relative overflow-hidden pt-32 pb-12 md:pt-44 md:pb-18">
-            <div className="container mx-auto px-6 relative z-10 text-center">
+        <section className="relative overflow-hidden pt-24 pb-10 md:pt-44 md:pb-18">
+            <div className="container mx-auto px-4 md:px-6 relative z-10 text-center">
                 <BlurReveal delay={0.1}>
                     <h1 className="text-massive tracking-tighter text-[var(--color-brand-navy)] mb-6 flex flex-col items-center leading-[0.9]">
                         <span>Accept any crypto.</span>
@@ -21,7 +21,7 @@ export default function Hero() {
                 </BlurReveal>
 
                 <BlurReveal delay={0.3}>
-                    <p className="text-xl md:text-2xl text-[var(--color-text-secondary)] max-w-3xl mx-auto mb-10 leading-relaxed font-medium">
+                    <p className="text-base md:text-2xl text-[var(--color-text-secondary)] max-w-3xl mx-auto mb-8 md:mb-10 leading-relaxed font-medium">
                         Non-custodial checkout for any ERC-20 token.{' '}
                         <span className="text-[var(--color-brand-navy)] font-bold">Integrate in minutes,</span>{' '}
                         settle direct to your wallet.
@@ -64,7 +64,7 @@ export default function Hero() {
                     </div>
                 </BlurReveal>
 
-                <BlurReveal delay={0.7} className="relative mt-24 md:mt-28">
+                <BlurReveal delay={0.7} className="relative mt-16 md:mt-28">
                     <div className="relative rounded-[20px] bg-white border-4 border-white/50 shadow-[0px_10px_30px_-10px_rgba(0,0,0,0.1)] p-2 backdrop-blur-sm mx-auto max-w-5xl group hover:scale-[1.01] transition-transform duration-700">
                         <div className="absolute inset-0 bg-gradient-to-tr from-[var(--color-brand-orange)]/5 to-[var(--color-brand-blue)]/5 rounded-[20px] pointer-events-none" />
                         <img
