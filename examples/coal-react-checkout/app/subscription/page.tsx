@@ -43,12 +43,12 @@ export default function SubscriptionPage() {
   };
 
   return (
-    <div style={{ maxWidth: '760px', margin: '0 auto', padding: '48px 24px' }}>
+    <div className="page-container" style={{ maxWidth: '760px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ marginBottom: '40px' }}>
         <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
           Subscription demo
         </span>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Recurring Payments</h1>
+        <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Recurring Payments</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
           Subscription checkouts require explicit billing consent. Coal captures wallet address for automatic renewal processing.
         </p>
@@ -150,7 +150,7 @@ export default function SubscriptionPage() {
       </div>
 
       {/* Code snippet */}
-      <div style={{ background: '#180D43', borderRadius: '20px', padding: '20px', fontFamily: 'monospace', fontSize: '11px', color: 'rgba(255,255,255,0.65)', lineHeight: 1.8 }}>
+      <div className="code-block" style={{ background: '#180D43', borderRadius: '20px', padding: '20px', fontFamily: 'monospace', fontSize: '11px', color: 'rgba(255,255,255,0.65)', lineHeight: 1.8 }}>
         <p style={{ margin: '0 0 4px', color: '#FF5C16', fontWeight: 900 }}>// Subscription checkout — note subscriptionConsentAccepted</p>
         <p style={{ margin: 0 }}>{'POST /api/checkouts'}</p>
         <p style={{ margin: 0 }}>{'{'}</p>

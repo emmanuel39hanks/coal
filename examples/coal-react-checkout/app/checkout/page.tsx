@@ -57,19 +57,19 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div style={{ maxWidth: '860px', margin: '0 auto', padding: '48px 24px' }}>
+    <div className="page-container" style={{ maxWidth: '860px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ textAlign: 'center', marginBottom: '40px' }}>
         <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
           Human checkout
         </span>
-        <h1 style={{ fontSize: '2.5rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Choose a plan</h1>
+        <h1 className="page-title" style={{ fontSize: '2.5rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Choose a plan</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0 }}>
           Select a plan → create session server-side → redirect to Coal checkout → success
         </p>
       </div>
 
       {/* Flow steps */}
-      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '36px', flexWrap: 'wrap' }}>
+      <div className="flow-steps" style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '36px', flexWrap: 'wrap' }}>
         {[
           { n: 1, label: 'Select plan', done: true },
           { n: 2, label: 'Create session', done: !!session },
@@ -81,7 +81,7 @@ export default function CheckoutPage() {
               {step.n}
             </div>
             <span style={{ fontSize: '12px', fontWeight: 700, color: step.done ? '#180D43' : '#9CA3AF' }}>{step.label}</span>
-            {step.n < 4 && <span style={{ color: '#D1D5DB', fontSize: '14px' }}>→</span>}
+            {step.n < 4 && <span className="flow-step-arrow" style={{ color: '#D1D5DB', fontSize: '14px' }}>→</span>}
           </div>
         ))}
       </div>
@@ -163,7 +163,7 @@ export default function CheckoutPage() {
       )}
 
       {/* Code snippet */}
-      <div style={{ marginTop: '48px', background: '#180D43', borderRadius: '24px', padding: '24px', fontSize: '12px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.65)', lineHeight: 1.8 }}>
+      <div className="code-block" style={{ marginTop: '48px', background: '#180D43', borderRadius: '24px', padding: '24px', fontSize: '12px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.65)', lineHeight: 1.8 }}>
         <p style={{ margin: '0 0 4px', color: '#FF5C16', fontWeight: 900, fontSize: '11px' }}>// Server: create-session/route.ts</p>
         <p style={{ margin: 0 }}>{'const res = await fetch(`${COAL_API_URL}/api/checkouts`, {'}</p>
         <p style={{ margin: 0 }}>&nbsp;&nbsp;{'method: "POST",'}</p>

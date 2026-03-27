@@ -1,0 +1,117 @@
+/* Reset & base */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; }
+
+/* Mobile-first responsive overrides */
+@media (max-width: 640px) {
+  /* Page containers */
+  .page-container {
+    padding: 24px 16px !important;
+  }
+  /* Headings */
+  .page-title {
+    font-size: clamp(1.5rem, 6vw, 2.5rem) !important;
+  }
+  /* Two-column grids → stack */
+  .grid-stack-mobile {
+    grid-template-columns: 1fr !important;
+  }
+  /* Nav */
+  .nav-links { display: none !important; }
+  .nav-mobile-toggle { display: flex !important; }
+  .nav-mobile-menu {
+    display: flex !important;
+    flex-direction: column;
+    position: absolute;
+    top: 52px;
+    left: 0;
+    right: 0;
+    background: rgba(245,242,237,0.97);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(0,0,0,0.07);
+    padding: 8px 16px 12px;
+    gap: 2px;
+    z-index: 100;
+  }
+  .nav-mobile-menu a {
+    padding: 10px 12px !important;
+    border-radius: 10px;
+    font-size: 13px !important;
+  }
+  /* Code blocks */
+  .code-block {
+    font-size: 10px !important;
+    padding: 16px !important;
+  }
+  /* Demo grid cards */
+  .demo-grid {
+    grid-template-columns: 1fr !important;
+  }
+  /* Flow steps */
+  .flow-steps {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+  }
+  .flow-step-arrow { display: none !important; }
+  /* Buttons */
+  .cta-button {
+    padding: 13px 32px !important;
+    font-size: 14px !important;
+  }
+  /* Terminal log */
+  .terminal-log {
+    font-size: 10px !important;
+    min-height: 200px !important;
+    max-height: 300px !important;
+  }
+  .terminal-log pre {
+    font-size: 9px !important;
+  }
+  /* Monospace text */
+  .mono-break {
+    word-break: break-all;
+    font-size: 10px !important;
+  }
+  /* How-it-works horizontal steps → stack */
+  .steps-row {
+    flex-direction: column !important;
+  }
+  .steps-row > div {
+    border-left: none !important;
+  }
+  /* Embed page layout */
+  .embed-layout {
+    padding: 24px 16px !important;
+    gap: 20px !important;
+  }
+  .side-panel-fixed {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  /* Stats grid 3-col → 2-col on mobile */
+  .stats-grid-3 {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  /* Detail rows (receipt verification) → stack */
+  .detail-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+  }
+  .detail-row span {
+    max-width: 100% !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    word-break: break-all !important;
+  }
+  /* Success page grid */
+  .success-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Ensure no horizontal overflow */
+html, body { overflow-x: hidden; max-width: 100vw; }

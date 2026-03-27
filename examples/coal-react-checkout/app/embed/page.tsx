@@ -51,10 +51,10 @@ export default function EmbedDemoPage() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f2ed', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 24px', gap: '32px', flexWrap: 'wrap' }}>
+    <div className="page-container embed-layout" style={{ minHeight: '100vh', background: '#f5f2ed', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 24px', gap: '32px', flexWrap: 'wrap' }}>
 
       {/* Left panel */}
-      <div style={{ width: '340px', flexShrink: 0 }}>
+      <div className="side-panel-fixed" style={{ width: '340px', flexShrink: 0 }}>
         <div style={{ marginBottom: '32px' }}>
           <span style={{ display: 'inline-block', background: 'white', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '11px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '12px' }}>
             Redirect checkout demo
@@ -112,7 +112,7 @@ export default function EmbedDemoPage() {
       </div>
 
       {/* Right panel — preview */}
-      <div style={{ flex: 1, minWidth: '340px', maxWidth: '500px' }}>
+      <div className="side-panel-fixed" style={{ flex: 1, minWidth: '340px', maxWidth: '500px' }}>
         {step === 'form' && (
           <div style={{ background: 'white', borderRadius: '32px', border: '2px dashed rgba(0,0,0,0.1)', height: '480px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>⬡</div>

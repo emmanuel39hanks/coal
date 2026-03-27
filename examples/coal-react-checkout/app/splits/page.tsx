@@ -81,18 +81,18 @@ export default function SplitsPage() {
   };
 
   return (
-    <div style={{ maxWidth: '860px', margin: '0 auto', padding: '48px 24px' }}>
+    <div className="page-container" style={{ maxWidth: '860px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ marginBottom: '40px' }}>
         <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
           Revenue splits demo
         </span>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Revenue Splits</h1>
+        <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Revenue Splits</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
           Define a <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 6px', borderRadius: '6px', fontFamily: 'monospace' }}>SplitConfig</code> once, then reference it by ID at checkout. Coal distributes funds to each recipient at settlement.
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '28px' }}>
+      <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '28px' }}>
         {/* Left: presets or custom */}
         <div>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
@@ -265,10 +265,10 @@ export default function SplitsPage() {
       </div>
 
       {/* How splits work */}
-      <div style={{ background: '#180D43', borderRadius: '20px', padding: '24px' }}>
+      <div className="code-block" style={{ background: '#180D43', borderRadius: '20px', padding: '24px' }}>
         <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>How it works</p>
         <p style={{ margin: '0 0 20px', fontSize: '14px', fontWeight: 700, color: 'white' }}>Create once, reference by ID</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontFamily: 'monospace', fontSize: '11px' }}>
+        <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontFamily: 'monospace', fontSize: '11px' }}>
           <div>
             <p style={{ margin: '0 0 8px', color: '#FF5C16', fontWeight: 900 }}>// 1. Create split config</p>
             <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '10px', padding: '12px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.8 }}>

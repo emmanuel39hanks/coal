@@ -130,13 +130,13 @@ export default function ReceiptPage() {
   ];
 
   return (
-    <div style={{ maxWidth: '720px', margin: '0 auto', padding: '48px 24px' }}>
+    <div className="page-container" style={{ maxWidth: '720px', margin: '0 auto', padding: '48px 24px' }}>
       {/* Header */}
       <div style={{ marginBottom: '36px' }}>
         <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
           Receipt Verification
         </span>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>
+        <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>
           Verify any payment
         </h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
@@ -297,36 +297,36 @@ export default function ReceiptPage() {
               Verification Details
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#6B7280' }}>Checkout ID</span>
-                <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#374151' }}>{receipt.checkoutId}</span>
+                <span className="mono-break" style={{ fontSize: '12px', fontFamily: 'monospace', color: '#374151' }}>{receipt.checkoutId}</span>
               </div>
               {receipt.payment?.txHash && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#6B7280' }}>Tx Hash</span>
-                  <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span className="mono-break" style={{ fontSize: '11px', fontFamily: 'monospace', color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {receipt.payment.txHash}
                   </span>
                 </div>
               )}
               {trail?.storage?.storageRoot && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#6B7280' }}>Storage Root</span>
-                  <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span className="mono-break" style={{ fontSize: '11px', fontFamily: 'monospace', color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {trail.storage.storageRoot}
                   </span>
                 </div>
               )}
               {trail?.chain?.anchorContract && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#6B7280' }}>Anchor Contract</span>
-                  <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span className="mono-break" style={{ fontSize: '11px', fontFamily: 'monospace', color: '#374151', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {trail.chain.anchorContract}
                   </span>
                 </div>
               )}
               {trail?.chain?.anchorChainId && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#6B7280' }}>0G Chain ID</span>
                   <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#374151' }}>{trail.chain.anchorChainId}</span>
                 </div>

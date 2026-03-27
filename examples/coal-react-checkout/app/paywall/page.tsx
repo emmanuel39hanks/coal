@@ -83,19 +83,19 @@ export default function PaywallPage() {
   const statusLabel = verifyStatus === 200 ? '200 OK — Access granted' : verifyStatus === 402 ? '402 Payment Required' : null;
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '48px 24px' }}>
+    <div className="page-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ marginBottom: '40px' }}>
         <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
           x402 Paywall Demo
         </span>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>HTTP 402 Payment Required</h1>
+        <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>HTTP 402 Payment Required</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
           Coal returns <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 6px', borderRadius: '6px', fontFamily: 'monospace' }}>402</code> until proof of payment is submitted. Perfect for gating APIs, content, or files — works natively with AI agents.
         </p>
       </div>
 
       {/* How it works */}
-      <div style={{ display: 'flex', gap: '0', marginBottom: '32px', background: 'white', borderRadius: '20px', border: '2px solid rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+      <div className="steps-row" style={{ display: 'flex', gap: '0', marginBottom: '32px', background: 'white', borderRadius: '20px', border: '2px solid rgba(0,0,0,0.06)', overflow: 'hidden' }}>
         {[
           { step: '1', icon: '🔍', title: 'Verify access', body: 'GET /api/paywalls/[id]/verify → returns 200 (paid) or 402 (not paid)' },
           { step: '2', icon: '💳', title: 'Pay on-chain', body: 'User sends USDC on Base, submits txHash to /api/paywalls/[id]/pay' },
@@ -112,7 +112,7 @@ export default function PaywallPage() {
       {/* Input form */}
       <div style={{ background: 'white', borderRadius: '24px', border: '2px solid rgba(0,0,0,0.06)', padding: '24px', marginBottom: '24px' }}>
         <h3 style={{ margin: '0 0 18px', fontSize: '14px', fontWeight: 900, color: '#180D43', letterSpacing: '-0.02em' }}>Check paywall access</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+        <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6B7280', marginBottom: '6px' }}>Paywall ID *</label>
             <input
@@ -173,7 +173,7 @@ export default function PaywallPage() {
           ) : (
             <div style={{ background: '#fff1f2', border: '2px solid #fecdd3', borderRadius: '20px', padding: '24px' }}>
               <p style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: 900, color: '#be123c' }}>🔒 Payment Required</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '20px' }}>
+              <div className="stats-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '20px' }}>
                 {[
                   { label: 'Price', value: `${verifyResult.price} ${verifyResult.currency}` },
                   { label: 'Model', value: verifyResult.pricingModel },
@@ -224,7 +224,7 @@ export default function PaywallPage() {
       )}
 
       {/* x402 spec info */}
-      <div style={{ background: '#180D43', borderRadius: '24px', padding: '24px' }}>
+      <div className="code-block" style={{ background: '#180D43', borderRadius: '24px', padding: '24px' }}>
         <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>x402 Protocol</p>
         <p style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: 700, color: 'white' }}>Standard HTTP response headers</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontFamily: 'monospace', fontSize: '12px' }}>
