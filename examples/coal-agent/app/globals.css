@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F5F2ED;
+  --foreground: #180D43;
+  --card: #ffffff;
+  --card-border: rgba(0, 0, 0, 0.05);
+  --card-hover: #faf9f7;
+  --accent: #FF5C16;
+  --accent-dim: #cc4a12;
+  --brand-navy: #180D43;
+  --brand-blue: #4362D1;
+  --brand-lavender: #D075FF;
+  --muted: #5C5C5C;
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-muted: var(--muted);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.btn-pill {
+  border-radius: 9999px;
+  font-weight: 600;
+  transition: transform 0.2s, opacity 0.2s, box-shadow 0.2s;
+}
+
+.btn-pill:hover {
+  transform: scale(1.02);
+}
+
+.shadow-coal {
+  box-shadow: 6px 6px 0px 0px #FF5C16;
+}
+
+.shadow-coal-sm {
+  box-shadow: 4px 4px 0px 0px #FF5C16;
+}
+
+.shadow-coal-navy {
+  box-shadow: 4px 4px 0px 0px #180D43;
+}
