@@ -225,18 +225,18 @@ export default function AgentPage() {
   };
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
+    <div className="page-container" style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ marginBottom: '36px' }}>
         <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
           AI Agent Demo
         </span>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Autonomous Agent Payments</h1>
+        <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Autonomous Agent Payments</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
           Watch an AI agent discover a paywall, parse x402 payment requirements, broadcast a transaction on Base, verify access, and confirm the receipt proof trail — without any human interaction.
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+      <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
         {/* Config */}
         <div style={{ background: 'white', borderRadius: '20px', border: '2px solid rgba(0,0,0,0.06)', padding: '20px' }}>
           <h3 style={{ margin: '0 0 16px', fontSize: '13px', fontWeight: 900, color: '#180D43' }}>Agent Configuration</h3>
@@ -306,7 +306,7 @@ export default function AgentPage() {
           <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>agent.log</span>
           {running && <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#22c55e', fontFamily: 'monospace' }}>● RUNNING</span>}
         </div>
-        <div style={{ padding: '16px', minHeight: '280px', maxHeight: '360px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', lineHeight: 1.7 }}>
+        <div className="terminal-log" style={{ padding: '16px', minHeight: '280px', maxHeight: '360px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', lineHeight: 1.7 }}>
           {log.length === 0 ? (
             <p style={{ color: 'rgba(255,255,255,0.2)', margin: 0 }}>Run the agent to see the autonomous payment flow...</p>
           ) : (
@@ -336,7 +336,7 @@ export default function AgentPage() {
           <span style={{ color: '#FF5C16', fontSize: '13px', fontWeight: 700 }}>{showCode ? '▲ Hide' : '▼ Show'}</span>
         </button>
         {showCode && (
-          <pre style={{ margin: 0, padding: '0 20px 20px', fontSize: '11px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.7)', lineHeight: 1.8, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+          <pre className="code-block" style={{ margin: 0, padding: '0 20px 20px', fontSize: '11px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.7)', lineHeight: 1.8, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
             {AGENT_CODE}
           </pre>
         )}

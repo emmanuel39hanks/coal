@@ -97,20 +97,20 @@ import { CoalCheckoutButton } from 'coal-react';
 
 export default function HubPage() {
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '48px 24px' }}>
+    <div className="page-container" style={{ maxWidth: '1000px', margin: '0 auto', padding: '48px 24px' }}>
 
       {/* Hero */}
-      <div style={{ textAlign: 'center', marginBottom: '56px' }}>
-        <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+        <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
           Demo Kitchen
         </span>
-        <h1 style={{ fontSize: 'clamp(2rem,5vw,3.5rem)', fontWeight: 900, color: '#180D43', margin: '0 0 16px', letterSpacing: '-0.04em', lineHeight: 1.1 }}>
+        <h1 className="page-title" style={{ fontSize: 'clamp(1.75rem,5vw,3.5rem)', fontWeight: 900, color: '#180D43', margin: '0 0 12px', letterSpacing: '-0.04em', lineHeight: 1.1 }}>
           Everything Coal can do.
         </h1>
-        <p style={{ color: '#6B7280', fontSize: '16px', maxWidth: '520px', margin: '0 auto 32px', lineHeight: 1.6 }}>
+        <p style={{ color: '#6B7280', fontSize: '14px', maxWidth: '520px', margin: '0 auto 24px', lineHeight: 1.6 }}>
           From a simple product checkout to full AI agent autonomous payments — every feature live and working.
         </p>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {[
             { icon: '⛓️', text: 'Base network' },
             { icon: '💵', text: 'USDC settlement' },
@@ -118,7 +118,7 @@ export default function HubPage() {
             { icon: '🤖', text: '0G AI-ready' },
             { icon: '🔐', text: 'Sealed inference' },
           ].map(b => (
-            <span key={b.text} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '6px 14px', fontSize: '12px', fontWeight: 700, color: '#180D43' }}>
+            <span key={b.text} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '5px 10px', fontSize: '11px', fontWeight: 700, color: '#180D43' }}>
               {b.icon} {b.text}
             </span>
           ))}
@@ -126,31 +126,31 @@ export default function HubPage() {
       </div>
 
       {/* Demo grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px,1fr))', gap: '16px', marginBottom: '56px' }}>
+      <div className="demo-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px,1fr))', gap: '12px', marginBottom: '40px' }}>
         {DEMOS.map(demo => (
           <a
-            key={demo.href}
+            key={demo.href + demo.tag}
             href={demo.href}
-            style={{ display: 'block', background: 'white', borderRadius: '24px', border: '2px solid rgba(0,0,0,0.06)', padding: '24px', textDecoration: 'none', transition: 'all 0.2s', cursor: 'pointer' }}
+            style={{ display: 'block', background: 'white', borderRadius: '20px', border: '2px solid rgba(0,0,0,0.06)', padding: '20px', textDecoration: 'none', transition: 'all 0.2s', cursor: 'pointer' }}
           >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <div style={{ width: '44px', height: '44px', background: demo.color, borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ width: '40px', height: '40px', background: demo.color, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
                 {demo.emoji}
               </div>
-              <span style={{ background: demo.color, color: demo.tagColor, fontSize: '10px', fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: '6px' }}>
+              <span style={{ background: demo.color, color: demo.tagColor, fontSize: '9px', fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: '6px', flexShrink: 0 }}>
                 {demo.tag}
               </span>
             </div>
-            <p style={{ margin: '0 0 6px', fontSize: '15px', fontWeight: 900, color: '#180D43', letterSpacing: '-0.02em' }}>{demo.label}</p>
-            <p style={{ margin: 0, fontSize: '13px', color: '#6B7280', lineHeight: 1.55 }}>{demo.desc}</p>
+            <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 900, color: '#180D43', letterSpacing: '-0.02em' }}>{demo.label}</p>
+            <p style={{ margin: 0, fontSize: '12px', color: '#6B7280', lineHeight: 1.55 }}>{demo.desc}</p>
           </a>
         ))}
       </div>
 
       {/* Quick start */}
-      <div style={{ background: '#180D43', borderRadius: '28px', padding: '32px', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '32px', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1, minWidth: '240px' }}>
+      <div style={{ background: '#180D43', borderRadius: '24px', padding: '24px', overflow: 'hidden' }}>
+        <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'flex-start' }}>
+          <div>
             <p style={{ margin: '0 0 8px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>Quick Start</p>
             <h2 style={{ margin: '0 0 12px', fontSize: '1.5rem', fontWeight: 900, color: 'white', letterSpacing: '-0.03em' }}>Two steps to payments</h2>
             <p style={{ margin: '0 0 20px', fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>

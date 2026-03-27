@@ -99,7 +99,7 @@ function SuccessContent() {
         </div>
 
         {/* Try more demos */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div className="success-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
           {DEMOS.map(d => (
             <a
               key={d.href}

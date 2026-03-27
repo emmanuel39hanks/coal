@@ -107,12 +107,12 @@ export default function WebhookPage() {
   };
 
   return (
-    <div style={{ maxWidth: '960px', margin: '0 auto', padding: '48px 24px' }}>
+    <div className="page-container" style={{ maxWidth: '960px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ marginBottom: '36px' }}>
         <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
           Webhooks demo
         </span>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Webhook Events</h1>
+        <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Webhook Events</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
           Coal sends HMAC-SHA256 signed events to your endpoint. Register this URL in your dashboard and complete a checkout to see live events.
         </p>
@@ -176,7 +176,7 @@ export default function WebhookPage() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: selectedEvent ? '1fr 1fr' : '1fr', gap: '20px' }}>
+      <div className="grid-stack-mobile" style={{ display: 'grid', gridTemplateColumns: selectedEvent ? '1fr 1fr' : '1fr', gap: '20px' }}>
         {/* Event list */}
         <div style={{ background: '#180D43', borderRadius: '20px', overflow: 'hidden', minHeight: '400px' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -254,7 +254,7 @@ export default function WebhookPage() {
       </div>
 
       {/* Verification code */}
-      <div style={{ marginTop: '28px', background: '#180D43', borderRadius: '20px', padding: '24px' }}>
+      <div className="code-block" style={{ marginTop: '28px', background: '#180D43', borderRadius: '20px', padding: '24px' }}>
         <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>Signature Verification</p>
         <p style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: 700, color: 'white' }}>HMAC-SHA256 — verify every event server-side</p>
         <pre style={{ margin: 0, background: 'rgba(255,255,255,0.05)', borderRadius: '14px', padding: '18px', fontSize: '11px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.75)', lineHeight: 1.8, overflowX: 'auto' }}>
