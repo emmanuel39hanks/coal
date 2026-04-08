@@ -78,8 +78,24 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     }
 
     case 'verify_receipt': {
-      const result = await coal.verifyReceipt(args.checkoutId as string);
-      return { _tool: 'verify_receipt', ...result };
+      // Poll until receipt is confirmed (payment verification takes a few seconds)
+      const checkoutId = args.checkoutId as string;
+      const maxAttempts = 8;
+      const delayMs = 3000;
+      for (let i = 0; i < maxAttempts; i++) {
+        const result = await coal.verifyReceipt(checkoutId);
+        const data = result as Record<string, unknown>;
+        if (data.verified || data.status === 'confirmed') {
+          return { _tool: 'verify_receipt', ...data };
+        }
+        // Wait before retrying
+        if (i < maxAttempts - 1) {
+          await new Promise(r => setTimeout(r, delayMs));
+        }
+      }
+      // Return whatever we have after max attempts
+      const final = await coal.verifyReceipt(checkoutId);
+      return { _tool: 'verify_receipt', ...final };
     }
 
     case 'execute_payment': {
@@ -92,6 +108,7 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
       return {
         _tool: 'execute_payment',
         success: true,
+        sessionId: args.sessionId,
         txHash,
         amount,
         recipient: to,

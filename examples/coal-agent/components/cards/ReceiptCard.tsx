@@ -50,18 +50,39 @@ export function ReceiptCard({ data }: { data: Record<string, unknown> }) {
         </div>
       </div>
 
-      {storage && (
-        <div className="px-4 py-2 text-[10px] space-y-0.5 border-t border-black/5">
-          <div className="font-mono truncate text-[var(--brand-navy)]"><span className="text-[var(--muted)]">Storage URI:</span> {storage.storageUri as string}</div>
-          {!!storage.explorerUrl && <div className="font-mono truncate text-[var(--brand-navy)]"><span className="text-[var(--muted)]">StorageScan:</span> {storage.explorerUrl as string}</div>}
-        </div>
-      )}
-      {chain && (
-        <div className="px-4 py-2 text-[10px] space-y-0.5 border-t border-black/5">
-          <div className="font-mono truncate text-[var(--brand-navy)]"><span className="text-[var(--muted)]">Anchor TX:</span> {chain.anchorTxHash as string}</div>
-          {!!chain.explorerUrl && <div className="font-mono truncate text-[var(--brand-navy)]"><span className="text-[var(--muted)]">ChainScan:</span> {chain.explorerUrl as string}</div>}
-        </div>
-      )}
+      {storage && (() => {
+        const uri = storage.storageUri as string;
+        const explorer = storage.explorerUrl as string | undefined;
+        return (
+          <div className="px-4 py-2 text-[10px] space-y-0.5 border-t border-black/5">
+            <div className="font-mono truncate text-[var(--brand-navy)]"><span className="text-[var(--muted)]">Storage URI:</span> {uri}</div>
+            {explorer && <div className="font-mono truncate text-[var(--brand-navy)]"><span className="text-[var(--muted)]">StorageScan:</span> {explorer}</div>}
+          </div>
+        );
+      })()}
+      {chain && (() => {
+        const anchorHash = chain.anchorTxHash as string;
+        const explorer = chain.explorerUrl as string | undefined;
+        return (
+          <div className="px-4 py-2 text-[10px] space-y-0.5 border-t border-black/5">
+            <div className="font-mono truncate text-[var(--brand-navy)]"><span className="text-[var(--muted)]">Anchor TX:</span> {anchorHash}</div>
+            {explorer && <div className="font-mono truncate text-[var(--brand-navy)]"><span className="text-[var(--muted)]">ChainScan:</span> {explorer}</div>}
+          </div>
+        );
+      })()}
+      {(() => {
+        const cid = data.checkoutId as string | undefined;
+        return cid ? (
+          <a
+            href={`https://www.usecoal.xyz/verify/${cid}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block px-4 py-2.5 bg-[var(--accent)]/5 text-center text-[11px] font-bold text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors border-t border-black/5"
+          >
+            View full receipt on Coal ↗
+          </a>
+        ) : null;
+      })()}
     </div>
   );
 }

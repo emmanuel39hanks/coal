@@ -8,6 +8,7 @@ export function AgentPaymentCard({ data }: { data: Record<string, unknown> }) {
   const purpose = data.purpose as string | undefined;
   const basescanUrl = data.basescanUrl as string | undefined;
   const error = data.error as string | undefined;
+  const sessionId = data.sessionId as string | undefined;
 
   return (
     <div className="border border-black/5 rounded-2xl bg-white overflow-hidden shadow-sm">
@@ -59,16 +60,28 @@ export function AgentPaymentCard({ data }: { data: Record<string, unknown> }) {
         )}
       </div>
 
-      {basescanUrl && (
-        <a
-          href={basescanUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block px-4 py-2.5 bg-[var(--accent)]/5 text-center text-[11px] font-bold text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
-        >
-          View on BaseScan ↗
-        </a>
-      )}
+      <div className="flex border-t border-black/5">
+        {basescanUrl && (
+          <a
+            href={basescanUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 px-4 py-2.5 bg-[var(--accent)]/5 text-center text-[11px] font-bold text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
+          >
+            BaseScan ↗
+          </a>
+        )}
+        {sessionId && (
+          <a
+            href={`https://www.usecoal.xyz/verify/${sessionId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex-1 px-4 py-2.5 text-center text-[11px] font-bold text-[var(--brand-navy)] hover:bg-black/5 transition-colors ${basescanUrl ? 'border-l border-black/5' : ''}`}
+          >
+            Receipt ↗
+          </a>
+        )}
+      </div>
     </div>
   );
 }
