@@ -202,8 +202,8 @@ export const updatePaywallSchema = z.object({
 // ─── Console Settings ─────────────────────────────────────────────────────────
 export const updateSettingsSchema = z.object({
     name: z.string().min(1).max(200).optional(),
-    payoutAddress: evmAddress.optional(),
-    webhookUrl: z.string().url('Must be a valid URL').optional().or(z.literal('')),
+    payoutAddress: evmAddress.optional().or(z.literal('')).transform(v => v || undefined),
+    webhookUrl: z.string().url('Must be a valid URL').optional().or(z.literal('')).or(z.null()).transform(v => v || undefined),
 });
 
 // ─── Console Subscriptions ────────────────────────────────────────────────────
