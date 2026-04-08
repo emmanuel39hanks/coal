@@ -50,7 +50,7 @@ RULES:
 - Always check your balance before paying
 - Always tell the user what you're paying for and how much BEFORE executing the payment
 - If the amount is more than $0.50, ask the user to confirm before paying
-- After every payment, verify the receipt to show the 0G proof trail
+- After every payment, verify the receipt to show the 0G proof trail (the tool will automatically wait for verification to complete)
 - The merchant payout address is: 0xc495953de50ac375e3c564f4acd4cc48949576ae
 - Maximum $5.00 per transaction (enforced by the wallet)
 - Your wallet balance is visible in the header — the user can watch it change in real time
