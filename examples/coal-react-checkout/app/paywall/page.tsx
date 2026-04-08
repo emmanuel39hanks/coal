@@ -86,11 +86,11 @@ export default function PaywallPage() {
     <div className="page-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ marginBottom: '40px' }}>
         <span style={{ display: 'inline-block', background: 'white', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: '999px', padding: '4px 14px', fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#FF5C16', marginBottom: '16px' }}>
-          x402 Paywall Demo
+          x402 Agent-Payable Content
         </span>
-        <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>HTTP 402 Payment Required</h1>
+        <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Agent-Payable Content Gates</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
-          Coal returns <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 6px', borderRadius: '6px', fontFamily: 'monospace' }}>402</code> until proof of payment is submitted. Perfect for gating APIs, content, or files — works natively with AI agents.
+          Gate any resource with <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 6px', borderRadius: '6px', fontFamily: 'monospace' }}>HTTP 402</code>. AI agents discover it on 0G Storage, read pricing from x402 headers, and pay autonomously with USDC on Base. <a href="https://coal-agent.vercel.app" target="_blank" rel="noopener noreferrer" style={{ color: '#FF5C16', fontWeight: 700, textDecoration: 'none' }}>See live agent demo →</a>
         </p>
       </div>
 

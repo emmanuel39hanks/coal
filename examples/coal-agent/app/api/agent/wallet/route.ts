@@ -1,4 +1,4 @@
-import { getUsdcBalance } from '@/lib/wallet';
+import { getUsdcBalance, getWalletAddress } from '@/lib/wallet';
 
 export async function GET() {
   try {
