@@ -26,7 +26,7 @@ const privyConfig: PrivyClientConfig = {
     theme: 'light',
     accentColor: '#FF5C16',
     logo: 'https://usecoal.xyz/logo.png',
-    showWalletLoginFirst: false,
+    showWalletLoginFirst: true,
     walletList: ['metamask', 'coinbase_wallet', 'rainbow', 'wallet_connect'],
   },
   legal: {
