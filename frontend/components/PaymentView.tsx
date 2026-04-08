@@ -122,20 +122,21 @@ export default function PaymentView({
     const apiBaseUrl = getApiBaseUrl();
     const searchParams = useSearchParams();
     const toast = useToast();
-    const { login, authenticated, getAccessToken } = usePrivy();
+    const { login, authenticated, getAccessToken, connectWallet } = usePrivy();
     const { wallets } = useWallets();
     const { createWallet } = useCreateEmbeddedWallet();
     const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy') ?? null;
     const externalWallet = wallets.find((wallet) => wallet.walletClientType !== 'privy') ?? null;
     const activeWallet = externalWallet ?? embeddedWallet ?? wallets[0];
     const fundingWallet = embeddedWallet;
+    // For settlement, always prefer external wallet (MetaMask etc) — embedded is for card funding only
     const settlementWallet =
         fundingIntent?.walletType === 'embedded'
             ? embeddedWallet ?? activeWallet
-            : activeWallet;
+            : externalWallet ?? activeWallet;
     const address = activeWallet?.address;
     const settlementAddress = settlementWallet?.address;
-    const isConnected = wallets.length > 0 && authenticated;
+    const isConnected = wallets.length > 0 && (authenticated || externalWallet !== null);
 
     // Expired session — show before any hooks that depend on data.merchant
     if (data.expired) {
@@ -254,15 +255,16 @@ export default function PaymentView({
 
     const handlePay = async () => {
         try {
-            // If already connected, proceed directly to payment
-            if (isConnected) {
+            // If already connected with an external wallet, proceed directly
+            if (isConnected && externalWallet) {
                 setStatus('processing');
                 await processPayment();
                 return;
             }
 
-            // Otherwise, open Privy login modal
-            login();
+            // Connect external wallet directly (MetaMask, WalletConnect, etc)
+            // This skips Privy's full login flow and embedded wallet creation
+            connectWallet();
             setStatus('connecting');
 
         } catch (e) {
@@ -271,16 +273,17 @@ export default function PaymentView({
         }
     };
 
-    // Watch for connection to proceed (only when modal connects us)
+    // Watch for external wallet connection to proceed
     useEffect(() => {
-        if (isConnected && status === 'connecting') {
+        if (externalWallet && status === 'connecting') {
             // Small delay to let wallet fully initialize
             const timer = setTimeout(() => {
+                setStatus('processing');
                 processPayment();
             }, 500);
             return () => clearTimeout(timer);
         }
-    }, [isConnected, status]);
+    }, [externalWallet, status]);
 
     // Reset status when disconnected
     useEffect(() => {
@@ -762,6 +765,17 @@ export default function PaymentView({
 
         } catch (e) {
             console.error("Payment failed:", e);
+            console.error("Payment debug:", {
+                settlementWalletAddress: settlementWallet?.address,
+                settlementWalletType: settlementWallet?.walletClientType,
+                externalWalletAddress: externalWallet?.address,
+                embeddedWalletAddress: embeddedWallet?.address,
+                merchantPayoutAddress: merchant?.payoutAddress,
+                walletsCount: wallets.length,
+                walletTypes: wallets.map(w => `${w.walletClientType}:${w.address?.slice(0,8)}`),
+                authenticated,
+                isConnected,
+            });
             const msg = (e as Error).message || '';
             const friendly =
                 msg.includes('rejected') || msg.includes('denied') || msg.includes('cancel') ? 'cancelled' :

@@ -1,7 +1,7 @@
 'use client';
 
 import { useToast } from '@/components/Toast';
-import { useCreateWallet, usePrivy, useWallets } from '@privy-io/react-auth';
+import { useCreateWallet, usePrivy, useWallets, useConnectWallet } from '@privy-io/react-auth';
 import type { User, ConnectedWallet, Wallet } from '@privy-io/react-auth';
 
 const isConfigured = Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID);
@@ -13,10 +13,13 @@ export type PrivySafe = {
     login: () => void;
     logout: () => Promise<void>;
     getAccessToken: () => Promise<string | null>;
+    connectWallet: () => void;
 };
 
 function useAuthConfigured(): PrivySafe {
-    return usePrivy() as PrivySafe;
+    const privy = usePrivy();
+    const { connectWallet } = useConnectWallet();
+    return { ...privy, connectWallet } as PrivySafe;
 }
 
 function useAuthFallback(): PrivySafe {
@@ -29,6 +32,10 @@ function useAuthFallback(): PrivySafe {
         login: () => {
             console.warn('[Coal] Set NEXT_PUBLIC_PRIVY_APP_ID to enable authentication.');
             toast('error', 'Auth not configured. Set NEXT_PUBLIC_PRIVY_APP_ID in your .env file.');
+        },
+        connectWallet: () => {
+            console.warn('[Coal] Set NEXT_PUBLIC_PRIVY_APP_ID to enable wallet connection.');
+            toast('error', 'Wallets not configured. Set NEXT_PUBLIC_PRIVY_APP_ID in your .env file.');
         },
         logout: async () => {},
         getAccessToken: async () => null,
