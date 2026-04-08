@@ -4,6 +4,21 @@ export const tools: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'discover_merchants',
+      description:
+        'Browse the Coal marketplace to discover available merchants, their products, and paywalls. Returns all active merchants with their offerings, prices, and 0G publication status. Use this to find what\'s available before buying.',
+      parameters: {
+        type: 'object',
+        properties: {
+          search: { type: 'string', description: 'Optional search term to filter products by name' },
+          maxPrice: { type: 'number', description: 'Optional max price in USD to filter products' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'discover_merchant_on_0g',
       description:
         'Download data directly from 0G Storage by root hash. Works for public artifacts like merchant profiles (coal.merchant_profile.v1) and receipts (coal.receipt.v1). Shows download performance metrics from decentralized storage nodes. This does NOT use the Coal API — it reads directly from the 0G network.',

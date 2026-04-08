@@ -4,6 +4,11 @@ import { sendUsdc, getUsdcBalance } from './wallet';
 
 export async function executeTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
   switch (name) {
+    case 'discover_merchants': {
+      const result = await coal.discoverMerchants();
+      return { _tool: 'discover_merchants', ...result };
+    }
+
     case 'discover_merchant_on_0g': {
       const result = await downloadFromZeroG(args.rootHash as string);
       return {

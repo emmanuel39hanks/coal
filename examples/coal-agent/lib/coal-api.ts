@@ -42,6 +42,24 @@ async function authedGet(path: string) {
   return res.json();
 }
 
+// Discovery endpoints (public, no auth)
+export function discoverMerchants() {
+  return publicGet('/api/agent/discover');
+}
+
+export function discoverProducts(opts: { search?: string; maxPrice?: number; tag?: string } = {}) {
+  const params = new URLSearchParams();
+  if (opts.search) params.set('search', opts.search);
+  if (opts.maxPrice) params.set('maxPrice', String(opts.maxPrice));
+  if (opts.tag) params.set('tag', opts.tag);
+  const qs = params.toString();
+  return publicGet(`/api/agent/discover/products${qs ? `?${qs}` : ''}`);
+}
+
+export function discoverPaywalls() {
+  return publicGet('/api/agent/discover/paywalls');
+}
+
 // Public endpoints (no auth)
 export function getMerchantProfile(merchantId: string) {
   return publicGet(`/api/agent/merchant-profiles/${merchantId}`);
