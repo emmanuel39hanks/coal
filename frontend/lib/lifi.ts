@@ -167,16 +167,20 @@ export async function getSettlementExecutionQuote(params: {
 }
 
 export async function executeSettlementRoute(params: {
-  quote: Awaited<ReturnType<typeof getSettlementExecutionQuote>>;
+  quote: any;
   wallet: {
     address: string;
     getEthereumProvider: () => Promise<any>;
   };
+  sourceChainId?: number;
 }): Promise<RouteExtended> {
   const provider = await params.wallet.getEthereumProvider();
+  const sourceChain = params.sourceChainId
+    ? { id: params.sourceChainId } as any
+    : settlementChain;
   const walletClient = createWalletClient({
     account: params.wallet.address as `0x${string}`,
-    chain: settlementChain,
+    chain: sourceChain,
     transport: custom(provider),
   });
 
@@ -186,6 +190,9 @@ export async function executeSettlementRoute(params: {
     }),
   ]);
 
-  const route = convertQuoteToRoute(params.quote);
+  // If quote has steps, it's already a route (from getRoutes). Otherwise convert from getQuote.
+  const route = params.quote.steps
+    ? (params.quote as RouteExtended)
+    : convertQuoteToRoute(params.quote);
   return executeRoute(route);
 }
