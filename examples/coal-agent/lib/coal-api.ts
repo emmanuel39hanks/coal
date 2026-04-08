@@ -107,3 +107,18 @@ export function createPaywallPayIntent(paywallId: string, opts: { walletAddress?
 export function verifyReceiptAuth(checkoutId: string) {
   return authedGet(`/api/agent/receipts/${checkoutId}/verify`);
 }
+
+// Payment confirmation (public endpoint — no API key needed)
+export async function confirmPayment(sessionId: string, txHash: string, payerAddress?: string) {
+  const res = await fetch(`${COAL_API_URL}/api/pay/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, txHash, payerAddress }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: { message: res.statusText } }));
+    throw new Error(data.error?.message || `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}

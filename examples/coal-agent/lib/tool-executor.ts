@@ -1,5 +1,6 @@
 import * as coal from './coal-api';
 import { downloadFromZeroG } from './zero-g';
+import { sendUsdc, getUsdcBalance } from './wallet';
 
 export async function executeTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
   switch (name) {
@@ -79,6 +80,30 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     case 'verify_receipt': {
       const result = await coal.verifyReceipt(args.checkoutId as string);
       return { _tool: 'verify_receipt', ...result };
+    }
+
+    case 'execute_payment': {
+      const { txHash, amount, to, from } = await sendUsdc(
+        args.recipient as string,
+        args.amount as number,
+      );
+      // Confirm with Coal backend
+      await coal.confirmPayment(args.sessionId as string, txHash, from);
+      return {
+        _tool: 'execute_payment',
+        success: true,
+        txHash,
+        amount,
+        recipient: to,
+        from,
+        purpose: args.purpose || 'checkout',
+        basescanUrl: `https://basescan.org/tx/${txHash}`,
+      };
+    }
+
+    case 'get_agent_wallet': {
+      const wallet = await getUsdcBalance();
+      return { _tool: 'get_agent_wallet', ...wallet, network: 'base' };
     }
 
     default:

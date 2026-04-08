@@ -9,6 +9,7 @@ import { CommerceRouteCard } from './cards/CommerceRouteCard';
 import { PolicyEvalCard } from './cards/PolicyEvalCard';
 import { CheckoutCard } from './cards/CheckoutCard';
 import { PaywallCard } from './cards/PaywallCard';
+import { AgentPaymentCard } from './cards/AgentPaymentCard';
 
 class CardErrorBoundary extends Component<{ toolName: string; children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -65,6 +66,21 @@ export function ToolResultCard({ toolName, data }: ToolResultCardProps) {
       card = <PaywallCard data={data} />; break;
     case 'get_recommendations':
       card = <CommerceRouteCard data={data} />; break;
+    case 'execute_payment':
+      card = <AgentPaymentCard data={data} />; break;
+    case 'get_agent_wallet':
+      card = (
+        <div className="border border-black/5 rounded-2xl bg-white overflow-hidden shadow-sm">
+          <div className="px-4 py-3 border-b border-black/5 flex items-center justify-between">
+            <span className="text-sm font-bold text-[var(--brand-navy)]">Agent Wallet</span>
+            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] font-semibold">Base</span>
+          </div>
+          <div className="px-4 py-3 text-xs space-y-1">
+            <div className="flex justify-between"><span className="text-[var(--muted)]">Address</span><span className="font-mono text-[var(--brand-navy)] font-medium">{String(data.address || '').slice(0, 6)}...{String(data.address || '').slice(-4)}</span></div>
+            <div className="flex justify-between"><span className="text-[var(--muted)]">Balance</span><span className="text-lg font-black text-[var(--brand-navy)]">${parseFloat(String(data.balance || '0')).toFixed(2)} USDC</span></div>
+          </div>
+        </div>
+      ); break;
     default:
       card = (
         <div className="border border-black/5 rounded-2xl bg-white overflow-hidden shadow-sm">

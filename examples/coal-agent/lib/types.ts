@@ -31,16 +31,16 @@ export const SUGGESTED_PROMPTS = [
     prompt: 'Verify the payment receipt and show me the full 0G proof trail — Base transaction, 0G Storage, and 0G Chain anchor.',
   },
   {
-    label: 'Buy Chocolate Cake',
-    prompt: 'I want to buy the Chocolate Cake from this merchant. Create a checkout so I can pay with my wallet.',
+    label: 'Buy me something under $1',
+    prompt: 'Find me a product under $1 from this merchant and buy it for me autonomously. Pay with your agent wallet — I want to see real USDC move on-chain.',
   },
   {
     label: 'Evaluate a refund policy',
     prompt: 'Can a customer get a refund after 30 days? Evaluate this using the policy engine with Sealed Inference.',
   },
   {
-    label: 'Full flow: discover → buy → verify',
-    prompt: 'Run the full agentic commerce flow: discover the merchant on 0G Storage, query memory for products, create a checkout for me to pay, and then verify the receipt with the full 0G proof trail.',
+    label: 'Full autonomous flow',
+    prompt: 'Run the full autonomous commerce flow: check your wallet balance, discover the merchant, find a product, buy it with your own wallet, and verify the receipt with the full 0G proof trail.',
   },
 ];
 
