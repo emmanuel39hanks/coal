@@ -151,6 +151,20 @@ export async function POST(request: Request) {
         }
 
         paymentLogger.info({ sessionId, txHash: normalizedHash }, 'On-chain verification started');
+
+        // Trigger immediate async verification instead of waiting for cron
+        const cronSecret = process.env.CRON_SECRET;
+        if (cronSecret) {
+            const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || '';
+            const verifyUrl = baseUrl
+                ? `${baseUrl}/api/cron/verify-payments`
+                : `${new URL(request.url).origin}/api/cron/verify-payments`;
+            fetch(verifyUrl, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${cronSecret}` },
+            }).catch(() => null); // Fire-and-forget
+        }
+
         return apiSuccess({ status: 'verifying', sessionId });
 
     } catch (error) {

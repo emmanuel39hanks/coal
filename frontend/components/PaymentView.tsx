@@ -103,7 +103,7 @@ export default function PaymentView({
     const [status, setStatus] = useState<'idle' | 'connecting' | 'processing' | 'verifying' | 'success' | 'failed'>('idle');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
-    const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(data.id ?? null);
+    const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(type === 'session' ? (data.id ?? null) : null);
     const [fundingIntentId, setFundingIntentId] = useState<string | null>(null);
     const [fundingStatus, setFundingStatus] = useState<FundingStatus>('idle');
     const [fundingMessage, setFundingMessage] = useState<string | null>(null);
@@ -215,8 +215,7 @@ export default function PaymentView({
         status !== 'idle' ||
         (isDonation && (!customAmount || (parsedCustomAmount ?? 0) <= 0)) ||
         (hasPayerInfoFields && !payerInfoValid) ||
-        (isRecurringProduct && !recurringConsentAccepted) ||
-        isRoutePreviewSelection;
+        (isRecurringProduct && !recurringConsentAccepted);
 
     // Determine if using embedded wallet (gasless) vs external
     const isEmbeddedWallet = settlementWallet?.walletClientType === 'privy';
@@ -410,12 +409,7 @@ export default function PaymentView({
             return false;
         }
 
-        if (mode === 'wallet' && isRoutePreviewSelection) {
-            const message = 'Route previews are available, but live routed checkout execution is not enabled yet. Switch back to direct USDC settlement to complete payment.';
-            setErrorMsg(message);
-            toast('error', message);
-            return false;
-        }
+        // LiFi routed checkout is now enabled for all audited tokens
 
         if (isDonation && (!customAmount || (parsedCustomAmount ?? 0) <= 0)) {
             const message = 'Enter an amount before continuing.';
@@ -701,7 +695,28 @@ export default function PaymentView({
 
         const finalAmount = isDonation ? customAmount : amount;
         const settlementToken = getSettlementToken();
+        const targetChainId = selectedToken.chainId;
 
+        // Switch wallet to the correct chain for the selected token
+        try {
+            const provider = await currentWallet.getEthereumProvider();
+            const currentChainId = await provider.request({ method: 'eth_chainId' });
+            if (parseInt(currentChainId as string, 16) !== targetChainId) {
+                await provider.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: `0x${targetChainId.toString(16)}` }],
+                });
+            }
+        } catch (switchErr) {
+            throw new Error(`Please switch your wallet to the correct network to complete payment`);
+        }
+
+        // Check if this is a direct USDC-on-Base transfer or needs LiFi routing
+        const isDirectUSDC =
+            selectedToken.address.toLowerCase() === USDC_BASE.address.toLowerCase() &&
+            selectedToken.chainId === USDC_BASE.chainId;
+
+        // Funding intent ETH→USDC route (card funding flow)
         if (fundingIntent?.fundingAsset === ETH_BASE.address || fundingIntent?.fundingAsset === 'eth_base' || fundingIntent?.fundingAsset === 'eth') {
             setFundingStatus('route_executing');
             setFundingMessage(`Funding confirmed. Coal is routing ${ETH_BASE.symbol} into ${settlementToken.symbol} and settling this payment from your Coal wallet.`);
@@ -729,6 +744,49 @@ export default function PaymentView({
             return;
         }
 
+        // LiFi routed payment — non-USDC or cross-chain token selected
+        if (!isDirectUSDC) {
+            const { getRoutes: getLifiRoutes } = await import('@lifi/sdk');
+            const fromAmount = lifiQuote?.fromAmount;
+            if (!fromAmount) {
+                throw new Error('Route quote not available. Please wait for the quote to load and try again.');
+            }
+
+            const routeRequest = {
+                fromChainId: selectedToken.chainId,
+                toChainId: USDC_BASE.chainId,
+                fromTokenAddress: selectedToken.address,
+                toTokenAddress: USDC_BASE.address,
+                fromAmount,
+                fromAddress: currentAddress,
+                toAddress: merchant.payoutAddress,
+                options: { slippage: 0.005 },
+            };
+
+            const routeResult = await getLifiRoutes(routeRequest);
+            if (!routeResult.routes.length) {
+                throw new Error('No route found for this token pair. Try a different token.');
+            }
+
+            const route = await executeSettlementRoute({
+                quote: routeResult.routes[0] as any,
+                wallet: currentWallet,
+                sourceChainId: selectedToken.chainId,
+            });
+
+            const routeProcesses = route.steps.flatMap((step) => step.execution?.process || []);
+            const finalHash = [...routeProcesses].reverse().find((process) => process.txHash)?.txHash;
+
+            if (!finalHash) {
+                throw new Error('Route executed, but could not determine the settlement transaction hash.');
+            }
+
+            await submitPaymentConfirmation(currentSessionId, finalHash, currentAddress);
+            pollStatus(currentSessionId, finalHash);
+            return;
+        }
+
+        // Direct USDC-on-Base transfer — simplest path
         const targetAddress = merchant.payoutAddress as `0x${string}`;
         const amountInAtomicUnits = parseUnits(finalAmount, settlementToken.decimals);
         const callData = encodeFunctionData({
@@ -790,7 +848,7 @@ export default function PaymentView({
                 friendly === 'balance' ? 'Insufficient USDC balance. Top up your wallet and try again.' :
                 friendly === 'nonce' ? 'Transaction nonce error. Please try again.' :
                 friendly === 'network' ? 'Network error. Check your connection and try again.' :
-                'Payment failed. Please try again.';
+                `Payment failed: ${msg.slice(0, 120)}`;
             if (fundingIntentId && friendly !== 'cancelled') {
                 setFundingStatus('failed');
                 setFundingMessage('Wallet funding succeeded, but Coal could not complete the onchain settlement yet. You can retry from this checkout.');
