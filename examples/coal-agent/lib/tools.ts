@@ -180,4 +180,31 @@ export const tools: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'execute_payment',
+      description:
+        'Autonomously pay for a checkout session using the agent wallet. Sends real USDC on Base from the agent\'s own wallet — no human interaction needed. Use this after create_checkout or create_paywall_pay_intent to complete payment. Maximum $5.00 per transaction. Returns the on-chain transaction hash.',
+      parameters: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'The checkout session ID to pay for' },
+          amount: { type: 'number', description: 'Payment amount in USD (max $5.00)' },
+          recipient: { type: 'string', description: 'Merchant payout wallet address (0x...)' },
+          purpose: { type: 'string', description: 'What this payment is for', enum: ['paywall', 'checkout'] },
+        },
+        required: ['sessionId', 'amount', 'recipient', 'purpose'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_agent_wallet',
+      description:
+        'Check the agent wallet balance and address. Returns the USDC balance on Base. Use this before making payments to ensure sufficient funds.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
 ];

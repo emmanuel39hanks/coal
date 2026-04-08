@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage, ToolLoadingIndicator } from '@/components/ChatMessage';
 import { WalletButton } from '@/components/WalletButton';
+import { AgentWallet } from '@/components/AgentWallet';
 import { SUGGESTED_PROMPTS } from '@/lib/types';
 import type { ChatMessage as ChatMessageType, StreamEvent } from '@/lib/types';
 
@@ -176,6 +177,7 @@ export default function AgentChat() {
           <span className="text-[10px] font-semibold px-3 py-1 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 hidden sm:inline-block">
             0G Mainnet
           </span>
+          <AgentWallet />
           <WalletButton />
         </div>
       </header>
