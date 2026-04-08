@@ -14,9 +14,15 @@ import { getSettlementToken } from '@/lib/chain';
 import { getApiBaseUrl } from '@/lib/api-base';
 
 const CONTENT_TYPE_LABELS: Record<string, string> = {
-    api: 'API endpoint',
-    content: 'Content page',
-    download: 'File download',
+    api: 'API Access',
+    content: 'Digital Content',
+    download: 'Data Feed',
+};
+
+const CONTENT_TYPE_DESCRIPTIONS: Record<string, string> = {
+    api: 'Gate an API endpoint. Agents pay per call or one-time.',
+    content: 'Gate downloadable files, datasets, or reports.',
+    download: 'Gate streaming data or recurring data access.',
 };
 
 const PRICING_MODEL_LABELS: Record<string, string> = {
@@ -241,9 +247,9 @@ function PaywallGate({ address, children }) {
                 className="flex items-center justify-between"
             >
                 <div>
-                    <h1 className="text-3xl font-black tracking-tight text-[var(--color-brand-navy)]">Paywalls</h1>
+                    <h1 className="text-3xl font-black tracking-tight text-[var(--color-brand-navy)]">Agent-Payable Gates</h1>
                     <p className="text-[var(--color-text-secondary)] font-medium">
-                        Gate any URL or API with an x402 payment. Manifests auto-publish to 0G so AI agents can discover and pay.
+                        Create services that AI agents discover on 0G and pay for autonomously via x402.
                     </p>
                 </div>
                 <button
@@ -251,7 +257,7 @@ function PaywallGate({ address, children }) {
                     className="inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white shadow-[4px_4px_0px_0px_#FF5C16] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#FF5C16]"
                 >
                     <Add size={18} variant="Linear" />
-                    New Paywall
+                    New Gate
                 </button>
             </motion.div>
 
@@ -289,16 +295,16 @@ function PaywallGate({ address, children }) {
                         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-bg-base)]">
                             <Lock size={28} variant="Bold" className="text-[var(--color-text-secondary)]" />
                         </div>
-                        <p className="text-base font-bold text-[var(--color-brand-navy)] mb-1">No paywalls yet</p>
+                        <p className="text-base font-bold text-[var(--color-brand-navy)] mb-1">No agent-payable gates yet</p>
                         <p className="text-sm text-[var(--color-text-secondary)] max-w-sm mx-auto mb-6">
-                            Create a paywall to gate any URL or API endpoint. Each paywall gets an x402-compatible verify endpoint and is published to 0G Storage so AI agents can discover it.
+                            Create your first agent-payable gate. Agents discover it on 0G Storage, get pricing via HTTP 402, and pay with USDC on Base.
                         </p>
                         <button
                             onClick={handleOpenCreate}
                             className="inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white shadow-[4px_4px_0px_0px_#FF5C16] transition-all hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#FF5C16]"
                         >
                             <Add size={16} variant="Linear" />
-                            Create your first paywall
+                            Create your first gate
                         </button>
                     </div>
                 ) : (
@@ -427,9 +433,9 @@ function PaywallGate({ address, children }) {
                     <h3 className="text-sm font-black text-[var(--color-brand-navy)] mb-3">How it works</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {[
-                            { step: '1', title: 'Client requests', body: 'Any HTTP client hits your protected URL. Coal returns HTTP 402 with payment terms.' },
-                            { step: '2', title: 'Client pays', body: 'Client sends USDC on Base and submits the txHash to the /pay endpoint.' },
-                            { step: '3', title: 'Access granted', body: 'Once verified, the /verify endpoint returns 200. Manifests are on 0G so AI agents discover you.' },
+                            { step: '1', title: 'Agent discovers', body: 'AI agents find your gate on 0G Storage or via the discovery API. They read pricing from the HTTP 402 response.' },
+                            { step: '2', title: 'Agent pays', body: 'Agent reads x402 headers, sends USDC on Base autonomously. No browser, no human clicks.' },
+                            { step: '3', title: 'Access granted', body: 'Agent gets content. Receipt published to 0G with 3-step proof trail: Base TX → Storage → Chain.' },
                         ].map((item) => (
                             <div key={item.step} className="flex gap-3">
                                 <div className="shrink-0 w-6 h-6 rounded-full bg-black text-white text-xs font-black flex items-center justify-center">
@@ -446,14 +452,14 @@ function PaywallGate({ address, children }) {
             )}
 
             {/* Create/Edit modal */}
-            <Modal isOpen={isCreateOpen} onClose={() => { setIsCreateOpen(false); resetForm(); }} title={editingPaywall ? 'Edit Paywall' : 'New Paywall'}>
+            <Modal isOpen={isCreateOpen} onClose={() => { setIsCreateOpen(false); resetForm(); }} title={editingPaywall ? 'Edit Gate' : 'New Agent-Payable Gate'}>
                 <div className="space-y-4">
                     <div>
                         <label className="block text-xs font-bold text-[var(--color-brand-navy)] mb-1.5">Name *</label>
                         <input
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g. Premium API Access"
+                            placeholder="e.g. Product Catalog Query, Premium Data API"
                             className="w-full rounded-2xl border-2 border-black/8 bg-[var(--color-bg-base)] px-4 py-3 text-sm font-medium focus:outline-none focus:border-[var(--color-brand-orange)]/40"
                         />
                     </div>
@@ -463,7 +469,7 @@ function PaywallGate({ address, children }) {
                         <input
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="What does this paywall protect?"
+                            placeholder="What does this gate protect? How do agents benefit?"
                             className="w-full rounded-2xl border-2 border-black/8 bg-[var(--color-bg-base)] px-4 py-3 text-sm font-medium focus:outline-none focus:border-[var(--color-brand-orange)]/40"
                         />
                     </div>
@@ -475,7 +481,7 @@ function PaywallGate({ address, children }) {
                                 type="number"
                                 value={price}
                                 onChange={(e) => setPrice(e.target.value)}
-                                placeholder="1.00"
+                                placeholder="0.10"
                                 min="0"
                                 step="0.01"
                                 className="w-full rounded-2xl border-2 border-black/8 bg-[var(--color-bg-base)] px-4 py-3 text-sm font-medium focus:outline-none focus:border-[var(--color-brand-orange)]/40"
@@ -524,19 +530,22 @@ function PaywallGate({ address, children }) {
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-[var(--color-brand-navy)] mb-1.5">Content type</label>
+                        <label className="block text-xs font-bold text-[var(--color-brand-navy)] mb-1.5">What are you gating?</label>
                         <div className="grid grid-cols-3 gap-2">
                             {(['api', 'content', 'download'] as const).map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => setContentType(type)}
-                                    className={`px-3 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                                    className={`px-3 py-2 rounded-xl text-left border-2 transition-all ${
                                         contentType === type
                                             ? 'border-black bg-black text-white'
                                             : 'border-black/8 bg-[var(--color-bg-base)] text-[var(--color-text-secondary)] hover:border-black/20'
                                     }`}
                                 >
-                                    {CONTENT_TYPE_LABELS[type]}
+                                    <span className="block text-xs font-bold">{CONTENT_TYPE_LABELS[type]}</span>
+                                    <span className={`block text-[10px] mt-0.5 ${contentType === type ? 'text-white/60' : 'text-[var(--color-text-secondary)]'}`}>
+                                        {CONTENT_TYPE_DESCRIPTIONS[type]}
+                                    </span>
                                 </button>
                             ))}
                         </div>

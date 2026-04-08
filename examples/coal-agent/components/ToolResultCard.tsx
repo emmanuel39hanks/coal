@@ -66,6 +66,59 @@ export function ToolResultCard({ toolName, data }: ToolResultCardProps) {
       card = <PaywallCard data={data} />; break;
     case 'get_recommendations':
       card = <CommerceRouteCard data={data} />; break;
+    case 'discover_merchants': {
+      const merchants = (data.merchants || []) as Array<Record<string, unknown>>;
+      const stats = data.stats as Record<string, unknown> | undefined;
+      card = (
+        <div className="border border-black/5 rounded-2xl bg-white overflow-hidden shadow-sm">
+          <div className="px-4 py-3 border-b border-black/5 flex items-center justify-between">
+            <span className="text-sm font-bold text-[var(--brand-navy)]">Marketplace Discovery</span>
+            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] font-semibold">
+              {String(stats?.totalMerchants || 0)} merchants · {String(stats?.totalProducts || 0)} products
+            </span>
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            {merchants.map((m: Record<string, unknown>) => {
+              const products = (m.topProducts || []) as Array<Record<string, unknown>>;
+              const paywalls = (m.topPaywalls || []) as Array<Record<string, unknown>>;
+              return (
+                <div key={String(m.id)} className="p-3 rounded-xl bg-[var(--background)] border border-black/3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-bold text-[var(--brand-navy)]">{String(m.name || 'Merchant')}</span>
+                    {Boolean((m.zeroG as Record<string, unknown>)?.published) && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 font-semibold">0G</span>
+                    )}
+                  </div>
+                  {products.length > 0 && (
+                    <div className="space-y-1 mb-2">
+                      <span className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">Products</span>
+                      {products.map((p: Record<string, unknown>) => (
+                        <div key={String(p.id)} className="flex justify-between text-xs">
+                          <span className="text-[var(--brand-navy)] font-medium">{String(p.name)}</span>
+                          <span className="font-bold text-[var(--brand-navy)]">${String(p.price)} USDC</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {paywalls.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">Paywalls</span>
+                      {paywalls.map((pw: Record<string, unknown>) => (
+                        <div key={String(pw.id)} className="flex justify-between text-xs">
+                          <span className="text-[var(--brand-navy)] font-medium">{String(pw.name)}</span>
+                          <span className="font-bold text-[var(--brand-navy)]">${String(pw.price)} {String(pw.pricingModel) === 'per_call' ? '/call' : ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+      break;
+    }
     case 'execute_payment':
       card = <AgentPaymentCard data={data} />; break;
     case 'get_agent_wallet':
