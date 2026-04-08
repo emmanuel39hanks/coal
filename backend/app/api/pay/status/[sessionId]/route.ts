@@ -51,6 +51,18 @@ export async function GET(
             return NextResponse.json({ status: "expired" });
         }
 
+        // If still verifying and has a pending tx, trigger verification inline
+        if (session.status === 'verifying' && session.pendingTxHash) {
+            const cronSecret = process.env.CRON_SECRET;
+            if (cronSecret) {
+                const verifyUrl = `${new URL(request.url).origin}/api/cron/verify-payments`;
+                fetch(verifyUrl, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${cronSecret}` },
+                }).catch(() => null);
+            }
+        }
+
         return NextResponse.json({
             status: session.status,
             txHash: session.txHash ?? session.pendingTxHash ?? null,
