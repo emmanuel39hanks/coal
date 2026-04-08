@@ -174,39 +174,50 @@ export async function publishVerifiedReceiptProof(input: {
         }
     }
 
+    // Chain anchor runs async (fire-and-forget) to avoid blocking payment confirmation.
+    // 0G Chain tx + waitForReceipt can take 10-45s which exceeds serverless timeouts.
     if (!anchor && isZeroGChainWriteConfigured() && artifactRoot) {
-        try {
-            anchor = await anchorReceipt(
-                effectivePayloadHash,
-                artifactRoot,
-                subjectHash,
-            );
+        const anchorAsync = async () => {
+            try {
+                const result = await anchorReceipt(
+                    effectivePayloadHash,
+                    artifactRoot,
+                    subjectHash,
+                );
 
-            await prisma.chainAnchor.create({
-                data: {
-                    merchantId: input.session.merchantId,
-                    kind: 'receipt',
-                    localEntityType: 'checkout_session',
-                    localEntityId: input.session.id,
-                    payloadHash: effectivePayloadHash,
-                    anchorContract: anchor.anchorContract,
-                    anchorTxHash: anchor.anchorTxHash,
-                    anchorChainId: anchor.anchorChainId,
-                    status: 'confirmed',
-                    metadata: {
-                        storageRoot: publishedArtifact.storageRoot,
-                        artifactRoot,
-                        subjectHash,
-                        txHash: input.transaction.txHash,
+                await prisma.chainAnchor.create({
+                    data: {
+                        merchantId: input.session.merchantId,
+                        kind: 'receipt',
+                        localEntityType: 'checkout_session',
+                        localEntityId: input.session.id,
+                        payloadHash: effectivePayloadHash,
+                        anchorContract: result.anchorContract,
+                        anchorTxHash: result.anchorTxHash,
+                        anchorChainId: result.anchorChainId,
+                        status: 'confirmed',
+                        metadata: {
+                            storageRoot: publishedArtifact.storageRoot,
+                            artifactRoot,
+                            subjectHash,
+                            txHash: input.transaction.txHash,
+                        },
                     },
-                },
-            });
-        } catch (error) {
-            zeroGLogger.warn(
-                { err: error, checkoutSessionId: input.session.id, txHash: input.transaction.txHash },
-                '0G receipt anchor write failed after storage publication',
-            );
-        }
+                });
+
+                zeroGLogger.info(
+                    { checkoutSessionId: input.session.id, anchorTxHash: result.anchorTxHash },
+                    '0G chain anchor completed (async)',
+                );
+            } catch (error) {
+                zeroGLogger.warn(
+                    { err: error, checkoutSessionId: input.session.id, txHash: input.transaction.txHash },
+                    '0G receipt anchor write failed (async) — will retry on next cron run',
+                );
+            }
+        };
+        // Fire and forget — don't await
+        anchorAsync().catch(() => null);
     }
 
     return { skipped: false as const, payloadHash: effectivePayloadHash, artifact: publishedArtifact, anchor };
