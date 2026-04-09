@@ -66,10 +66,18 @@ const NAV_SECTIONS: NavSection[] = [
         ],
     },
     {
+        title: 'Agents',
+        icon: <CommandSquare size={14} variant="Bold" />,
+        items: [
+            { name: 'Agent Discovery', href: '/docs/agent-discovery' },
+            { name: 'Autonomous Payments', href: '/docs/agent-payments' },
+            { name: 'Agent-Payable Gates', href: '/docs/paywalls' },
+        ],
+    },
+    {
         title: 'Advanced',
         icon: <Setting2 size={14} variant="Bold" />,
         items: [
-            { name: 'Paywalls (x402)', href: '/docs/paywalls' },
             { name: 'Revenue Splits', href: '/docs/splits' },
             { name: 'Multi-Token', href: '/docs/multi-token' },
             { name: 'Auth & Capture', href: '/docs/auth-capture' },

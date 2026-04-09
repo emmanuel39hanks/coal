@@ -1,0 +1,132 @@
+# Autonomous Agent Payments
+
+Coal enables AI agents to pay for products and services autonomously — real USDC on Base, no human interaction needed.
+
+## How It Works
+
+1. **Agent has a wallet** — funded with USDC on Base (via Privy server wallet or raw key)
+2. **Agent discovers** — browses merchants via the [Discovery API](/docs/agent-discovery)
+3. **Agent pays** — sends USDC on-chain, confirms with Coal API
+4. **Agent verifies** — receipt published to 0G Storage, anchored on 0G Chain
+
+## Agent Wallet Setup
+
+### Privy Server Wallets (Recommended)
+
+Coal uses [Privy server wallets](https://docs.privy.io/wallets/overview) for agent wallets. Keys are secured in TEE enclaves — never exposed.
+
+```typescript
+// Create a server wallet (one-time)
+const wallet = await privy.wallets.create({ chain_type: 'ethereum' });
+// wallet.address = "0x99301e..."
+
+// Send USDC via the wallet
+const tx = await privy.wallets.rpc(wallet.id, {
+  method: 'eth_sendTransaction',
+  caip2: 'eip155:8453', // Base mainnet
+  params: { transaction: { to: USDC_ADDRESS, data: transferCalldata } }
+});
+```
+
+### Fund & Withdraw
+
+- **Fund:** Send USDC on Base to the agent wallet address
+- **Withdraw:** Agent can send remaining USDC to any address via `POST /api/agent/wallet/withdraw`
+- Users can always withdraw — Privy wallets are self-custodial
+
+## Autonomous Payment Flow
+
+### Step 1: Check Balance
+
+```bash
+GET /api/agent/wallet
+# → { "address": "0x993...", "balance": "14.20", "network": "base" }
+```
+
+### Step 2: Create Checkout
+
+```bash
+POST /api/agent/checkout
+{
+  "amount": 0.10,
+  "productName": "F1 Figurine",
+  "currency": "USDC"
+}
+# → { "id": "cmn...", "amount": "0.10", "status": "pending" }
+```
+
+### Step 3: Send USDC On-Chain
+
+Agent sends a USDC ERC-20 `transfer()` to the merchant's payout address.
+
+```typescript
+const hash = await walletClient.writeContract({
+  address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
+  abi: erc20Abi,
+  functionName: 'transfer',
+  args: [merchantPayoutAddress, parseUnits('0.10', 6)]
+});
+```
+
+### Step 4: Confirm Payment
+
+```bash
+POST /api/pay/confirm
+{ "sessionId": "cmn...", "txHash": "0xabc...", "payerAddress": "0x993..." }
+# → { "status": "verifying" }
+```
+
+### Step 5: Verify Receipt
+
+```bash
+GET /api/receipts/{sessionId}
+# → { "verified": true, "proofTrail": { "storage": {...}, "chain": {...} } }
+```
+
+The receipt includes a 3-step proof trail: Base TX → 0G Storage → 0G Chain anchor.
+
+## x402 Paywall Flow
+
+For paywalled content, agents use the x402 protocol:
+
+```bash
+# 1. Check access → 402 with payment requirements
+GET /api/paywalls/{id}/verify
+# X-PAYMENT header contains: price, network, asset, payTo
+
+# 2. Create pay intent
+POST /api/agent/paywalls/{id}/pay-intent
+# → { "checkoutId": "cmn...", "amount": 0.10 }
+
+# 3. Pay + confirm (same as above)
+
+# 4. Re-check → 200 with content
+GET /api/paywalls/{id}/verify?address=0x993...
+```
+
+## Security
+
+| Protection | How |
+|-----------|-----|
+| Per-tx cap | $5 max enforced in wallet code |
+| Rate limit | 10 payments/minute |
+| Balance check | Fails fast if insufficient USDC |
+| User confirmation | Agent asks before spending > $0.50 |
+| Privy policies | Allowlisted recipients, daily caps |
+
+## Coal Agent SDK Tools
+
+The [coal-agent](https://coal-agent.vercel.app) example app provides these OpenAI function-calling tools:
+
+| Tool | Description |
+|------|-------------|
+| `discover_merchants` | Browse marketplace for merchants/products/paywalls |
+| `get_agent_wallet` | Check wallet address and USDC balance |
+| `execute_payment` | Send real USDC autonomously (max $5) |
+| `check_paywall` | Check x402 paywall access status |
+| `create_checkout` | Create a payment session |
+| `verify_receipt` | Get 0G proof trail for a payment |
+
+## Live Demo
+
+Try the [Coal Agent Demo](https://coal-agent.vercel.app) — click "Buy me something under $1" to see autonomous payments in action.

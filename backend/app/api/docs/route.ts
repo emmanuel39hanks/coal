@@ -35,6 +35,8 @@ export async function GET() {
       { name: 'Console — Keys', description: 'Requires Bearer token (Privy)' },
       { name: 'Console — Paywalls', description: 'Requires Bearer token (Privy)' },
       { name: 'Console — Splits', description: 'Requires Bearer token (Privy)' },
+      { name: 'Discovery', description: 'Public agent discovery — browse merchants, products, paywalls. No auth required.' },
+      { name: '0G Events', description: 'DA event stream visibility' },
       { name: 'Console — Analytics', description: 'Requires Bearer token (Privy)' },
       { name: 'Console — Settings', description: 'Requires Bearer token (Privy)' },
     ],
@@ -2394,6 +2396,137 @@ export async function GET() {
             '400': { $ref: '#/components/responses/ValidationError' },
             '401': { $ref: '#/components/responses/Unauthorized' },
             '500': { $ref: '#/components/responses/InternalError' },
+          },
+        },
+      },
+
+      '/api/agent/discover': {
+        get: {
+          tags: ['Discovery'],
+          operationId: 'discoverMerchants',
+          summary: 'Browse all merchants with products and paywalls',
+          description:
+            'Public discovery endpoint for AI agents. Returns all active merchants with their top products, ' +
+            'paywalls, 0G publication status, and API endpoints. No authentication required.',
+          responses: {
+            '200': {
+              description: 'Marketplace overview',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      merchants: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string' },
+                            name: { type: 'string' },
+                            productCount: { type: 'integer' },
+                            paywallCount: { type: 'integer' },
+                            topProducts: { type: 'array', items: { type: 'object' } },
+                            topPaywalls: { type: 'array', items: { type: 'object' } },
+                            zeroG: { type: 'object', properties: { published: { type: 'boolean' }, storageRoot: { type: 'string' } } },
+                            endpoints: { type: 'object' },
+                          },
+                        },
+                      },
+                      stats: {
+                        type: 'object',
+                        properties: {
+                          totalMerchants: { type: 'integer' },
+                          totalProducts: { type: 'integer' },
+                          totalPaywalls: { type: 'integer' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            '429': { $ref: '#/components/responses/RateLimited' },
+          },
+        },
+      },
+
+      '/api/agent/discover/products': {
+        get: {
+          tags: ['Discovery'],
+          operationId: 'discoverProducts',
+          summary: 'Search products across all merchants',
+          description: 'Browse and search active products. Filter by name, max price, or tag.',
+          parameters: [
+            { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Filter by product name (case-insensitive)' },
+            { name: 'maxPrice', in: 'query', schema: { type: 'number' }, description: 'Maximum price in USD' },
+            { name: 'tag', in: 'query', schema: { type: 'string' }, description: 'Filter by product tag' },
+          ],
+          responses: {
+            '200': {
+              description: 'Product listing',
+              content: { 'application/json': { schema: { type: 'object', properties: { products: { type: 'array' }, total: { type: 'integer' } } } } },
+            },
+            '429': { $ref: '#/components/responses/RateLimited' },
+          },
+        },
+      },
+
+      '/api/agent/discover/paywalls': {
+        get: {
+          tags: ['Discovery'],
+          operationId: 'discoverPaywalls',
+          summary: 'List all active paywalls with verify URLs',
+          description: 'Browse active agent-payable gates. Each paywall includes its x402 verify URL for immediate agent use.',
+          responses: {
+            '200': {
+              description: 'Paywall listing',
+              content: { 'application/json': { schema: { type: 'object', properties: { paywalls: { type: 'array' }, total: { type: 'integer' } } } } },
+            },
+            '429': { $ref: '#/components/responses/RateLimited' },
+          },
+        },
+      },
+
+      '/api/0g/da-events': {
+        get: {
+          tags: ['0G Events'],
+          operationId: 'getDAEvents',
+          summary: 'Recent DA event stream',
+          description:
+            'Returns recent payment events posted to 0G Data Availability layer. ' +
+            'Events include payment confirmations, subscription lifecycle, and paywall access grants.',
+          responses: {
+            '200': {
+              description: 'DA event log',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      events: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            kind: { type: 'string', enum: ['payment_confirmed', 'subscription_renewed', 'subscription_created', 'webhook_delivered', 'paywall_access_granted', 'receipt_anchored'] },
+                            merchantId: { type: 'string' },
+                            requestId: { type: 'string', nullable: true },
+                            status: { type: 'string' },
+                            byteSize: { type: 'integer' },
+                            timestamp: { type: 'string', format: 'date-time' },
+                            payloadHash: { type: 'string' },
+                          },
+                        },
+                      },
+                      total: { type: 'integer' },
+                      daEnabled: { type: 'boolean' },
+                      daEndpoint: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+            '429': { $ref: '#/components/responses/RateLimited' },
           },
         },
       },
