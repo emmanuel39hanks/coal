@@ -39,8 +39,8 @@ export const SUGGESTED_PROMPTS = [
     prompt: 'Can a customer get a refund after 30 days? Evaluate this using the policy engine with Sealed Inference.',
   },
   {
-    label: 'Full autonomous flow',
-    prompt: 'Run the full autonomous commerce flow: check your wallet balance, discover the merchant, find a product, buy it with your own wallet, and verify the receipt with the full 0G proof trail.',
+    label: 'Full agent-to-agent flow',
+    prompt: 'Run the full agent-to-agent commerce flow: discover available merchants, find a paywall to access, pay for it autonomously via x402, then find a product under $1 and buy it with your wallet. Show the 0G proof trail for everything.',
   },
 ];
 
