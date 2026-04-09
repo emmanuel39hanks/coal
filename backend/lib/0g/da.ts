@@ -182,6 +182,32 @@ export function buildDAEvent(kind: DAEventKind, merchantId: string, payload: Rec
     };
 }
 
+// ─── Event Log (in-memory, for demo visibility) ─────────────────────────────
+
+interface DAEventLogEntry {
+    kind: DAEventKind;
+    merchantId: string;
+    requestId: string | null;
+    status: string;
+    byteSize: number;
+    timestamp: string;
+    payloadHash: string;
+}
+
+const recentDAEvents: DAEventLogEntry[] = [];
+const MAX_EVENT_LOG = 50;
+
+export function getRecentDAEvents(): DAEventLogEntry[] {
+    return [...recentDAEvents];
+}
+
+function logDAEvent(entry: DAEventLogEntry) {
+    recentDAEvents.unshift(entry);
+    if (recentDAEvents.length > MAX_EVENT_LOG) {
+        recentDAEvents.pop();
+    }
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -231,6 +257,17 @@ export async function postDAEvent(
             },
             'Posted payment event to 0G DA',
         );
+
+        // Track for demo visibility
+        logDAEvent({
+            kind,
+            merchantId,
+            requestId: result.requestId,
+            status: String(status),
+            byteSize: data.byteLength,
+            timestamp: event.timestamp,
+            payloadHash: event.payloadHash,
+        });
 
         // Poll for confirmation in background (best-effort)
         pollForConfirmation(requestId, kind, merchantId).catch((error) => {
