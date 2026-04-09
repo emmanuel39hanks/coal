@@ -1,33 +1,30 @@
-import { getUsdcBalance, getOrCreateUserWallet } from '@/lib/wallet';
-import { cookies } from 'next/headers';
+import { getUsdcBalance, getOrCreateUserWallet, getWalletById } from '@/lib/wallet';
 
-async function getWalletForSession(): Promise<{ walletId: string; address: string }> {
-  const cookieStore = await cookies();
-  const walletId = cookieStore.get('agent_wallet_id')?.value;
-  const walletAddr = cookieStore.get('agent_wallet_addr')?.value;
-
-  if (walletId && walletAddr) {
-    return { walletId, address: walletAddr };
-  }
-
-  // Create a new wallet for this session
-  const wallet = await getOrCreateUserWallet(`session_${Date.now()}`);
-  return wallet;
-}
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const wallet = await getWalletForSession();
-    const balance = await getUsdcBalance(wallet.address);
+    const { searchParams } = new URL(request.url);
+    const walletId = searchParams.get('walletId');
+    const address = searchParams.get('address');
 
-    // Set cookies for session persistence
-    const response = Response.json({
-      ...balance,
-      walletId: wallet.walletId,
-      network: 'base',
-    });
+    // If client provides a walletId, use that wallet
+    if (walletId) {
+      try {
+        const wallet = await getWalletById(walletId);
+        const balance = await getUsdcBalance(wallet.address);
+        return Response.json({ ...balance, walletId, network: 'base' });
+      } catch {
+        // Wallet not found — fall through to create
+      }
+    }
 
-    return response;
+    // If client provides an address (from localStorage), just check balance
+    if (address) {
+      const balance = await getUsdcBalance(address);
+      return Response.json({ ...balance, walletId: walletId || null, network: 'base' });
+    }
+
+    // No wallet provided — return empty state, client should POST to create
+    return Response.json({ address: null, balance: '0', walletId: null, network: 'base' });
   } catch (err) {
     return Response.json(
       { error: err instanceof Error ? err.message : 'Failed to get wallet' },
@@ -36,17 +33,11 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
-    // Create/get wallet and return it — client stores walletId
     const wallet = await getOrCreateUserWallet(`session_${Date.now()}`);
     const balance = await getUsdcBalance(wallet.address);
-
-    return Response.json({
-      ...balance,
-      walletId: wallet.walletId,
-      network: 'base',
-    });
+    return Response.json({ ...balance, walletId: wallet.walletId, network: 'base' });
   } catch (err) {
     return Response.json(
       { error: err instanceof Error ? err.message : 'Failed to create wallet' },

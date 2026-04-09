@@ -35,6 +35,22 @@ export async function getOrCreateUserWallet(userId: string): Promise<{ walletId:
   return { walletId: wallet.id, address: wallet.address };
 }
 
+// ─── Get Wallet By ID ───────────────────────────────────────────────────────
+
+export async function getWalletById(walletId: string): Promise<{ address: string }> {
+  const privy = getPrivyClient();
+  // Privy wallets().get() — fetch wallet details by ID
+  const response = await fetch(`https://api.privy.io/v1/wallets/${walletId}`, {
+    headers: {
+      'Authorization': `Basic ${Buffer.from(`${process.env.PRIVY_APP_ID || process.env.NEXT_PUBLIC_PRIVY_APP_ID}:${process.env.PRIVY_APP_SECRET}`).toString('base64')}`,
+      'privy-app-id': process.env.PRIVY_APP_ID || process.env.NEXT_PUBLIC_PRIVY_APP_ID || '',
+    },
+  });
+  if (!response.ok) throw new Error('Wallet not found');
+  const wallet = await response.json();
+  return { address: wallet.address };
+}
+
 // ─── Balance ────────────────────────────────────────────────────────────────
 
 export async function getUsdcBalance(address: string): Promise<{ address: string; balance: string; balanceRaw: string }> {

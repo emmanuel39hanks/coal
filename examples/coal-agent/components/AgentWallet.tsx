@@ -37,27 +37,32 @@ export function AgentWallet({ onWalletReady }: Props) {
     try {
       // Check localStorage for existing wallet
       const stored = localStorage.getItem('coal_agent_wallet');
-      let walletData: { walletId: string; address: string } | null = stored ? JSON.parse(stored) : null;
+      let walletData: { walletId: string; address: string } | null = null;
 
-      if (walletData) {
+      try { walletData = stored ? JSON.parse(stored) : null; } catch {}
+
+      if (walletData?.walletId && walletData?.address) {
         // Fetch balance for existing wallet
-        const res = await fetch(`/api/agent/wallet?address=${walletData.address}`);
+        const res = await fetch(`/api/agent/wallet?walletId=${walletData.walletId}&address=${walletData.address}`);
         if (res.ok) {
           const data = await res.json();
-          setWallet({ ...walletData, balance: data.balance || '0' });
+          setWallet({ walletId: walletData.walletId, address: walletData.address, balance: data.balance || '0' });
           onWalletReady?.(walletData);
+          setLoading(false);
           return;
         }
       }
 
-      // Create new wallet
+      // No wallet in localStorage — create new one
       const res = await fetch('/api/agent/wallet', { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
-        walletData = { walletId: data.walletId, address: data.address };
-        localStorage.setItem('coal_agent_wallet', JSON.stringify(walletData));
-        setWallet({ ...walletData, balance: data.balance || '0' });
-        onWalletReady?.(walletData);
+        if (data.walletId && data.address) {
+          walletData = { walletId: data.walletId, address: data.address };
+          localStorage.setItem('coal_agent_wallet', JSON.stringify(walletData));
+          setWallet({ ...walletData, balance: data.balance || '0' });
+          onWalletReady?.(walletData);
+        }
       }
     } catch {} finally { setLoading(false); }
   }, [onWalletReady]);
