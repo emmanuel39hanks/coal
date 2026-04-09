@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, useWriteContract, useSwitchChain } from 'wagmi';
 import { parseUnits, parseAbi } from 'viem';
+import { base } from 'viem/chains';
 
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const USDC_ABI = parseAbi(['function transfer(address to, uint256 amount) returns (bool)']);
@@ -30,6 +31,7 @@ export function AgentWallet({ onWalletReady }: Props) {
   const [withdrawResult, setWithdrawResult] = useState<{ txHash: string; amount: string } | null>(null);
 
   const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
 
   const fetchWallet = useCallback(async () => {
     try {
@@ -78,7 +80,11 @@ export function AgentWallet({ onWalletReady }: Props) {
     setFunding(true);
     setFundTxHash(null);
     try {
+      // Force switch to Base network
+      await switchChainAsync({ chainId: base.id }).catch(() => {});
+
       const hash = await writeContractAsync({
+        chainId: base.id,
         address: USDC_ADDRESS as `0x${string}`,
         abi: USDC_ABI,
         functionName: 'transfer',
