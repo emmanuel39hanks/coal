@@ -337,7 +337,7 @@ export async function checkDAHealth(): Promise<{
     }
 
     try {
-        await withTimeout(getDAClient(), 5_000, '0G DA health check');
+        await withTimeout(getDAClient(), 15_000, '0G DA health check');
         return {
             enabled: true,
             configured: true,
