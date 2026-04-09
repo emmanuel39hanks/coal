@@ -1,11 +1,13 @@
 import {
   createPublicClient, createWalletClient, http,
   parseAbi, parseUnits, formatUnits, encodeFunctionData,
-  keccak256, encodePacked, toHex, hexToBytes, concat, pad,
+  keccak256, toBytes,
+  type Hex,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 import { PrivyClient } from '@privy-io/node';
+import crypto from 'crypto';
 
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const;
 const USDC_DECIMALS = 6;
@@ -14,14 +16,30 @@ const MAX_PAYMENT_USD = 5;
 const ERC20_ABI = parseAbi([
   'function transfer(address to, uint256 amount) returns (bool)',
   'function balanceOf(address owner) view returns (uint256)',
-  'function nonces(address owner) view returns (uint256)',
-  'function DOMAIN_SEPARATOR() view returns (bytes32)',
 ]);
 
-// ERC-3009 transferWithAuthorization ABI
-const ERC3009_ABI = parseAbi([
+// ERC-3009 transferWithAuthorization — operator pays gas, agent wallet signs
+const TRANSFER_WITH_AUTH_ABI = parseAbi([
   'function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)',
 ]);
+
+const USDC_EIP712_DOMAIN = {
+  name: 'USD Coin',
+  version: '2',
+  chainId: 8453,
+  verifyingContract: USDC_ADDRESS as Hex,
+} as const;
+
+const TRANSFER_WITH_AUTH_TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+} as const;
 
 // ─── Privy Client ───────────────────────────────────────────────────────────
 
@@ -32,20 +50,16 @@ function getPrivyClient() {
   return new PrivyClient({ appId, appSecret });
 }
 
-// ─── Operator Wallet (pays gas for agent transactions) ──────────────────────
-
-function getOperatorAccount() {
-  const key = process.env.OPERATOR_PRIVATE_KEY || process.env.AGENT_WALLET_PRIVATE_KEY;
-  if (!key) throw new Error('OPERATOR_PRIVATE_KEY not configured');
-  return privateKeyToAccount(key as `0x${string}`);
-}
+// ─── Operator Wallet (pays gas for relay) ───────────────────────────────────
 
 function getOperatorWalletClient() {
+  const key = process.env.OPERATOR_PRIVATE_KEY;
+  if (!key) throw new Error('OPERATOR_PRIVATE_KEY not configured');
   const rpcUrl = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
   return createWalletClient({
     chain: base,
     transport: http(rpcUrl),
-    account: getOperatorAccount(),
+    account: privateKeyToAccount(key as `0x${string}`),
   });
 }
 
@@ -95,7 +109,7 @@ export async function getUsdcBalance(address: string): Promise<{ address: string
   };
 }
 
-// ─── Send USDC via Privy sign + Operator relay ──────────────────────────────
+// ─── Send USDC via ERC-3009 (gasless for agent wallet) ──────────────────────
 
 export async function sendUsdc(
   walletId: string,
@@ -123,80 +137,70 @@ export async function sendUsdc(
     throw new Error(`Insufficient USDC. Have ${formatUnits(balance, USDC_DECIMALS)}, need ${amountUsd.toFixed(2)}`);
   }
 
-  // Try direct transfer via Privy first (simplest)
-  // Operator wallet pays gas by submitting a standard ERC-20 transfer
-  // signed by the Privy wallet
-  const calldata = encodeFunctionData({
-    abi: ERC20_ABI,
-    functionName: 'transfer',
-    args: [recipient, amountRaw],
+  // Generate random nonce for ERC-3009 (NOT the ethereum tx nonce)
+  const authNonce = keccak256(toBytes(crypto.randomUUID())) as Hex;
+  const validAfter = BigInt(0);
+  const validBefore = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour
+
+  // Step 1: Sign EIP-712 transferWithAuthorization with Privy wallet (no gas needed)
+  const signResult = await privy.wallets().ethereum().signTypedData(walletId, {
+    params: {
+      typed_data: {
+        domain: USDC_EIP712_DOMAIN as any,
+        types: TRANSFER_WITH_AUTH_TYPES as any,
+        primary_type: 'TransferWithAuthorization',
+        message: {
+          from: walletAddress,
+          to: recipient,
+          value: amountRaw.toString(),
+          validAfter: validAfter.toString(),
+          validBefore: validBefore.toString(),
+          nonce: authNonce,
+        },
+      },
+    },
   });
 
-  try {
-    // Try Privy server wallet RPC with gas sponsorship
-    const result = await privy.wallets().ethereum().sendTransaction(walletId, {
-      caip2: 'eip155:8453',
-      params: {
-        transaction: {
-          to: USDC_ADDRESS,
-          data: calldata,
-          value: 0,
-        },
-      },
-      sponsor: true,
-    });
-
-    const txHash = (result as any).hash || (result as any).transaction_hash || '';
-    if (txHash) {
-      try {
-        await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 30_000 });
-      } catch {}
-      return { txHash, amount: amountUsd.toFixed(2), to: recipient, from: walletAddress };
-    }
-  } catch (sponsorError) {
-    // Gas sponsorship failed — fall back to operator-funded direct transfer
-    console.log('Gas sponsorship failed, falling back to operator relay:', (sponsorError as Error).message);
+  const signature = (signResult as any).signature || (signResult as any).data || '';
+  if (!signature || signature.length < 132) {
+    throw new Error('Failed to get signature from Privy wallet');
   }
 
-  // Fallback: Use Privy to sign, but without sponsorship
-  // First drip a tiny ETH amount from operator to agent wallet for gas
+  // Step 2: Split signature into r, s, v
+  const r = ('0x' + signature.slice(2, 66)) as Hex;
+  const s = ('0x' + signature.slice(66, 130)) as Hex;
+  const v = parseInt(signature.slice(130, 132), 16);
+
+  // Step 3: Operator submits transferWithAuthorization (operator pays gas)
+  const operatorClient = getOperatorWalletClient();
+  const txHash = await operatorClient.writeContract({
+    address: USDC_ADDRESS,
+    abi: TRANSFER_WITH_AUTH_ABI,
+    functionName: 'transferWithAuthorization',
+    args: [
+      walletAddress,
+      recipient,
+      amountRaw,
+      validAfter,
+      validBefore,
+      authNonce,
+      v,
+      r,
+      s,
+    ],
+  });
+
+  // Wait for confirmation
   try {
-    const operatorClient = getOperatorWalletClient();
-    const gasDripAmount = parseUnits('0.0001', 18); // ~$0.25, enough for many txs
+    await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 30_000 });
+  } catch {}
 
-    // Check if agent wallet already has some ETH
-    const ethBalance = await publicClient.getBalance({ address: walletAddress });
-    if (ethBalance < parseUnits('0.00005', 18)) {
-      const dripHash = await operatorClient.sendTransaction({
-        to: walletAddress,
-        value: gasDripAmount,
-      });
-      await publicClient.waitForTransactionReceipt({ hash: dripHash, timeout: 15_000 });
-    }
-
-    // Now send the USDC transfer via Privy (agent wallet has gas)
-    const result = await privy.wallets().ethereum().sendTransaction(walletId, {
-      caip2: 'eip155:8453',
-      params: {
-        transaction: {
-          to: USDC_ADDRESS,
-          data: calldata,
-          value: 0,
-        },
-      },
-    });
-
-    const txHash = (result as any).hash || (result as any).transaction_hash || '';
-    if (txHash) {
-      try {
-        await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 30_000 });
-      } catch {}
-    }
-
-    return { txHash, amount: amountUsd.toFixed(2), to: recipient, from: walletAddress };
-  } catch (fallbackError) {
-    throw new Error(`Payment failed: ${(fallbackError as Error).message}`);
-  }
+  return {
+    txHash,
+    amount: amountUsd.toFixed(2),
+    to: recipient,
+    from: walletAddress,
+  };
 }
 
 // ─── Withdraw ───────────────────────────────────────────────────────────────
