@@ -82,6 +82,7 @@ export async function sendUsdc(
         value: 0,
       },
     },
+    sponsor: true,
   });
 
   const txHash = (result as any).hash || (result as any).transaction_hash || '';
@@ -128,6 +129,7 @@ export async function withdrawUsdc(
         value: 0,
       },
     },
+    sponsor: true,
   });
 
   return {
