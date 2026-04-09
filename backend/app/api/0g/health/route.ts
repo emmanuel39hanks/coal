@@ -6,6 +6,7 @@ import { listComputeServices } from '@/lib/0g/compute';
 import { zeroGEnv } from '@/lib/0g/env';
 import { checkStorageHealth, getStoragePerformancePlaybook } from '@/lib/0g/storage';
 import { checkDAHealth } from '@/lib/0g/da';
+import { isZeroGMutableMirrorConfigured } from '@/lib/0g/env';
 
 export async function GET(request: Request) {
     try {
@@ -74,10 +75,20 @@ export async function GET(request: Request) {
                 })),
         ]);
 
+        const kv = {
+            ok: isZeroGMutableMirrorConfigured(),
+            details: {
+                enabled: isZeroGMutableMirrorConfigured(),
+                configured: Boolean(zeroGEnv.storageStreamId),
+                streamId: zeroGEnv.storageStreamId ? `${zeroGEnv.storageStreamId.slice(0, 10)}...` : null,
+            },
+        };
+
         const checks: Record<string, { ok: boolean; details?: unknown; error?: string }> = {
             storage,
             chain,
             compute,
+            kv,
             da,
         };
 
