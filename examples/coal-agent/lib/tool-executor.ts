@@ -114,17 +114,36 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
 
     case 'execute_payment': {
       if (!_sessionWalletId) throw new Error('Agent wallet not initialized. Please refresh the page.');
+
+      const sessionId = args.sessionId as string;
+
+      // SAFETY: Verify the session exists BEFORE sending money
+      try {
+        const statusCheck = await coal.verifyReceipt(sessionId).catch(() => null);
+        // If receipt endpoint returns null/error, try a basic status check
+        if (!statusCheck) {
+          const statusRes = await fetch(`${process.env.COAL_API_URL || 'https://api.usecoal.xyz'}/api/pay/status/${sessionId}`);
+          if (!statusRes.ok || statusRes.status === 404) {
+            throw new Error(`Session ${sessionId} not found. Do not retry — create a new checkout first.`);
+          }
+        }
+      } catch (checkErr) {
+        if ((checkErr as Error).message.includes('not found') || (checkErr as Error).message.includes('404')) {
+          throw new Error(`Session ${sessionId} not found. Create a new checkout with create_checkout before paying.`);
+        }
+      }
+
       const { txHash, amount, to, from } = await sendUsdc(
         _sessionWalletId,
         args.recipient as string,
         args.amount as number,
       );
       // Confirm with Coal backend
-      await coal.confirmPayment(args.sessionId as string, txHash, from);
+      await coal.confirmPayment(sessionId, txHash, from);
       return {
         _tool: 'execute_payment',
         success: true,
-        sessionId: args.sessionId,
+        sessionId,
         txHash,
         amount,
         recipient: to,

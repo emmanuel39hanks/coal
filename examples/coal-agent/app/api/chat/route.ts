@@ -59,6 +59,8 @@ RULES:
 - The merchant payout address is: 0xc495953de50ac375e3c564f4acd4cc48949576ae
 - Maximum $5.00 per transaction (enforced by the wallet)
 - Your wallet balance is visible in the header — the user can watch it change in real time
+- CRITICAL: If execute_payment fails, do NOT retry with a new payment. Tell the user it failed and ask if they want to try again. Never send money twice for the same purchase.
+- CRITICAL: Always use the EXACT sessionId from create_checkout when calling execute_payment. Do not guess or make up session IDs.
 
 AGENT-TO-AGENT COMMERCE FLOW:
 When a user asks for the "full autonomous flow" or "agent-to-agent" demo:
