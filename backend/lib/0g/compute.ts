@@ -172,6 +172,7 @@ export async function runStructuredInference<T>(input: {
     provider: string | null;
     model: string;
     verificationStatus: 'direct_secret' | 'sealed_tee';
+    teeAttestation?: { verified: boolean; provider: string; timestamp: string } | null;
 }> {
     const useSealedInference = input.sealed && isSealedInferenceEnabled();
     const client = createZeroGOpenAIClient();
@@ -230,11 +231,29 @@ export async function runStructuredInference<T>(input: {
                 throw new Error('0G Compute returned an empty response');
             }
 
+            // TEE attestation: verify the provider's TEE signature on sealed responses
+            let teeAttestation: { verified: boolean; provider: string; timestamp: string } | null = null;
             if (useSealedInference) {
-                zeroGLogger.info(
-                    { provider: zeroGEnv.computeProvider, model },
-                    'Completed Sealed Inference (TEE) query',
-                );
+                try {
+                    // Attempt per-response TEE verification via the serving broker
+                    const teeResult = await withTimeout(
+                        verifyProviderTeeInline(),
+                        15_000,
+                        'per-response TEE attestation',
+                    );
+                    teeAttestation = teeResult;
+                    zeroGLogger.info(
+                        { provider: zeroGEnv.computeProvider, model, teeVerified: teeResult?.verified },
+                        'Completed Sealed Inference (TEE) query with attestation',
+                    );
+                } catch (teeError) {
+                    // TEE verification is best-effort — don't block the response
+                    zeroGLogger.warn(
+                        { err: teeError, provider: zeroGEnv.computeProvider },
+                        'TEE attestation verification failed (non-blocking)',
+                    );
+                    teeAttestation = { verified: false, provider: zeroGEnv.computeProvider || '', timestamp: new Date().toISOString() };
+                }
             }
 
             return {
@@ -242,6 +261,7 @@ export async function runStructuredInference<T>(input: {
                 provider: zeroGEnv.computeProvider || null,
                 model,
                 verificationStatus: useSealedInference ? 'sealed_tee' as const : 'direct_secret' as const,
+                teeAttestation,
             };
         } catch (error) {
             lastError = error;
@@ -263,6 +283,40 @@ export async function runStructuredInference<T>(input: {
     }
 
     throw lastError instanceof Error ? lastError : new Error('0G Compute structured inference failed');
+}
+
+/**
+ * Lightweight per-response TEE verification.
+ * Calls the serving broker to verify the provider's TEE attestation
+ * is still valid for this session.
+ */
+async function verifyProviderTeeInline(): Promise<{ verified: boolean; provider: string; timestamp: string }> {
+    if (!zeroGEnv.computeProvider || !zeroGEnv.chainPrivateKey) {
+        return { verified: false, provider: '', timestamp: new Date().toISOString() };
+    }
+
+    try {
+        const provider = new JsonRpcProvider(zeroGEnv.chainRpcUrl);
+        const wallet = new Wallet(zeroGEnv.chainPrivateKey, provider);
+        const broker = await createZGComputeNetworkBroker(wallet);
+
+        const outputDir = path.join(tmpdir(), `coal-tee-inline-${Date.now()}`);
+        await mkdir(outputDir, { recursive: true });
+
+        await broker.inference.verifyService(zeroGEnv.computeProvider, outputDir);
+
+        return {
+            verified: true,
+            provider: zeroGEnv.computeProvider,
+            timestamp: new Date().toISOString(),
+        };
+    } catch {
+        return {
+            verified: false,
+            provider: zeroGEnv.computeProvider || '',
+            timestamp: new Date().toISOString(),
+        };
+    }
 }
 
 export async function verifyConfiguredProviderTee() {
