@@ -10,9 +10,18 @@ export async function GET(request: Request) {
     const apiBase = new URL(request.url).origin;
 
     // Find merchants with at least 1 active product or paywall
+    // Filter out QA/dev/test merchants
     const merchants = await prisma.user.findMany({
         where: {
             onboardingComplete: true,
+            NOT: {
+                OR: [
+                    { name: { contains: 'QA', mode: 'insensitive' } },
+                    { name: { contains: 'Dev ', mode: 'insensitive' } },
+                    { name: { contains: 'Test', mode: 'insensitive' } },
+                    { id: { startsWith: 'qa_' } },
+                ],
+            },
             OR: [
                 { products: { some: { active: true } } },
                 { paywalls: { some: { active: true } } },
