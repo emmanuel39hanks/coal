@@ -1,0 +1,85 @@
+# Agent Discovery
+
+AI agents can browse Coal's marketplace to discover merchants, products, and paywalls — no API key needed. All discovery endpoints are public and rate-limited.
+
+## Discovery Endpoints
+
+### Browse All Merchants
+
+```bash
+GET https://api.usecoal.xyz/api/agent/discover
+```
+
+Returns all active merchants with their top products, paywalls, 0G publication status, and API endpoints.
+
+```json
+{
+  "merchants": [
+    {
+      "id": "lst00PqEWRwcM4roiOcSpD8WfxlBc2hH",
+      "name": "Saint",
+      "productCount": 2,
+      "paywallCount": 1,
+      "topProducts": [
+        { "id": "prod_123", "name": "F1 Figurine", "price": "0.10", "image": "https://..." }
+      ],
+      "topPaywalls": [
+        { "id": "pw_456", "name": "Product Catalog", "price": "0.10", "pricingModel": "per_call", "verifyUrl": "https://api.usecoal.xyz/api/paywalls/pw_456/verify" }
+      ],
+      "zeroG": { "published": true, "storageRoot": "0xfb508c72..." },
+      "endpoints": {
+        "profile": "https://api.usecoal.xyz/api/agent/merchant-profiles/lst00PqE...",
+        "memoryQuery": "https://api.usecoal.xyz/api/agent/memory/query"
+      }
+    }
+  ],
+  "stats": { "totalMerchants": 6, "totalProducts": 8, "totalPaywalls": 3 }
+}
+```
+
+### Search Products
+
+```bash
+GET https://api.usecoal.xyz/api/agent/discover/products?maxPrice=1&search=cake
+```
+
+Filter by name, max price, or tag. Returns products across all merchants.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `search` | string | Filter by product name (case-insensitive) |
+| `maxPrice` | number | Maximum price in USD |
+| `tag` | string | Filter by product tag |
+
+### Browse Paywalls
+
+```bash
+GET https://api.usecoal.xyz/api/agent/discover/paywalls
+```
+
+Returns all active agent-payable gates with their x402 verify URLs. Agents can immediately hit the `verifyUrl` to check pricing and access.
+
+## Agent Discovery Flow
+
+```
+1. Agent calls GET /api/agent/discover
+2. Agent picks a merchant based on products/paywalls
+3. Agent hits paywall verifyUrl → gets 402 with pricing
+4. Agent pays autonomously → gets 200 with content
+```
+
+## 0G Storage Discovery
+
+Merchants are also published to 0G Storage as public artifacts. Agents can discover merchants by downloading profiles directly from 0G's decentralized storage network — no Coal API needed.
+
+```typescript
+import { Indexer } from '@0glabs/0g-ts-sdk';
+
+const indexer = new Indexer('https://indexer-storage-turbo.0g.ai');
+const data = await indexer.download(rootHash, '/tmp/profile.json', true);
+// data contains the full merchant profile
+```
+
+## Live Example
+
+Try the [Coal Agent Demo](https://coal-agent.vercel.app) — click "What merchants are available?" to see discovery in action.
