@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage, ToolLoadingIndicator } from '@/components/ChatMessage';
 import { WalletButton } from '@/components/WalletButton';
-import { AgentWallet } from '@/components/AgentWallet';
+import { AgentWallet, useAgentWalletContext } from '@/components/AgentWallet';
 import { SUGGESTED_PROMPTS } from '@/lib/types';
 import type { ChatMessage as ChatMessageType, StreamEvent } from '@/lib/types';
 
@@ -12,6 +12,7 @@ export default function AgentChat() {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingTool, setPendingTool] = useState<string | null>(null);
+  const [agentWallet, setAgentWallet] = useState<{ walletId: string; address: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -41,6 +42,8 @@ export default function AgentChat() {
           messages: updatedMessages
             .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.content))
             .map((m) => ({ role: m.role, content: m.content })),
+          walletId: agentWallet?.walletId,
+          walletAddress: agentWallet?.address,
         }),
       });
 
@@ -177,7 +180,7 @@ export default function AgentChat() {
           <span className="text-[10px] font-semibold px-3 py-1 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 hidden sm:inline-block">
             0G Mainnet
           </span>
-          <AgentWallet />
+          <AgentWallet onWalletReady={setAgentWallet} />
           <WalletButton />
         </div>
       </header>

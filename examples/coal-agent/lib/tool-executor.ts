@@ -2,6 +2,15 @@ import * as coal from './coal-api';
 import { downloadFromZeroG } from './zero-g';
 import { sendUsdc, getUsdcBalance } from './wallet';
 
+// Per-session wallet ID — set by the chat route before tool execution
+let _sessionWalletId: string = '';
+let _sessionWalletAddress: string = '';
+
+export function setSessionWallet(walletId: string, address: string) {
+  _sessionWalletId = walletId;
+  _sessionWalletAddress = address;
+}
+
 export async function executeTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
   switch (name) {
     case 'discover_merchants': {
@@ -104,7 +113,9 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     }
 
     case 'execute_payment': {
+      if (!_sessionWalletId) throw new Error('Agent wallet not initialized. Please refresh the page.');
       const { txHash, amount, to, from } = await sendUsdc(
+        _sessionWalletId,
         args.recipient as string,
         args.amount as number,
       );
@@ -124,7 +135,8 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     }
 
     case 'get_agent_wallet': {
-      const wallet = await getUsdcBalance();
+      if (!_sessionWalletAddress) throw new Error('Agent wallet not initialized');
+      const wallet = await getUsdcBalance(_sessionWalletAddress);
       return { _tool: 'get_agent_wallet', ...wallet, network: 'base' };
     }
 

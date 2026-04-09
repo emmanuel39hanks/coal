@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { tools } from '@/lib/tools';
-import { executeTool } from '@/lib/tool-executor';
+import { executeTool, setSessionWallet } from '@/lib/tool-executor';
 
 interface FunctionToolCall {
   id: string;
@@ -89,7 +89,13 @@ export async function POST(req: Request) {
     return Response.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
   }
 
-  const { messages: clientMessages } = (await req.json()) as { messages: Array<{ role: string; content: string }> };
+  const body = (await req.json()) as { messages: Array<{ role: string; content: string }>; walletId?: string; walletAddress?: string };
+  const clientMessages = body.messages;
+
+  // Set per-session wallet for tool execution
+  if (body.walletId && body.walletAddress) {
+    setSessionWallet(body.walletId, body.walletAddress);
+  }
 
   const openai = new OpenAI({ apiKey });
   const model = process.env.OPENAI_MODEL || 'gpt-4o';

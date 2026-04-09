@@ -6,7 +6,7 @@ export const config = createConfig({
   chains: [base],
   connectors: [
     injected(),
-    coinbaseWallet({ appName: 'Coal Agent', preference: 'smartWalletOnly' }),
+    coinbaseWallet({ appName: 'Coal Agent', preference: { options: 'smartWalletOnly' } }),
   ],
   transports: {
     [base.id]: http(),

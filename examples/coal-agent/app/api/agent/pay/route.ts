@@ -39,8 +39,13 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Invalid recipient address' }, { status: 400 });
     }
 
+    const walletId = body.walletId as string;
+    if (!walletId) {
+      return Response.json({ error: 'walletId required' }, { status: 400 });
+    }
+
     // Send USDC on Base
-    const result = await sendUsdc(recipient, amount);
+    const result = await sendUsdc(walletId, recipient, amount);
 
     // Confirm with Coal backend
     await confirmPayment(sessionId, result.txHash, result.from);
