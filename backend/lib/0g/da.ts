@@ -50,15 +50,13 @@ interface DADisperseResult {
 
 const DA_GRPC_URL = process.env.ZERO_G_DA_GRPC_URL || 'localhost:51001';
 const DA_ENABLED = process.env.ZERO_G_DA_ENABLED === 'true';
+// 0G DA sidecars typically serve plain (insecure) gRPC over a private or firewalled network.
+// Default to insecure; set ZERO_G_DA_GRPC_TLS=true to require TLS (e.g. behind a reverse proxy).
+const DA_USE_TLS = process.env.ZERO_G_DA_GRPC_TLS === 'true';
 const DA_TIMEOUT_MS = 10_000;
 const DA_POLL_INTERVAL_MS = 2_000;
 const DA_MAX_POLL_ATTEMPTS = 5;
 const DA_MAX_PAYLOAD_BYTES = 256_000; // 256 KB max DA payload
-
-function isLocalhostUrl(url: string): boolean {
-    const host = url.split(':')[0].toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
-}
 
 export function isDAEnabled(): boolean {
     return zeroGEnv.enabled && DA_ENABLED;
@@ -94,21 +92,42 @@ async function getDAClient() {
         const grpc = await import('@grpc/grpc-js');
         const protoLoader = await import('@grpc/proto-loader');
 
-        const PROTO_PATH = path.resolve(__dirname, 'proto/disperser.proto');
-        const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-            keepCase: true,
-            longs: String,
-            enums: String,
-            defaults: true,
-            oneofs: true,
-        });
+        // Proto path must be resolvable in both local dev and the Vercel serverless bundle.
+        // next.config.ts uses outputFileTracingIncludes to copy proto/ into the bundle;
+        // we try the bundled path first, then fall back to the source path.
+        const candidatePaths = [
+            path.resolve(__dirname, 'proto/disperser.proto'),
+            path.resolve(process.cwd(), 'backend/lib/0g/proto/disperser.proto'),
+            path.resolve(process.cwd(), 'lib/0g/proto/disperser.proto'),
+        ];
+        let packageDefinition: any = null;
+        let lastLoadError: unknown = null;
+        for (const candidate of candidatePaths) {
+            try {
+                packageDefinition = protoLoader.loadSync(candidate, {
+                    keepCase: true,
+                    longs: String,
+                    enums: String,
+                    defaults: true,
+                    oneofs: true,
+                });
+                break;
+            } catch (loadErr) {
+                lastLoadError = loadErr;
+            }
+        }
+        if (!packageDefinition) {
+            throw lastLoadError instanceof Error
+                ? lastLoadError
+                : new Error('0G DA proto file not found in any candidate path');
+        }
 
         const proto = grpc.loadPackageDefinition(packageDefinition) as any;
 
-        // C1: Use TLS for non-localhost DA endpoints
-        const credentials = isLocalhostUrl(DA_GRPC_URL)
-            ? grpc.credentials.createInsecure()
-            : grpc.credentials.createSsl();
+        // 0G DA sidecars default to insecure gRPC; set ZERO_G_DA_GRPC_TLS=true to force TLS.
+        const credentials = DA_USE_TLS
+            ? grpc.credentials.createSsl()
+            : grpc.credentials.createInsecure();
 
         grpcClient = new proto.disperser.Disperser(DA_GRPC_URL, credentials);
         return grpcClient;

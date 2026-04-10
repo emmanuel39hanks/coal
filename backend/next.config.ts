@@ -25,6 +25,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
     // CORS is handled by middleware.ts
+    // Bundle the 0G DA gRPC proto file into serverless functions.
+    // It's loaded at runtime via path.resolve() so Next.js cannot trace it automatically.
+    outputFileTracingIncludes: {
+        '/api/**/*': ['./lib/0g/proto/**/*'],
+    },
     async headers() {
         return [
             {
