@@ -22,12 +22,12 @@ This repo is an active product branch, not a tiny demo. The current codebase inc
 - docs site + OpenAPI playground
 - live 0G storage / chain / compute integration
 
-## 0G Integration — 4 Components
+## 0G Integration — 5 Components on Mainnet
 
-Coal uses **four** 0G network components on mainnet:
+Coal uses **five** 0G network components. **All live on 0G mainnet.** See [`0G-SETUP.md`](./0G-SETUP.md) for the full integration guide.
 
 ### 1. 0G Storage — Immutable Artifact Layer
-Every payment receipt, merchant profile, and encrypted memory snapshot is published to 0G Storage as an immutable artifact. AI agents and apps can discover merchants and verify payments by reading these artifacts directly from the decentralized storage network.
+Every payment receipt, merchant profile, and encrypted memory snapshot is published to 0G Storage as an immutable, content-addressed artifact. AI agents and apps can discover merchants and verify payments by reading these artifacts directly from the decentralized storage network.
 
 - **Receipt payloads:** tx hash, amount, payer address, merchant, metadata
 - **Merchant profiles:** name, products, paywalls, supported tokens, API endpoints
@@ -35,23 +35,32 @@ Every payment receipt, merchant profile, and encrypted memory snapshot is publis
 - Explorer: [storagescan.0g.ai](https://storagescan.0g.ai)
 
 ### 2. 0G Chain — Receipt Proof Anchoring
-After publishing a receipt to 0G Storage, Coal anchors a SHA-256 hash of the receipt payload on-chain via the `CoalReceiptAnchor` smart contract. This creates a tamper-proof, independently verifiable proof that a specific payment happened at a specific time.
+After publishing a receipt to 0G Storage, Coal anchors a SHA-256 hash of the receipt payload on-chain via the `CoalReceiptAnchor V2` smart contract. Creates a tamper-proof, independently verifiable proof that a specific payment happened at a specific time. V2 calls the DASigners precompile (`epochNumber()`) and embeds the current DA epoch into every anchor event.
 
-- Contract: `CoalReceiptAnchor` on 0G Chain (chain ID 16661)
-- Explorer: [chainscan.0g.ai](https://chainscan.0g.ai)
+- Contract: `0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b`
+- Chain: 0G mainnet (chain ID 16661)
+- Explorer: [chainscan.0g.ai/address/0x24a80A3B...](https://chainscan.0g.ai/address/0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b)
 
 ### 3. 0G Compute — AI Commerce Inference
-Coal's agent-facing APIs use 0G Compute for AI inference:
+Coal's agent-facing APIs use 0G Compute for AI inference on the decentralized GPU network:
 
 - **Memory query:** Natural language Q&A against merchant data ("What products does this merchant sell?")
 - **Commerce routing:** AI decides which merchant or product fits an agent's request
 - **Policy evaluation:** AI evaluates scenarios against merchant rules ("Can this customer get a refund?")
-- **Sealed inference:** Privacy-preserving inference where the model never sees raw merchant data
+- **Sealed Inference:** Privacy-preserving inference with per-response TEE attestation via `broker.inference.verifyService()`. Responses from sealed queries carry a verification signature from the Intel TDX + NVIDIA H100/H200 enclave they ran inside.
 
-### 4. 0G DA — Data Availability (Feature-Flagged)
-Coal has a complete DA integration (282 lines, gRPC client, 6 event types, TLS, health checks) that posts payment lifecycle events as DA blobs. Currently feature-flagged (`ZERO_G_DA_ENABLED=false`) pending public DA endpoint availability.
+### 4. 0G KV — Mutable Merchant Mirror
+KV writes keep merchant profiles, memory pointers, and paywall manifests always-current on top of the 0G log layer, so agent discovery returns fresh data without walking the full log history.
 
-- Event types: payment_confirmed, refund_issued, subscription_created, subscription_renewed, subscription_cancelled, merchant_updated
+- `merchant:profile:latest` — merchant profile bundle
+- `merchant:memory:latest` — memory pointer (storage URI + root hash + timestamp)
+- `paywall:{id}:manifest:latest` — x402 paywall manifest
+
+### 5. 0G DA — Payment Event Streaming
+Every confirmed payment, subscription lifecycle event, and webhook delivery is posted as a DA blob to the 0G Data Availability layer via a gRPC sidecar. External systems monitoring the DA stream see events in real time.
+
+- 6 event types: `payment_confirmed`, `subscription_created`, `subscription_renewed`, `webhook_delivered`, `paywall_access_granted`, `receipt_anchored`
+- In-memory demo feed: [api.usecoal.xyz/api/0g/da-events](https://api.usecoal.xyz/api/0g/da-events)
 
 ### Architecture
 
@@ -76,13 +85,13 @@ flowchart TB
         AUTH["Privy Auth"]
     end
 
-    subgraph ZG["0G Network"]
+    subgraph ZG["0G Network — 5 Components Live on Mainnet"]
         direction TB
         ZGS["<b>1. 0G Storage</b><br/><small>Immutable receipt logs<br/>Merchant profiles<br/>Encrypted memory snapshots</small>"]
-        ZGC["<b>2. 0G Chain</b><br/><small>CoalReceiptAnchor contract<br/>SHA-256 proof hashes<br/>Tamper-proof verification</small>"]
-        ZGX["<b>3. 0G Compute</b><br/><small>AI commerce inference<br/>Memory query answering<br/>Policy evaluation</small>"]
-        ZGD["<b>4. 0G DA</b><br/><small>Data Availability layer<br/>6 event types, gRPC<br/>Feature-flagged &#40;ready&#41;</small>"]
-        ZGK["<b>0G KV</b><br/><small>Mutable merchant catalog<br/>Per-merchant stream IDs</small>"]
+        ZGC["<b>2. 0G Chain</b><br/><small>CoalReceiptAnchor V2<br/>Calls DASigners precompile<br/>SHA-256 proof anchors</small>"]
+        ZGX["<b>3. 0G Compute</b><br/><small>AI commerce inference<br/>Sealed Inference with TEE<br/>Per-response attestation</small>"]
+        ZGK["<b>4. 0G KV</b><br/><small>Mutable merchant mirror<br/>Per-merchant stream IDs<br/>Live agent discovery</small>"]
+        ZGD["<b>5. 0G DA</b><br/><small>Payment event streaming<br/>gRPC sidecar<br/>6 event types</small>"]
     end
 
     BASE["<b>Base (Coinbase L2)</b><br/><small>USDC Settlement via Alchemy RPC</small>"]
@@ -95,8 +104,8 @@ flowchart TB
     RP -->|publish| ZGS
     RP -->|anchor| ZGC
     ACI -->|infer| ZGX
-    RP -.->|DA events| ZGD
     API -->|mirror| ZGK
+    RP -->|DA events| ZGD
 
     CHK --> BASE
     API --> DB
@@ -138,18 +147,22 @@ flowchart TB
 | Metric | Value |
 |--------|-------|
 | Test suite | 512 tests across 33 files |
-| 0G components | 4 (Storage, Chain, Compute, DA) |
-| Network | Base mainnet (USDC) + 0G mainnet |
+| 0G components | 5 on mainnet (Storage, Chain, Compute, KV, DA) |
+| 0G contract | [`0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b`](https://chainscan.0g.ai/address/0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b) |
+| Network | Base mainnet (USDC) + 0G mainnet (chain ID 16661) |
 | Live deployment | [usecoal.xyz](https://usecoal.xyz) |
 | API | [api.usecoal.xyz](https://api.usecoal.xyz) |
+| Live 0G health | [api.usecoal.xyz/api/0g/health](https://api.usecoal.xyz/api/0g/health) |
 
 ## Quick Start for Judges
 
 1. **Try the live app:** Visit [usecoal.xyz](https://usecoal.xyz), sign in with Privy, explore the merchant console
-2. **See 0G integration:** Go to Console → 0G to see all 4 components with live mainnet status
-3. **Verify a receipt:** Visit `/verify/[session-id]` to see the full 0G proof trail for any payment
-4. **Run the example:** Clone the repo, `cd examples/coal-react-checkout`, `cp .env.example .env.local`, fill in your API key, `npm install && npm run dev`
-5. **Read the agent code:** See `examples/agentkit-action/coal-checkout-action.ts` for a complete AgentKit action provider with 7 actions
+2. **Verify all 5 0G components live:** `curl https://api.usecoal.xyz/api/0g/health` — expect `status: "ok"` with storage, chain, compute, kv, and da all `ok: true`
+3. **See 0G integration in the dashboard:** Go to Console → 0G to see all 5 components with live mainnet status, activity feed, and publish controls
+4. **Verify a receipt:** Visit `/verify/[session-id]` to see the full 3-step 0G proof trail (Base TX → 0G Storage → 0G Chain) for any payment
+5. **Try autonomous agent commerce:** Visit [coal-agent.vercel.app](https://coal-agent.vercel.app), fund a fresh agent wallet, and ask the agent to buy something
+6. **Run an example locally:** Clone the repo, `cd examples/coal-react-checkout`, `cp .env.example .env.local`, fill in your API key, `npm install && npm run dev`
+7. **Read the full 0G setup guide:** See [`0G-SETUP.md`](./0G-SETUP.md) for how to configure all 5 components from scratch
 
 ## Core Thesis
 
@@ -164,16 +177,16 @@ That is the correct mental model for the repo.
 
 ```text
 coal/
-├── backend/      # Next.js API app, Prisma, on-chain verification, 0G logic
-├── frontend/     # Next.js UI app, docs site, dashboard, checkout surfaces
-├── contracts/    # 0G receipt anchor contract package
-├── packages/     # JS + React SDK surfaces
-├── examples/     # Example integrations: React checkout, AgentKit, demo-store
-├── 0g/           # 0G architecture + rollout planning docs
-├── context/      # Current-state handoff docs for future agents/contributors
-├── bugs/         # Original bug audit
-├── bugs-2/       # Follow-up verification and bug audit
-└── security/     # Security review notes and hardening queue
+├── backend/          # Next.js API app, Prisma, on-chain verification, 0G logic
+│   └── lib/0g/       # All 5 0G component implementations (Storage, Chain, Compute, KV, DA)
+├── frontend/         # Next.js UI app, docs site, dashboard, checkout surfaces
+├── contracts/        # CoalReceiptAnchor V2 Solidity contract + Foundry project
+├── packages/         # JS + React SDK surfaces
+├── examples/         # Runnable integrations: React checkout, AgentKit action provider, demo-store
+├── scripts/          # Deploy, sync, promotion scripts
+├── 0G-SETUP.md       # Full setup guide for all 5 0G components
+├── DEPLOYMENT.md     # Production deployment checklist
+└── README.md         # You are here
 ```
 
 ## System Architecture
@@ -353,27 +366,45 @@ npm run 0g:storage:benchmark
 
 0G is opt-in. Coal still works without it.
 
-Set these only when you are ready to turn the live 0G layer on:
+For complete setup instructions for all 5 components (Storage, Chain, Compute, KV, DA), see **[`0G-SETUP.md`](./0G-SETUP.md)**.
 
-- `ZERO_G_ENABLED=true`
-- `ZERO_G_CHAIN_RPC_URL`
-- `ZERO_G_CHAIN_PRIVATE_KEY`
-- `ZERO_G_RECEIPT_ANCHOR_ADDRESS`
-- `ZERO_G_STORAGE_INDEXER_URL`
-- `ZERO_G_STORAGE_ENCRYPTION_KEY`
-- `ZERO_G_COMPUTE_ENABLED=true`
-- `ZERO_G_COMPUTE_PROVIDER`
-- `ZERO_G_COMPUTE_BASE_URL`
-- `ZERO_G_COMPUTE_API_KEY`
-- `ZERO_G_COMPUTE_MODEL`
+Minimum environment variables to enable 0G:
+
+```bash
+# Storage + Chain
+ZERO_G_ENABLED=true
+ZERO_G_CHAIN_RPC_URL=https://evmrpc.0g.ai
+ZERO_G_CHAIN_PRIVATE_KEY=0x...
+ZERO_G_RECEIPT_ANCHOR_ADDRESS=0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b
+ZERO_G_STORAGE_INDEXER_URL=https://indexer-storage-turbo.0g.ai
+ZERO_G_STORAGE_ENCRYPTION_KEY=<32-byte hex>
+
+# Compute
+ZERO_G_COMPUTE_ENABLED=true
+ZERO_G_COMPUTE_PROVIDER=<provider_address>
+ZERO_G_COMPUTE_BASE_URL=<provider_base_url>
+ZERO_G_COMPUTE_API_KEY=<api_key>
+ZERO_G_COMPUTE_MODEL=<model_name>
+ZERO_G_SEALED_INFERENCE_ENABLED=true
+
+# KV
+ZERO_G_STORAGE_STREAM_ID=0x<64-hex-chars>
+
+# DA (requires running a sidecar — see 0G-SETUP.md)
+ZERO_G_DA_ENABLED=true
+ZERO_G_DA_GRPC_URL=<sidecar_host>:51001
+ZERO_G_DA_GRPC_TLS=false
+```
 
 The main implementation lives in:
 
-- [backend/lib/0g/storage.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/0g/storage.ts)
-- [backend/lib/0g/chain.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/0g/chain.ts)
-- [backend/lib/0g/compute.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/0g/compute.ts)
-- [backend/lib/0g/merchant.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/0g/merchant.ts)
-- [backend/lib/receipts/proof.ts](/Users/emmanuel/Documents/schemalabs/coal/backend/lib/receipts/proof.ts)
+- [`backend/lib/0g/storage.ts`](./backend/lib/0g/storage.ts) — Storage + KV
+- [`backend/lib/0g/chain.ts`](./backend/lib/0g/chain.ts) — Chain anchor writes
+- [`backend/lib/0g/compute.ts`](./backend/lib/0g/compute.ts) — AI inference + TEE attestation
+- [`backend/lib/0g/da.ts`](./backend/lib/0g/da.ts) — DA event streaming via gRPC
+- [`backend/lib/0g/merchant.ts`](./backend/lib/0g/merchant.ts) — merchant profile + memory publishing
+- [`backend/lib/receipts/proof.ts`](./backend/lib/receipts/proof.ts) — receipt proof pipeline
+- [`contracts/0g-receipt-anchor/src/CoalReceiptAnchor.sol`](./contracts/0g-receipt-anchor/src/CoalReceiptAnchor.sol) — V2 contract with DASigners precompile call
 
 ## SDK / Widget
 
@@ -407,14 +438,17 @@ Use [DEPLOYMENT.md](/Users/emmanuel/Documents/schemalabs/coal/DEPLOYMENT.md) for
 
 ## Branch Strategy
 
-- `main` is production and should point at Base mainnet + 0G mainnet.
-- `dev` is the working branch and should point at Base Sepolia + 0G mainnet.
+- `main` is production and points at Base mainnet + 0G mainnet.
+- `dev` is the working branch.
 - Vercel production envs belong to `main`.
-- Vercel preview envs for the `dev` branch should be synced with [scripts/sync-vercel-dev-env.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/sync-vercel-dev-env.sh).
 
 Useful scripts:
 
-- [scripts/check-all.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/check-all.sh) runs the full backend + frontend verification sweep.
-- [scripts/push-dev.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/push-dev.sh) checks and pushes `dev`.
-- [scripts/promote-dev-to-main.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/promote-dev-to-main.sh) fast-forwards `main` from `dev` after checks pass.
-- [scripts/sync-vercel-dev-env.sh](/Users/emmanuel/Documents/schemalabs/coal/scripts/sync-vercel-dev-env.sh) syncs branch-specific Vercel preview env vars for `dev`.
+- [`scripts/check-all.sh`](./scripts/check-all.sh) runs the full backend + frontend verification sweep.
+- [`scripts/deploy.sh`](./scripts/deploy.sh) local prebuild + push to Vercel for `frontend`, `backend`, `checkout`, `agent`.
+- [`scripts/push-dev.sh`](./scripts/push-dev.sh) checks and pushes `dev`.
+- [`scripts/promote-dev-to-main.sh`](./scripts/promote-dev-to-main.sh) fast-forwards `main` from `dev` after checks pass.
+
+## License
+
+[MIT](./LICENSE) — Copyright (c) 2026 Schema Labs / Emmanuel Haankwenda.
