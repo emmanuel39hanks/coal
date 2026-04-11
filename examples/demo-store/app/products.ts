@@ -1,18 +1,19 @@
 /**
- * Shared product catalog for the demo store.
+ * Demo store catalog.
  *
- * This is the merchant's "source of truth" — in a real store it would be a
- * Postgres table, a Sanity CMS, a Shopify export, or any other backend.
- * Both the product grid (app/page.tsx) and the agent-discovery publisher
- * (<CoalAgentPublisher> on the same page) read from here, so they cannot
- * drift out of sync.
+ * These are the merchant's "source of truth" products. In a real store they
+ * live in a Postgres table, a Sanity CMS, a Shopify export, etc. For this
+ * demo they live here as a static TypeScript array so it's easy to see what
+ * gets pushed into Coal via <CoalAgentPublisher>.
  *
- * The `externalId` field is what Coal's catalog indexing uses as the
- * idempotency key — the same value can be republished safely forever.
+ * The `id` field is what Coal's catalog indexing uses as `externalId` — the
+ * idempotency key per merchant. We prefix with `ds_` so the published
+ * products cannot collide with Saint's console-created products, and the
+ * publisher runs in `upsert` mode so Saint's existing catalog is untouched.
  */
 
 export interface DemoStoreProduct {
-    /** Merchant-owned stable id. Used as externalId by CoalAgentPublisher. */
+    /** Merchant-owned stable id. Becomes externalId when indexed on Coal. */
     id: string;
     name: string;
     price: number;
@@ -24,68 +25,68 @@ export interface DemoStoreProduct {
 
 export const demoStoreProducts: DemoStoreProduct[] = [
     {
-        id: 'prod_coffee',
-        name: 'Super Coffee',
-        price: 0.02,
-        image:
-            'https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=800&q=80',
-        description: 'Premium single-origin coffee beans',
+        id: 'ds_agent_handbook',
+        name: 'Agentic Commerce Handbook',
+        price: 0.10,
+        image: 'https://picsum.photos/seed/agent-handbook/800/1000',
+        description:
+            'The definitive field guide to building stores that AI agents can discover and buy from. 180 pages. PDF download.',
         badge: 'Best Seller',
-        tags: ['drink', 'coffee'],
+        tags: ['book', 'digital', 'agentic-commerce'],
     },
     {
-        id: 'prod_hoodie',
-        name: 'Dev Hoodie',
-        price: 0.05,
-        image:
-            'https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=800&q=80',
-        description: 'Cozy hoodie for late night coding',
+        id: 'ds_0g_starter_kit',
+        name: '0G Integration Starter Kit',
+        price: 0.15,
+        image: 'https://picsum.photos/seed/zerog-kit/800/1000',
+        description:
+            'Drop-in scaffolds for all 5 0G components (Storage, Chain, Compute, KV, DA) with tests.',
         badge: 'New',
-        tags: ['apparel', 'hoodie'],
+        tags: ['template', 'digital', '0g'],
     },
     {
-        id: 'prod_cap',
-        name: 'MNEE Cap',
-        price: 0.03,
-        image:
-            'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=800&q=80',
-        description: 'Classic cap with MNEE branding',
-        tags: ['apparel', 'accessories'],
+        id: 'ds_x402_cheatsheet',
+        name: 'x402 Protocol Cheatsheet',
+        price: 0.05,
+        image: 'https://picsum.photos/seed/x402/800/1000',
+        description:
+            'One-page reference: HTTP 402 headers, verify flow, payment settlement, error codes.',
+        tags: ['reference', 'digital', 'x402'],
     },
     {
-        id: 'prod_mug',
-        name: 'Crypto Mug',
-        price: 0.02,
-        image:
-            'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?auto=format&fit=crop&w=800&q=80',
-        description: 'Start your morning with blockchain vibes',
-        tags: ['home', 'mug'],
+        id: 'ds_merchant_playbook',
+        name: 'Merchant Onboarding Playbook',
+        price: 0.20,
+        image: 'https://picsum.photos/seed/merchant-playbook/800/1000',
+        description:
+            'Everything a crypto-native store needs to launch an agent-discoverable checkout in 24 hours.',
+        tags: ['book', 'digital', 'onboarding'],
     },
     {
-        id: 'prod_tshirt',
-        name: 'Web3 Tee',
-        price: 0.04,
-        image:
-            'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=80',
-        description: 'Minimalist tee for the decentralized',
+        id: 'ds_prompt_library',
+        name: 'Agent Commerce Prompt Library',
+        price: 0.08,
+        image: 'https://picsum.photos/seed/prompt-library/800/1000',
+        description:
+            '200+ battle-tested prompts for building AI agents that can discover products, negotiate, and pay.',
         badge: 'Popular',
-        tags: ['apparel', 'tshirt'],
+        tags: ['prompts', 'digital', 'ai'],
     },
     {
-        id: 'prod_stickers',
-        name: 'Sticker Pack',
-        price: 0.01,
-        image:
-            'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=800&q=80',
-        description: '5 premium vinyl stickers',
-        tags: ['accessories', 'stickers'],
+        id: 'ds_sdk_quickstart',
+        name: 'Coal SDK Quickstart Bundle',
+        price: 0.03,
+        image: 'https://picsum.photos/seed/sdk-quickstart/800/1000',
+        description:
+            'Pre-wired Next.js starter + coal-react examples. Go from npm install to agent-buyable in 10 minutes.',
+        tags: ['template', 'digital', 'sdk'],
     },
 ];
 
 /**
- * Map the demo catalog to the `CoalAgentPublisher` product shape (externalId
- * + name + price + metadata). Kept as a pure function so the component
- * only re-runs when the product list actually changes.
+ * Map the demo catalog to the `CoalAgentPublisher` product shape. Kept as a
+ * pure function so the component only re-runs when the product list actually
+ * changes.
  */
 export function toCoalCatalog(
     products: DemoStoreProduct[],

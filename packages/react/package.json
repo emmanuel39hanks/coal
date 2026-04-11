@@ -1,6 +1,6 @@
 {
   "name": "coal-react",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "React SDK for Coal — payment rails for humans and AI agents on 0G. Checkout components, catalog indexing, and Next.js route helpers for agent-discoverable commerce.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
