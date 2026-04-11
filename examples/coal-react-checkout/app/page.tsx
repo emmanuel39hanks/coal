@@ -71,6 +71,15 @@ const DEMOS = [
     color: '#e0f2fe',
     tagColor: '#0284c7',
   },
+  {
+    href: '/bring-your-own-catalog',
+    emoji: '📇',
+    label: 'Bring Your Own Catalog',
+    tag: 'Indexing',
+    desc: 'Drop <CoalAgentPublisher> on your site and your existing product catalog gets indexed on 0G Storage + KV for live agent discovery. Zero migration.',
+    color: '#fce7f3',
+    tagColor: '#db2777',
+  },
 ];
 
 const CODE = `// 1. Create session (server)
