@@ -1,7 +1,7 @@
 {
   "name": "coal-react",
-  "version": "0.3.0",
-  "description": "React component and hook for Coal crypto checkout",
+  "version": "0.4.0",
+  "description": "React SDK for Coal — payment rails for humans and AI agents on 0G. Checkout components, catalog indexing, and Next.js route helpers for agent-discoverable commerce.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -9,6 +9,16 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "require": "./dist/server.js",
+      "default": "./dist/server.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "require": "./dist/next.js",
+      "default": "./dist/next.js"
     }
   },
   "files": [
@@ -18,30 +28,50 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "react": ">=18",
     "react-dom": ">=18"
   },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^16.0.0",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
-    "typescript": "^5.0.0"
+    "happy-dom": "^15.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.9"
   },
   "keywords": [
     "coal",
+    "0g",
+    "agents",
+    "agentic-commerce",
     "crypto",
     "payments",
     "checkout",
     "react",
+    "next",
     "base",
     "usdc",
+    "x402",
+    "catalog-indexing",
     "web3"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/schemalabs/coal"
+    "url": "https://github.com/emmanuel39hanks/coal"
   },
   "homepage": "https://usecoal.xyz",
   "license": "MIT",
