@@ -109,11 +109,22 @@ export default function BringYourOwnCatalogPage() {
                  * the catalog to our own /api/coal/publish-catalog route,
                  * which calls publishCoalCatalog() on the server with the
                  * Coal API key kept server-side.
+                 *
+                 * The `headers` prop sends a demo-grade shared secret so the
+                 * proxy route can reject drive-by attackers. In production
+                 * replace this with a real CSRF token, a session cookie, or
+                 * scrap the browser path entirely and publish from a
+                 * server-side webhook. See the comment block at the top of
+                 * app/api/coal/publish-catalog/route.ts for the full picture.
                  */}
                 <CoalAgentPublisher
                     products={LOCAL_PRODUCTS}
                     proxyUrl="/api/coal/publish-catalog"
                     mode="upsert"
+                    headers={{
+                        'x-coal-publish-secret':
+                            process.env.NEXT_PUBLIC_COAL_PUBLISH_PROXY_SECRET || '',
+                    }}
                     showStatus
                     onPublish={(result) => {
                         if (typeof window !== 'undefined') {

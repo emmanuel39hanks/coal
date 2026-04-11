@@ -12,7 +12,7 @@
  *   - Custom fetch implementation
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { publishCoalCatalog, CoalPublishError } from '../server';
 
 function mockFetch(response: {
@@ -46,6 +46,32 @@ const VALID_OPTS = {
         { externalId: 'sku-2', name: 'Enterprise', price: 99 },
     ],
 };
+
+describe('coal-react/server — server-only guard', () => {
+    afterEach(() => {
+        // Remove the mocked window so the rest of the suite continues to run
+        // in a clean Node environment.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (globalThis as any).window;
+        vi.resetModules();
+    });
+
+    it('throws at module load time if loaded in a browser-like environment', async () => {
+        // Simulate a browser context by defining globalThis.window BEFORE
+        // the dynamic import. The module's top-level guard should throw
+        // the moment the chunk is evaluated.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (globalThis as any).window = { location: { href: 'https://example.test' } };
+
+        // vi.resetModules() ensures we get a fresh import, not a cached one
+        // from earlier tests in this file.
+        vi.resetModules();
+
+        await expect(async () => {
+            await import('../server');
+        }).rejects.toThrow(/server-only/i);
+    });
+});
 
 describe('publishCoalCatalog — input validation', () => {
     it('throws CoalPublishError when merchantId is missing', async () => {
@@ -82,6 +108,139 @@ describe('publishCoalCatalog — input validation', () => {
         await expect(
             publishCoalCatalog({ ...VALID_OPTS, products }),
         ).rejects.toBeInstanceOf(CoalPublishError);
+    });
+});
+
+describe('publishCoalCatalog — per-product validation', () => {
+    it('rejects a product with missing externalId', async () => {
+        await expect(
+            publishCoalCatalog({
+                ...VALID_OPTS,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                products: [{ name: 'x', price: 1 } as any],
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_ARGUMENT',
+            message: expect.stringContaining('externalId'),
+        });
+    });
+
+    it('rejects a product with missing name', async () => {
+        await expect(
+            publishCoalCatalog({
+                ...VALID_OPTS,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                products: [{ externalId: 'sku-1', price: 1 } as any],
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_ARGUMENT',
+            message: expect.stringContaining('name'),
+        });
+    });
+
+    it('rejects a non-finite price (Infinity)', async () => {
+        await expect(
+            publishCoalCatalog({
+                ...VALID_OPTS,
+                products: [{ externalId: 'sku-1', name: 'x', price: Infinity }],
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_ARGUMENT',
+            message: expect.stringContaining('finite'),
+        });
+    });
+
+    it('rejects NaN prices (including string that parses to NaN)', async () => {
+        await expect(
+            publishCoalCatalog({
+                ...VALID_OPTS,
+                products: [{ externalId: 'sku-1', name: 'x', price: 'abc' }],
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_ARGUMENT',
+            message: expect.stringContaining('finite'),
+        });
+    });
+
+    it('rejects zero and negative prices', async () => {
+        await expect(
+            publishCoalCatalog({
+                ...VALID_OPTS,
+                products: [{ externalId: 'sku-1', name: 'x', price: 0 }],
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_ARGUMENT',
+            message: expect.stringContaining('positive'),
+        });
+
+        await expect(
+            publishCoalCatalog({
+                ...VALID_OPTS,
+                products: [{ externalId: 'sku-1', name: 'x', price: -10 }],
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_ARGUMENT',
+            message: expect.stringContaining('positive'),
+        });
+    });
+
+    it('rejects prices above 1,000,000', async () => {
+        await expect(
+            publishCoalCatalog({
+                ...VALID_OPTS,
+                products: [
+                    { externalId: 'sku-1', name: 'x', price: 1_000_001 },
+                ],
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_ARGUMENT',
+            message: expect.stringContaining('1,000,000'),
+        });
+    });
+
+    it('rejects prices with more than 6 decimal places', async () => {
+        await expect(
+            publishCoalCatalog({
+                ...VALID_OPTS,
+                products: [
+                    { externalId: 'sku-1', name: 'x', price: 1.1234567 },
+                ],
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_ARGUMENT',
+            message: expect.stringContaining('decimal'),
+        });
+    });
+
+    it('accepts a price with exactly 6 decimals', async () => {
+        const fetchImpl = mockFetch({
+            ok: true,
+            body: {
+                merchantId: 'lst_test',
+                productCount: 1,
+                deactivated: 0,
+                mode: 'upsert',
+                products: [],
+                zeroG: {
+                    published: true,
+                    skipped: false,
+                    storageUri: null,
+                    storageRoot: null,
+                    storageTxHash: null,
+                    payloadHash: null,
+                    kv: null,
+                },
+            },
+        });
+
+        const result = await publishCoalCatalog({
+            ...VALID_OPTS,
+            products: [
+                { externalId: 'sku-1', name: 'Microtxn', price: 0.000001 },
+            ],
+            fetch: fetchImpl,
+        });
+        expect(result.productCount).toBe(1);
     });
 });
 
