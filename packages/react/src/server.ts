@@ -11,6 +11,23 @@
  */
 
 // ---------------------------------------------------------------------------
+// Server-only guard
+// ---------------------------------------------------------------------------
+// Runs at module load time. If a bundler (Next.js, Webpack, Vite, etc.)
+// accidentally pulls this file into a client chunk, the browser will throw
+// the moment the chunk loads — BEFORE any API key can leak. This is a
+// belt-and-suspenders check on top of the `exports` sub-path convention
+// that `coal-react/server` is a server-only surface.
+if (typeof window !== 'undefined') {
+    throw new Error(
+        '[coal-react/server] This module is server-only. Importing it in a ' +
+            'client component will leak your COAL_API_KEY to the browser bundle. ' +
+            'Call publishCoalCatalog() from a Next.js server action, API route ' +
+            'handler, or any other Node/edge-runtime context instead.',
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -188,11 +205,59 @@ export async function publishCoalCatalog(
     const base = apiUrl.replace(/\/+$/, '');
     const url = `${base}/api/agent/publish-catalog`;
 
-    // Normalize product prices to the API's expected shape (numbers, not Decimals).
-    const normalized = products.map((p) => ({
-        ...p,
-        price: typeof p.price === 'string' ? Number(p.price) : p.price,
-    }));
+    // Validate + normalize product prices. Coal's server-side Zod catches
+    // garbage values with a 400, but validating here gives merchants a clear
+    // error BEFORE the network round-trip and before rate limit counts tick.
+    const normalized = products.map((p, i) => {
+        if (!p.externalId) {
+            throw new CoalPublishError(
+                0,
+                'INVALID_ARGUMENT',
+                `products[${i}].externalId is required`,
+            );
+        }
+        if (!p.name) {
+            throw new CoalPublishError(
+                0,
+                'INVALID_ARGUMENT',
+                `products[${i}].name is required`,
+            );
+        }
+
+        const priceNum = typeof p.price === 'string' ? Number(p.price) : p.price;
+        if (typeof priceNum !== 'number' || !Number.isFinite(priceNum)) {
+            throw new CoalPublishError(
+                0,
+                'INVALID_ARGUMENT',
+                `products[${i}].price must be a finite number (got ${String(p.price)})`,
+            );
+        }
+        if (priceNum <= 0) {
+            throw new CoalPublishError(
+                0,
+                'INVALID_ARGUMENT',
+                `products[${i}].price must be positive (got ${priceNum})`,
+            );
+        }
+        if (priceNum > 1_000_000) {
+            throw new CoalPublishError(
+                0,
+                'INVALID_ARGUMENT',
+                `products[${i}].price must not exceed 1,000,000 (got ${priceNum})`,
+            );
+        }
+        // Max 6 decimals — mirrors Coal's amountField schema and USDC precision.
+        const decimals = priceNum.toString().split('.')[1]?.length ?? 0;
+        if (decimals > 6) {
+            throw new CoalPublishError(
+                0,
+                'INVALID_ARGUMENT',
+                `products[${i}].price may have at most 6 decimal places`,
+            );
+        }
+
+        return { ...p, price: priceNum };
+    });
 
     const doFetch = fetchImpl ?? fetch;
 

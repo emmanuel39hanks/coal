@@ -1,3 +1,22 @@
+'use client';
+
+// ---------------------------------------------------------------------------
+// coal-react — Client components + hooks
+// ---------------------------------------------------------------------------
+// This file is marked 'use client' so Next.js App Router consumers can import
+// <CoalProvider>, <CoalProducts>, <CoalAgentPublisher>, etc. from a server
+// component and have Next.js correctly treat them as client boundaries.
+//
+// Server-only helpers live in coal-react/server (publishCoalCatalog), and
+// Next.js route handlers live in coal-react/next (createAgentCardRoute etc.).
+// Those sub-exports are NOT marked 'use client' and are safe to import from
+// pure server contexts without pulling any of the React code in this file.
+//
+// safeJsonForScriptTag is a pure function that works in both environments —
+// the 'use client' directive does not prevent non-React server code from
+// calling it, because it does not touch the DOM or React hooks.
+// ---------------------------------------------------------------------------
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // ---------------------------------------------------------------------------
@@ -602,6 +621,16 @@ export interface CoalAgentPublisherProps {
   mode?: 'upsert' | 'replace';
   /** Debounce publishes to this interval (ms). Defaults to 30000. */
   debounceMs?: number;
+  /**
+   * Extra HTTP headers to send with the proxy POST. Use this to pass CSRF
+   * tokens, shared secrets, or any other auth scheme your proxy route
+   * expects. The `content-type` header is always set to `application/json`
+   * and cannot be overridden.
+   *
+   * Do NOT put a raw Coal API key here — the whole point of the proxy
+   * pattern is to keep the Coal API key on the server.
+   */
+  headers?: Record<string, string>;
   /** Called with the response on success. */
   onPublish?: (result: unknown) => void;
   /** Called on publish failure. */
@@ -615,6 +644,7 @@ export function CoalAgentPublisher({
   proxyUrl = '/api/coal/publish-catalog',
   mode = 'upsert',
   debounceMs = 30_000,
+  headers,
   onPublish,
   onError,
   showStatus = false,
@@ -641,7 +671,11 @@ export function CoalAgentPublisher({
 
     fetch(proxyUrl, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        ...(headers ?? {}),
+        // content-type is enforced last so callers can't override it.
+        'content-type': 'application/json',
+      },
       body: payload,
     })
       .then(async (res) => {
@@ -663,7 +697,7 @@ export function CoalAgentPublisher({
         setError(e.message);
         onError?.(e);
       });
-  }, [products, proxyUrl, mode, debounceMs, onPublish, onError]);
+  }, [products, proxyUrl, mode, debounceMs, headers, onPublish, onError]);
 
   if (!showStatus) return null;
 
@@ -771,9 +805,35 @@ export function CoalSchemaOrg({
     <script
       type="application/ld+json"
       // React allows dangerouslySetInnerHTML for <script> JSON-LD blobs.
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(itemList) }}
+      // The escape below prevents XSS when product fields contain "</script>"
+      // or other HTML-breaking sequences. JSON.stringify alone does NOT escape
+      // "<", ">", "&", or the U+2028/U+2029 line separators; a malicious
+      // product name like `Cake</script><script>alert(1)</script>` would
+      // otherwise escape the JSON-LD context and execute arbitrary JS.
+      dangerouslySetInnerHTML={{ __html: safeJsonForScriptTag(itemList) }}
     />
   );
+}
+
+/**
+ * Serialize an object for safe injection inside a `<script type="application/ld+json">`
+ * tag. JSON.stringify escapes quotes and backslashes but NOT html-sensitive
+ * characters, which is how almost every XSS-via-JSON-LD bug happens. Escape:
+ *   - `<` → `\u003c` (prevents `</script>` termination)
+ *   - `>` → `\u003e` (defense in depth)
+ *   - `&` → `\u0026` (prevents HTML entity tricks)
+ *   - U+2028 / U+2029 → their unicode escapes (older JS parsers treat these
+ *     as line terminators, which can break inline JSON in HTML)
+ *
+ * Exported so apps can reuse it for their own inline JSON-LD scripts.
+ */
+export function safeJsonForScriptTag(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 // ---------------------------------------------------------------------------
