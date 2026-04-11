@@ -122,12 +122,20 @@ model Product {
   status               String            @default("active")
   tags                 String[]          @default([])
   images               String[]          @default([])
+  // Catalog indexing: source = "console" (created in Coal's merchant console)
+  // or "external" (pushed from merchant's own data via /api/agent/publish-catalog).
+  // externalId is the merchant's own product ID used for idempotent upserts from
+  // external sources; unique per merchant to prevent cross-merchant collisions.
+  source               String            @default("console")
+  externalId           String?
   billingMandates      BillingMandate[]
   checkoutSessions     CheckoutSession[]
   paymentLinks         PaymentLink[]
   merchant             User              @relation(fields: [merchantId], references: [id])
   subscriptions        Subscription[]
 
+  @@unique([merchantId, externalId])
+  @@index([merchantId, source])
   @@map("product")
 }
 

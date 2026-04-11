@@ -2487,6 +2487,139 @@ export async function GET() {
         },
       },
 
+      '/api/agent/publish-catalog': {
+        post: {
+          tags: ['Discovery'],
+          operationId: 'publishCatalog',
+          summary: 'Publish an external catalog for agent discovery (Catalog Indexing as a Service)',
+          description:
+            'Catalog indexing as a service. Merchants whose products live outside Coal\'s console ' +
+            '(Shopify, Sanity, Postgres, any custom backend) POST their product catalog here to have ' +
+            'it indexed on 0G for agent discovery. Products are upserted keyed by (merchantId, externalId), ' +
+            'and the merchant profile is re-published to 0G Storage (Log layer) and mirrored to 0G KV ' +
+            '(mutable layer) so agents hitting /api/agent/discover or /api/agent/merchant-profiles get ' +
+            'fresh data immediately. Rate limited to 1 publish per minute per merchant.',
+          security: [{ apiKey: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['products'],
+                  properties: {
+                    products: {
+                      type: 'array',
+                      minItems: 1,
+                      maxItems: 500,
+                      items: {
+                        type: 'object',
+                        required: ['externalId', 'name', 'price'],
+                        properties: {
+                          externalId: { type: 'string', maxLength: 128, description: 'Merchant-owned product ID, used as the idempotency key' },
+                          name: { type: 'string', maxLength: 200 },
+                          description: { type: 'string', maxLength: 2000 },
+                          price: { type: 'number', description: 'Price in the settlement token (USDC by default)' },
+                          image: { type: 'string', format: 'uri' },
+                          images: { type: 'array', items: { type: 'string', format: 'uri' }, maxItems: 6 },
+                          sku: { type: 'string', maxLength: 100 },
+                          tags: { type: 'array', items: { type: 'string' }, maxItems: 10 },
+                          billingType: { type: 'string', enum: ['one_time', 'subscription'] },
+                          billingInterval: { type: 'string', enum: ['day', 'week', 'month', 'year'] },
+                          billingIntervalCount: { type: 'integer', minimum: 1, maximum: 12 },
+                        },
+                      },
+                    },
+                    mode: {
+                      type: 'string',
+                      enum: ['upsert', 'replace'],
+                      default: 'upsert',
+                      description:
+                        '"upsert" only touches products in the payload. "replace" additionally deactivates any existing external products NOT in the payload (console-sourced products are never touched by replace mode).',
+                    },
+                  },
+                },
+                examples: {
+                  simple: {
+                    summary: 'Simple upsert of two products',
+                    value: {
+                      products: [
+                        { externalId: 'sku-1', name: 'Pro Plan', price: 29.99 },
+                        { externalId: 'sku-2', name: 'Enterprise Plan', price: 99.00 },
+                      ],
+                    },
+                  },
+                  replace: {
+                    summary: 'Full catalog replace from Shopify sync',
+                    value: {
+                      mode: 'replace',
+                      products: [
+                        { externalId: 'shopify_12345', name: 'Coffee Mug', price: 19.99, image: 'https://cdn.shop/mug.jpg', tags: ['kitchen'] },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Catalog published. Returns the upserted products plus 0G Storage + KV publication details.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      merchantId: { type: 'string' },
+                      productCount: { type: 'integer', description: 'Number of products upserted from the payload' },
+                      deactivated: { type: 'integer', description: 'Number of external products deactivated (replace mode only)' },
+                      mode: { type: 'string', enum: ['upsert', 'replace'] },
+                      products: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string' },
+                            externalId: { type: 'string' },
+                            name: { type: 'string' },
+                            price: { type: 'string' },
+                            image: { type: 'string', nullable: true },
+                            active: { type: 'boolean' },
+                          },
+                        },
+                      },
+                      zeroG: {
+                        type: 'object',
+                        properties: {
+                          published: { type: 'boolean', description: 'true if a new artifact was written to 0G Storage' },
+                          skipped: { type: 'boolean', description: 'true if the payload was unchanged and 0G publication was deduped' },
+                          storageUri: { type: 'string', nullable: true, description: '0g://log/<rootHash>' },
+                          storageRoot: { type: 'string', nullable: true, description: '0G Storage Merkle root hash' },
+                          storageTxHash: { type: 'string', nullable: true, description: 'On-chain transaction for the 0G Storage write' },
+                          payloadHash: { type: 'string', nullable: true, description: 'SHA-256 hash of the canonical profile JSON' },
+                          kv: {
+                            type: 'object',
+                            nullable: true,
+                            properties: {
+                              streamId: { type: 'string', description: '0G KV stream identifier' },
+                              key: { type: 'string', description: 'KV key where the latest merchant profile is mirrored' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            '400': { $ref: '#/components/responses/ValidationError' },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+            '429': { $ref: '#/components/responses/RateLimited' },
+            '500': { $ref: '#/components/responses/InternalError' },
+          },
+        },
+      },
+
       '/api/0g/da-events': {
         get: {
           tags: ['0G Events'],

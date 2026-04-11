@@ -173,6 +173,34 @@ export const createKeySchema = z.object({
     name: z.string().max(100).optional(),
 });
 
+// ─── Agent Catalog Publish ───────────────────────────────────────────────────
+// Used by merchants whose product catalog lives OUTSIDE Coal's console (their
+// own DB, Shopify, Sanity, etc.) to push products into Coal for agent discovery.
+// Each product is upserted keyed by (merchantId, externalId) so the same call
+// can be replayed safely.
+export const publishCatalogProductSchema = z.object({
+    externalId: z.string().min(1, 'externalId is required').max(128),
+    name: z.string().min(1, 'name is required').max(200),
+    description: z.string().max(2000).optional(),
+    price: amountField,
+    image: optionalUrl,
+    images: z.array(z.string().url()).max(6).optional(),
+    sku: z.string().max(100).optional(),
+    tags: z.array(z.string().max(50)).max(10).optional(),
+    billingType: billingTypeField.optional(),
+    billingInterval: billingIntervalField.optional(),
+    billingIntervalCount: z.coerce.number().int().min(1).max(12).optional(),
+});
+
+export const publishCatalogSchema = z.object({
+    products: z.array(publishCatalogProductSchema)
+        .min(1, 'At least one product is required')
+        .max(500, 'Maximum 500 products per publish'),
+    // upsert (default): only touch products listed in the payload.
+    // replace: also deactivate any existing external products not in the payload.
+    mode: z.enum(['upsert', 'replace']).default('upsert'),
+});
+
 // ─── Console Paywalls ────────────────────────────────────────────────────────
 export const createPaywallSchema = z.object({
     name: z.string().min(1, 'Name required').max(200),

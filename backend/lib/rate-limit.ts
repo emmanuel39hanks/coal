@@ -101,6 +101,9 @@ export const rateLimiters = {
     console:  makeLimiter(60, '1 m', 'rl:console'),
     public:   makeLimiter(30, '1 m', 'rl:public'),
     aiQuery:  makeLimiter(20, '1 m', 'rl:ai-query'),
+    // Catalog publish: 1 per minute per merchant. Publishing is expensive
+    // (Prisma upserts + 0G Storage write + KV mirror) so we keep it tight.
+    publish:  makeLimiter(1,  '1 m', 'rl:publish'),
 };
 
 export function getIP(request: Request): string {
