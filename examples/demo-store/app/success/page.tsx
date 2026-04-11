@@ -1,12 +1,13 @@
 
 import Link from 'next/link';
 
-export default function SuccessPage({
+// Next.js 15+ makes searchParams a Promise (async dynamic rendering).
+export default async function SuccessPage({
     searchParams,
 }: {
-    searchParams: { session_id?: string };
+    searchParams: Promise<{ session_id?: string }>;
 }) {
-    const sessionId = searchParams.session_id;
+    const { session_id: sessionId } = await searchParams;
 
     return (
         <div className="min-h-screen bg-white flex items-center justify-center p-6">
