@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "coal-react": "file:../../packages/react",
+    "coal-react": "file:./vendor/coal-react-0.4.0.tgz",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"
