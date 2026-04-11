@@ -28,7 +28,8 @@ export const demoStoreProducts: DemoStoreProduct[] = [
         id: 'ds_agent_handbook',
         name: 'Agentic Commerce Handbook',
         price: 0.10,
-        image: 'https://picsum.photos/seed/agent-handbook/800/1000',
+        image:
+            'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=800&q=80',
         description:
             'The definitive field guide to building stores that AI agents can discover and buy from. 180 pages. PDF download.',
         badge: 'Best Seller',
@@ -38,7 +39,8 @@ export const demoStoreProducts: DemoStoreProduct[] = [
         id: 'ds_0g_starter_kit',
         name: '0G Integration Starter Kit',
         price: 0.15,
-        image: 'https://picsum.photos/seed/zerog-kit/800/1000',
+        image:
+            'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=800&q=80',
         description:
             'Drop-in scaffolds for all 5 0G components (Storage, Chain, Compute, KV, DA) with tests.',
         badge: 'New',
@@ -48,7 +50,8 @@ export const demoStoreProducts: DemoStoreProduct[] = [
         id: 'ds_x402_cheatsheet',
         name: 'x402 Protocol Cheatsheet',
         price: 0.05,
-        image: 'https://picsum.photos/seed/x402/800/1000',
+        image:
+            'https://images.unsplash.com/photo-1516116216624-53e697fedbea?auto=format&fit=crop&w=800&q=80',
         description:
             'One-page reference: HTTP 402 headers, verify flow, payment settlement, error codes.',
         tags: ['reference', 'digital', 'x402'],
@@ -57,7 +60,8 @@ export const demoStoreProducts: DemoStoreProduct[] = [
         id: 'ds_merchant_playbook',
         name: 'Merchant Onboarding Playbook',
         price: 0.20,
-        image: 'https://picsum.photos/seed/merchant-playbook/800/1000',
+        image:
+            'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?auto=format&fit=crop&w=800&q=80',
         description:
             'Everything a crypto-native store needs to launch an agent-discoverable checkout in 24 hours.',
         tags: ['book', 'digital', 'onboarding'],
@@ -66,7 +70,8 @@ export const demoStoreProducts: DemoStoreProduct[] = [
         id: 'ds_prompt_library',
         name: 'Agent Commerce Prompt Library',
         price: 0.08,
-        image: 'https://picsum.photos/seed/prompt-library/800/1000',
+        image:
+            'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=800&q=80',
         description:
             '200+ battle-tested prompts for building AI agents that can discover products, negotiate, and pay.',
         badge: 'Popular',
@@ -76,7 +81,8 @@ export const demoStoreProducts: DemoStoreProduct[] = [
         id: 'ds_sdk_quickstart',
         name: 'Coal SDK Quickstart Bundle',
         price: 0.03,
-        image: 'https://picsum.photos/seed/sdk-quickstart/800/1000',
+        image:
+            'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
         description:
             'Pre-wired Next.js starter + coal-react examples. Go from npm install to agent-buyable in 10 minutes.',
         tags: ['template', 'digital', 'sdk'],
