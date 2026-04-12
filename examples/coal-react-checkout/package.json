@@ -9,7 +9,7 @@
     "start": "next start -p 3002"
   },
   "dependencies": {
-    "coal-react": "file:../../packages/react",
+    "coal-react": "^0.4.1",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
