@@ -1,96 +1,286 @@
 # coal-react
 
-React component and hook for [Coal](https://usecoal.xyz) — non-custodial crypto payments on Base.
+Payment rails for humans and AI agents on [0G](https://0g.ai). Drop-in React components, Next.js route helpers, and a server-side catalog indexing SDK.
 
-## Install
+[![npm version](https://img.shields.io/npm/v/coal-react)](https://www.npmjs.com/package/coal-react)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ```bash
 npm install coal-react
-# or
-yarn add coal-react
 ```
 
-React 18+ is a peer dependency.
+## What coal-react does
 
-## Usage
+| Surface | What it does | Import from |
+|---|---|---|
+| **Client components** | Checkout buttons, product grids, catalog publisher, Schema.org SEO | `coal-react` |
+| **Server helper** | Publish your product catalog to Coal's 0G-backed index | `coal-react/server` |
+| **Next.js routes** | Serve `/.well-known/agent-card.json`, `/llms.txt`, `/.well-known/x402.json` | `coal-react/next` |
 
-### `<CoalWidget />`
+One SDK. Your site becomes agent-discoverable with a verifiable proof trail on 0G for every transaction.
 
-Drop-in iframe checkout component:
+## Quick start
+
+### 1. Wrap your app in CoalProvider
 
 ```tsx
-import { CoalWidget } from 'coal-react';
+// app/layout.tsx
+import { CoalProvider } from 'coal-react';
 
-export function CheckoutPage({ sessionId }: { sessionId: string }) {
+export default function RootLayout({ children }) {
   return (
-    <CoalWidget
-      sessionId={sessionId}
-      onSuccess={(data) => {
-        console.log('Payment confirmed', data.txHash);
-        // redirect or unlock content
+    <CoalProvider merchantId="your-coal-merchant-id">
+      {children}
+    </CoalProvider>
+  );
+}
+```
+
+### 2. Add a checkout button
+
+```tsx
+// app/products/page.tsx
+import { CoalBuyButton } from 'coal-react';
+
+export default function ProductPage() {
+  return (
+    <CoalBuyButton
+      createSession={async () => {
+        const res = await fetch('/api/create-checkout', { method: 'POST' });
+        return res.json(); // { url: 'https://usecoal.xyz/pay/checkout/...' }
       }}
-      onCancel={() => console.log('User cancelled')}
-    />
+    >
+      Buy for $9.99
+    </CoalBuyButton>
   );
 }
 ```
 
-### `useCoalCheckout`
+### 3. Make your site agent-discoverable (optional)
 
-Low-level hook for programmatic mount/unmount:
+```ts
+// app/.well-known/agent-card.json/route.ts
+import { createAgentCardRoute } from 'coal-react/next';
+export const GET = createAgentCardRoute({ merchantId: 'your-coal-merchant-id' });
+
+// app/llms.txt/route.ts
+import { createLlmsTxtRoute } from 'coal-react/next';
+export const GET = createLlmsTxtRoute({ merchantId: 'your-coal-merchant-id' });
+```
+
+AI agents using A2A (Google), x402 (Coinbase), MCP, or LLM crawlers (ChatGPT, Perplexity) can now find your products.
+
+## Client components
+
+All components require `<CoalProvider>` as an ancestor.
+
+### `<CoalProvider>`
+
+Wraps your app with Coal configuration. Safe to render on the server.
 
 ```tsx
-import { useRef, useEffect } from 'react';
-import { useCoalCheckout } from '@coal/react';
+<CoalProvider
+  merchantId="lst00PqE..."        // Your Coal merchant ID (required)
+  apiUrl="https://api.usecoal.xyz" // Coal API URL (default)
+  baseUrl="https://usecoal.xyz"    // Coal frontend URL (default)
+>
+  {children}
+</CoalProvider>
+```
 
-function PayButton({ sessionId }: { sessionId: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { status, paymentData, mount, unmount } = useCoalCheckout({ sessionId });
+### `<CoalCheckoutButton>`
 
-  useEffect(() => {
-    mount(containerRef);
-    return () => unmount();
-  }, [sessionId]);
+Redirects to Coal's hosted checkout. Use when you already have a checkout URL or session ID.
 
-  return (
-    <div>
-      <p>Status: {status}</p>
-      <div ref={containerRef} />
-    </div>
-  );
+```tsx
+<CoalCheckoutButton
+  checkoutUrl="https://usecoal.xyz/pay/checkout/abc123"
+  target="_self"     // '_self' (redirect) or '_blank' (new tab)
+  onBeforeRedirect={() => analytics.track('checkout_start')}
+>
+  Pay with Coal
+</CoalCheckoutButton>
+```
+
+### `<CoalBuyButton>`
+
+Higher-level button — calls your server to create a session, then redirects. API key stays server-side.
+
+```tsx
+<CoalBuyButton
+  createSession={async () => {
+    const res = await fetch('/api/checkout', { method: 'POST' });
+    return res.json(); // must return { url } or { sessionId } or { id }
+  }}
+  onError={(err) => console.error(err)}
+>
+  Buy Now
+</CoalBuyButton>
+```
+
+### `<CoalProducts>`
+
+Product grid from your Coal merchant profile.
+
+```tsx
+<CoalProducts
+  layout="grid"      // 'grid' or 'list'
+  columns={3}
+  renderProduct={(p) => <MyCustomCard product={p} />} // Optional
+/>
+```
+
+### `<CoalProduct>`
+
+Single product card by ID.
+
+```tsx
+<CoalProduct id="product-id-from-coal" />
+```
+
+### `<CoalAgentPublisher>`
+
+Publishes your catalog to Coal for 0G-backed agent discovery. Posts to a merchant-owned proxy route (your server handles the API key).
+
+```tsx
+<CoalAgentPublisher
+  products={[
+    { externalId: 'sku-1', name: 'Pro Plan', price: 29.99, description: '...' },
+    { externalId: 'sku-2', name: 'Enterprise', price: 99, image: 'https://...' },
+  ]}
+  proxyUrl="/api/coal/publish-catalog"  // Your proxy route (default)
+  mode="upsert"                         // 'upsert' or 'replace'
+  headers={{ 'x-csrf-token': token }}   // Custom auth headers
+  showStatus                            // Shows "Indexed on 0G" badge
+  onPublish={(result) => console.log(result)}
+/>
+```
+
+### `<CoalSchemaOrg>`
+
+Injects Schema.org JSON-LD Product/Offer markup so ChatGPT, Perplexity, and Google AI Overviews can cite your products. XSS-safe.
+
+```tsx
+<CoalSchemaOrg />
+```
+
+### `useCoalReceipt(sessionId)`
+
+Polls Coal for a receipt until the 3-step proof trail is complete (Base TX → 0G Storage → 0G Chain).
+
+```tsx
+const { receipt, loading, fullyVerified, verifiedSteps } = useCoalReceipt(sessionId);
+// fullyVerified = true when all 3 steps are green
+// verifiedSteps = 0..3
+```
+
+## Server helper
+
+### `publishCoalCatalog(options)`
+
+**Import from `coal-react/server`.** Server-only — throws if imported in a browser.
+
+```ts
+import { publishCoalCatalog } from 'coal-react/server';
+
+const result = await publishCoalCatalog({
+  merchantId: 'your-merchant-id',
+  apiKey: process.env.COAL_API_KEY!,
+  products: [
+    { externalId: 'sku-1', name: 'Pro Plan', price: 29.99 },
+    { externalId: 'sku-2', name: 'Enterprise', price: 99 },
+  ],
+  mode: 'upsert',  // or 'replace'
+});
+
+console.log(result.zeroG.storageUri); // "0g://log/0x..."
+```
+
+**What happens:** Coal upserts products → publishes to 0G Storage (immutable) → mirrors to 0G KV (live discovery) → agents find your products.
+
+### Example proxy route
+
+```ts
+// app/api/coal/publish-catalog/route.ts
+import { publishCoalCatalog } from 'coal-react/server';
+
+export async function POST(request: Request) {
+  // Add your own auth here!
+  const body = await request.json();
+  const result = await publishCoalCatalog({
+    merchantId: process.env.NEXT_PUBLIC_COAL_MERCHANT_ID!,
+    apiKey: process.env.COAL_API_KEY!,
+    products: body.products,
+  });
+  return Response.json(result);
 }
 ```
 
-## Props
+## Next.js route helpers
 
-### `CoalWidget`
+**Import from `coal-react/next`.** Drop-in GET handlers for agent-discoverable manifests.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `sessionId` | `string` | required | Session ID from `POST /api/checkouts` |
-| `baseUrl` | `string` | `https://usecoal.xyz` | Coal frontend base URL |
-| `height` | `number \| string` | `600` | iframe height |
-| `theme` | `'light' \| 'dark'` | — | Color theme |
-| `onReady` | `() => void` | — | Fired when iframe is ready |
-| `onSuccess` | `(data) => void` | — | Fired on payment confirmation |
-| `onError` | `(error) => void` | — | Fired on error |
-| `onCancel` | `() => void` | — | Fired when user cancels |
-| `className` | `string` | — | Wrapper div className |
-| `style` | `CSSProperties` | — | Wrapper div inline style |
+### `createAgentCardRoute(options)`
 
-## Creating a session
+Serves [A2A Agent Card](https://a2a-protocol.org/) at `/.well-known/agent-card.json`.
 
-Create a session server-side with your Coal API key:
-
-```bash
-curl -X POST https://api.usecoal.xyz/api/checkouts \
-  -H "x-api-key: coal_live_your_key_here" \
-  -H "Content-Type: application/json" \
-  -d '{ "amount": 49.99, "productName": "Pro Plan" }'
+```ts
+// app/.well-known/agent-card.json/route.ts
+import { createAgentCardRoute } from 'coal-react/next';
+export const GET = createAgentCardRoute({ merchantId: '...' });
 ```
 
-Returns `{ data: { id, url, status, expiresAt } }` — pass `id` as `sessionId`.
+### `createLlmsTxtRoute(options)`
+
+Serves `/llms.txt` for ChatGPT, Perplexity, Google AI Overviews.
+
+```ts
+// app/llms.txt/route.ts
+import { createLlmsTxtRoute } from 'coal-react/next';
+export const GET = createLlmsTxtRoute({ merchantId: '...' });
+```
+
+### `createX402ManifestRoute(options)`
+
+Serves `/.well-known/x402.json` for [x402 Bazaar](https://docs.cdp.coinbase.com/x402/bazaar) (Coinbase).
+
+```ts
+// app/.well-known/x402.json/route.ts
+import { createX402ManifestRoute } from 'coal-react/next';
+export const GET = createX402ManifestRoute({ merchantId: '...' });
+```
+
+## How it fits together
+
+```
+Your Next.js app                          Coal                           0G Network
+─────────────────                         ────                           ──────────
+<CoalProvider>                      →     Merchant profile API     →    0G Storage (Log)
+<CoalAgentPublisher products={}>    →     POST /publish-catalog    →    0G KV mirror
+<CoalBuyButton createSession={}>    →     POST /checkouts          →    Base (USDC)
+<CoalSchemaOrg />                   →     (renders locally)        →    ChatGPT/Perplexity
+useCoalReceipt(id)                  →     GET /receipts/{id}       →    3-step proof trail
+createAgentCardRoute()              →     GET /merchant-profiles   →    A2A Agent Card
+createLlmsTxtRoute()                →     GET /merchant-profiles   →    llms.txt
+createX402ManifestRoute()           →     GET /merchant-profiles   →    x402 Bazaar
+```
+
+## Examples
+
+- **[demo-store](https://coal-demo-store.vercel.app)** — Full storefront with catalog indexing + agent manifests ([source](https://github.com/emmanuel39hanks/coal/tree/main/examples/demo-store))
+- **[coal-react-checkout](https://coal-react-checkout.vercel.app)** — Every Coal feature demoed ([source](https://github.com/emmanuel39hanks/coal/tree/main/examples/coal-react-checkout))
+- **[coal-agent](https://coal-agent.vercel.app)** — AI agent sandbox with autonomous purchases
+
+## Requirements
+
+- React 18+ (peer dependency, optional for server-only usage)
+- Next.js 14+ for `/next` route helpers
+- [Coal merchant account](https://usecoal.xyz) + API key for `publishCoalCatalog()`
+
+## Links
+
+- [Coal Platform](https://usecoal.xyz) | [API Docs](https://api.usecoal.xyz/api/docs/ui) | [0G Setup Guide](https://github.com/emmanuel39hanks/coal/blob/main/0G-SETUP.md) | [GitHub](https://github.com/emmanuel39hanks/coal)
 
 ## License
 
-MIT
+MIT — [Schema Labs](https://github.com/emmanuel39hanks/coal)

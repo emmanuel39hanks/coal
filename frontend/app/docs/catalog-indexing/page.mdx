@@ -1,0 +1,206 @@
+
+# Catalog Indexing
+
+Catalog indexing is how your existing products — wherever they live (Shopify, Sanity, Postgres, a JSON file) — become discoverable by AI agents on the 0G network. You push your catalog to Coal, Coal snapshots it to 0G Storage and mirrors it to 0G KV, and agents across the web can find and buy from you.
+
+No migration. No rebuilding your store. One endpoint or one React component.
+
+---
+
+## How it works
+
+```
+Your backend / CMS            Coal                              0G Network
+──────────────────           ──────                            ──────────
+Products in your DB    →     POST /api/agent/publish-catalog   →  0G Storage (immutable log)
+                             ↓                                    0G KV (mutable mirror)
+                             Upsert into Coal's product index     ↓
+                             ↓                                    Agents query KV for fresh data
+                             Dedup via payload hash               Agents verify via log root hash
+                             ↓
+                             Return { storageUri, storageRoot }
+```
+
+1. You call `POST /api/agent/publish-catalog` with your products (or use `<CoalAgentPublisher>` / `publishCoalCatalog()`)
+2. Coal upserts each product keyed by `(merchantId, externalId)` — idempotent, safe to replay
+3. Coal rebuilds your merchant profile bundle and publishes it to **0G Storage** (Log layer) as an immutable, content-addressed JSON artifact
+4. Coal mirrors the same profile to **0G KV** at `merchant:profile:latest` for low-latency agent discovery
+5. Agents hitting `api.usecoal.xyz/api/agent/discover` or your `/.well-known/agent-card.json` see the fresh catalog
+
+---
+
+## Three integration paths
+
+### Path 1: React component (recommended for Next.js)
+
+Install `coal-react` and drop `<CoalAgentPublisher>` onto any page that renders your products:
+
+```tsx
+import { CoalProvider, CoalAgentPublisher } from 'coal-react';
+
+const products = await db.products.findMany(); // your own data
+
+<CoalProvider merchantId="your-merchant-id">
+  <CoalAgentPublisher
+    products={products.map(p => ({
+      externalId: p.id,
+      name: p.name,
+      description: p.description,
+      price: p.price,
+      image: p.imageUrl,
+      tags: p.tags,
+    }))}
+    showStatus
+  />
+</CoalProvider>
+```
+
+The component posts to `/api/coal/publish-catalog` on YOUR server, which calls `publishCoalCatalog()` from `coal-react/server` with your API key. See [React SDK — CoalAgentPublisher](/docs/sdk/react#coalagentpublisher) for full props.
+
+### Path 2: Server-side function (recommended for webhooks / cron)
+
+Call `publishCoalCatalog()` from your backend whenever products change:
+
+```ts
+import { publishCoalCatalog } from 'coal-react/server';
+
+// In a Prisma hook, Shopify webhook, Sanity GROQ subscription, etc.
+await publishCoalCatalog({
+  merchantId: process.env.COAL_MERCHANT_ID!,
+  apiKey: process.env.COAL_API_KEY!,
+  products: updatedProducts,
+  mode: 'replace', // archives external products not in this payload
+});
+```
+
+This is the **strongest pattern** — no browser-facing route to secure, no debouncing, publishes exactly when your data changes.
+
+### Path 3: Direct API call (any language)
+
+```bash
+curl -X POST https://api.usecoal.xyz/api/agent/publish-catalog \
+  -H "x-api-key: coal_live_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "products": [
+      {
+        "externalId": "sku-1",
+        "name": "Pro Plan",
+        "price": 29.99,
+        "description": "Monthly API access",
+        "image": "https://cdn.example.com/pro.png",
+        "tags": ["api", "subscription"]
+      }
+    ],
+    "mode": "upsert"
+  }'
+```
+
+Works from Python, Go, Ruby, PHP, or any HTTP client. No SDK required.
+
+---
+
+## Product shape
+
+Each product in the `products` array:
+
+| Field | Type | Required | Description |
+|:---|:---|:---|:---|
+| `externalId` | `string` | Yes | Your own stable product ID. Max 128 chars. Used as the idempotency key. |
+| `name` | `string` | Yes | Product display name. Max 200 chars. |
+| `price` | `number` | Yes | Price in USDC. Positive, max 1,000,000, max 6 decimals. |
+| `description` | `string` | No | Short description. Max 2000 chars. |
+| `image` | `string` | No | Primary image URL. |
+| `images` | `string[]` | No | Additional image URLs. Max 6. |
+| `sku` | `string` | No | SKU code. Max 100 chars. |
+| `tags` | `string[]` | No | Discovery tags. Max 10 items, 50 chars each. |
+| `billingType` | `string` | No | `one_time` (default) or `subscription`. |
+| `billingInterval` | `string` | No | Required when subscription: `day`, `week`, `month`, `year`. |
+
+---
+
+## Publish modes
+
+| Mode | Behavior |
+|:---|:---|
+| `upsert` (default) | Only touches products listed in the payload. Existing products not in the payload are left alone. |
+| `replace` | Upserts the listed products AND archives (deactivates) any existing **external** products whose `externalId` is NOT in the payload. Console-sourced products are never touched. |
+
+**Use `replace` for full catalog syncs** (e.g. a nightly Shopify webhook that sends the complete product list). Products you remove from Shopify will get archived in Coal.
+
+**Use `upsert` for partial updates** (e.g. a single product was just edited). Only the changed product is touched.
+
+---
+
+## Rate limiting
+
+Publishing is rate-limited to **1 request per minute per merchant**. This is enforced server-side regardless of which integration path you use.
+
+If you hit the limit, the API returns `429 RATE_LIMITED`. The `coal-react` helpers surface this as a `CoalPublishError` with `err.status === 429`.
+
+---
+
+## 0G integration
+
+Every successful publish triggers Coal's existing 0G pipeline:
+
+- **0G Storage (Log layer):** The merchant profile is published as an immutable, content-addressed JSON artifact. You get back a `storageRoot` (Merkle root hash) and a `storageUri` (`0g://log/0x...`). Anyone with the root hash can fetch and cryptographically verify the exact bytes.
+
+- **0G KV (mutable mirror):** The same profile is written to the key `merchant:profile:latest` under the merchant's KV stream. Agents hitting the discovery API get this fresh copy. Writes to KV are fire-and-forget — a failure doesn't block the log-layer publish.
+
+- **Deduplication:** If the profile's SHA-256 payload hash matches the last published artifact, Coal skips the 0G write entirely. Republishing an unchanged catalog is free.
+
+The response includes the 0G details:
+
+```json
+{
+  "zeroG": {
+    "published": true,
+    "skipped": false,
+    "storageUri": "0g://log/0x7e59c818e4b92bd9534a2ce0003fbd6ab10af6d016c7c0563c7e07488f615578",
+    "storageRoot": "0x7e59c818...",
+    "storageTxHash": "0x...",
+    "payloadHash": "0x...",
+    "kv": {
+      "streamId": "0x7a11955a...",
+      "key": "merchant:profile:latest"
+    }
+  }
+}
+```
+
+---
+
+## How agents discover your catalog
+
+Once published, your products are findable via multiple channels:
+
+| Channel | How agents reach it |
+|:---|:---|
+| Coal Discovery API | `GET api.usecoal.xyz/api/agent/discover` — returns all merchants with top products |
+| Merchant Profile API | `GET api.usecoal.xyz/api/agent/merchant-profiles/{merchantId}` — full profile with 0G proof |
+| A2A Agent Card | `/.well-known/agent-card.json` on your site (via `createAgentCardRoute` from `coal-react/next`) |
+| llms.txt | `/llms.txt` on your site (via `createLlmsTxtRoute`) |
+| x402 Bazaar manifest | `/.well-known/x402.json` on your site (via `createX402ManifestRoute`) |
+| 0G Storage directly | Any 0G-native agent can fetch the profile by root hash from the decentralized storage network |
+| Schema.org JSON-LD | `<CoalSchemaOrg />` on your product pages — ChatGPT / Perplexity / Google AI Overviews cite this |
+
+---
+
+## Security considerations
+
+1. **Never put your Coal API key in the browser.** Use the proxy route pattern (Path 1) or server-side calls (Path 2/3).
+
+2. **Add auth to your proxy route.** The `<CoalAgentPublisher>` component posts to YOUR server. Without auth on that route, any visitor can publish junk products. Use session auth, CSRF tokens, or scrap the browser path entirely.
+
+3. **Replace mode can be destructive.** A `replace` call with an empty `products` array will archive ALL of your external products. Be careful in automated pipelines.
+
+4. **Rate limiting is your safety net.** Even if an attacker reaches your proxy, Coal's 1/min rate limit caps the damage. But don't rely on it as your only defense.
+
+---
+
+## Next steps
+
+- [React SDK](/docs/sdk/react) — component reference for `<CoalAgentPublisher>`, `publishCoalCatalog()`, and the Next.js route helpers
+- [Agent Discovery](/docs/agent-discovery) — how the discovery API works
+- [0G Setup Guide](https://github.com/emmanuel39hanks/coal/blob/main/0G-SETUP.md) — configure all 5 0G components from scratch
