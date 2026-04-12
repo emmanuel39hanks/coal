@@ -291,14 +291,59 @@ async function handleJsonRpc(msg: { id?: unknown; method?: string; params?: Reco
     }
 }
 
+// ─── Response formatting ─────────────────────────────────────────────────────
+
+/**
+ * MCP Streamable HTTP spec: if the client sends Accept: text/event-stream,
+ * wrap responses in SSE format. Otherwise return plain JSON.
+ *
+ * Claude Code/Desktop sends Accept: text/event-stream, application/json
+ * and expects SSE back. curl sends a wildcard Accept and works with either.
+ */
+function formatResponse(result: unknown, accept: string): Response {
+    if (accept.includes('text/event-stream')) {
+        // SSE format — what Claude Code/Desktop expect
+        const ssePayload = `event: message\ndata: ${JSON.stringify(result)}\n\n`;
+        return new Response(ssePayload, {
+            status: 200,
+            headers: {
+                'content-type': 'text/event-stream',
+                'cache-control': 'no-cache',
+                connection: 'keep-alive',
+            },
+        });
+    }
+    // Plain JSON — for curl, Postman, custom clients
+    return Response.json(result);
+}
+
+function formatBatchResponse(results: unknown[], accept: string): Response {
+    if (accept.includes('text/event-stream')) {
+        const ssePayload = results
+            .map((r) => `event: message\ndata: ${JSON.stringify(r)}\n\n`)
+            .join('');
+        return new Response(ssePayload, {
+            status: 200,
+            headers: {
+                'content-type': 'text/event-stream',
+                'cache-control': 'no-cache',
+                connection: 'keep-alive',
+            },
+        });
+    }
+    return Response.json(results);
+}
+
 // ─── HTTP handlers ───────────────────────────────────────────────────────────
 
 export async function POST(request: Request): Promise<Response> {
+    const accept = request.headers.get('accept') || 'application/json';
+
     let body: unknown;
     try {
         body = await request.json();
     } catch {
-        return Response.json(jsonRpcError(null, -32700, 'Parse error: Invalid JSON'));
+        return formatResponse(jsonRpcError(null, -32700, 'Parse error: Invalid JSON'), accept);
     }
 
     // Handle JSON-RPC batch (array of messages)
@@ -308,16 +353,16 @@ export async function POST(request: Request): Promise<Response> {
             const res = await handleJsonRpc(msg);
             if (res) responses.push(res);
         }
-        return Response.json(responses);
+        return formatBatchResponse(responses, accept);
     }
 
     // Single message
     const result = await handleJsonRpc(body as { id?: unknown; method?: string; params?: Record<string, unknown> });
     if (!result) {
         // Notifications don't get a response
-        return new Response(null, { status: 204 });
+        return new Response(null, { status: 202 });
     }
-    return Response.json(result);
+    return formatResponse(result, accept);
 }
 
 export async function GET(): Promise<Response> {
