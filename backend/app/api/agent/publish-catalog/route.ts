@@ -18,7 +18,7 @@ import { publishCatalogSchema, validateBody } from '@/lib/schemas';
 import { errors, apiSuccess } from '@/lib/errors';
 import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
-import { publishMerchantProfileBundle } from '@/lib/0g/merchant';
+import { syncMerchantZeroGArtifacts } from '@/lib/0g/merchant';
 import { buildZeroGStreamId } from '@/lib/0g/catalog';
 import { NextResponse } from 'next/server';
 
@@ -164,25 +164,27 @@ export async function POST(request: Request) {
             return { upserted, deactivated };
         });
 
-        // ── Publish merchant profile to 0G ──────────────────────────────────
-        // publishMerchantProfileBundle() handles:
-        //   - reading all active products from prisma.product
-        //   - building the profile JSON envelope
-        //   - dedup via payload hash (no-op if unchanged)
-        //   - writing to 0G Storage log layer
-        //   - writing to 0G KV layer (fire-and-forget)
-        //   - creating the storedArtifact row
-        // If 0G is disabled (ZERO_G_ENABLED=false) this returns null and the
-        // endpoint still succeeds with the local DB upsert.
-        const published = await publishMerchantProfileBundle(merchantId).catch(
+        // ── Publish merchant profile + memory to 0G ─────────────────────────
+        // syncMerchantZeroGArtifacts() publishes BOTH:
+        //   1. Profile bundle → 0G Storage (Log) + KV mirror
+        //      (products, paywalls, endpoints, capabilities)
+        //   2. Memory snapshot → 0G Storage (encrypted AES-256-GCM)
+        //      (full product descriptions, team info, settings — used by
+        //      0G Compute for memory queries and policy evaluation)
+        //
+        // Without the memory sync, agents using 0G Compute (query_merchant_memory)
+        // see stale product data even though the profile is fresh. Both must stay
+        // in sync after every catalog publish.
+        const syncResult = await syncMerchantZeroGArtifacts(merchantId).catch(
             (err) => {
                 logger.warn(
                     { err, merchantId },
-                    'publish-catalog: 0G profile publish failed (non-blocking)',
+                    'publish-catalog: 0G artifact sync failed (non-blocking)',
                 );
                 return null;
             },
         );
+        const published = syncResult?.profile ?? null;
 
         logger.info(
             {
