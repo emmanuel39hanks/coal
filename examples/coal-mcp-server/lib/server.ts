@@ -13,6 +13,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as coal from './coal-api';
+import * as wallet from './wallet';
 
 export function createCoalMcpServer(): McpServer {
     const server = new McpServer({
@@ -285,6 +286,134 @@ export function createCoalMcpServer(): McpServer {
                 }
                 return {
                     content: [{ type: 'text', text: lines.join('\n') }],
+                };
+            } catch (err) {
+                return errorResult(err);
+            }
+        },
+    );
+
+    // ─── Agent Wallet (autonomous payments) ────────────────────────────
+
+    server.tool(
+        'agent_wallet_status',
+        'Check the status of the MCP server\'s agent wallet. Shows whether autonomous ' +
+            'payments are enabled, the wallet address, USDC balance, and spending cap. ' +
+            'If the wallet is not configured, payments require manual approval via checkout URL.',
+        {},
+        async () => {
+            try {
+                if (!wallet.isWalletConfigured()) {
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: [
+                                    'Agent wallet: NOT CONFIGURED',
+                                    '',
+                                    'Autonomous payments are disabled. To enable:',
+                                    '1. Set AGENT_PRIVATE_KEY (EOA with USDC on Base)',
+                                    '2. Set OPERATOR_PRIVATE_KEY (Coal operator that pays gas)',
+                                    '',
+                                    'Without a wallet, create_checkout returns a URL for manual payment.',
+                                ].join('\n'),
+                            },
+                        ],
+                    };
+                }
+
+                const info = await wallet.getAgentBalance();
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: [
+                                'Agent wallet: CONFIGURED ✓',
+                                `Address: ${info?.address}`,
+                                `Balance: ${info?.balance} USDC`,
+                                `Spending cap: $${process.env.AGENT_MAX_SPEND_PER_TX || '5'} per transaction`,
+                                `Network: Base (chain ID 8453)`,
+                                `Payment method: ERC-3009 transferWithAuthorization (gasless)`,
+                                '',
+                                'Autonomous payments are enabled. The pay_merchant tool can',
+                                'send USDC directly without human approval.',
+                            ].join('\n'),
+                        },
+                    ],
+                };
+            } catch (err) {
+                return errorResult(err);
+            }
+        },
+    );
+
+    server.tool(
+        'pay_merchant',
+        'Pay a merchant directly using the agent wallet. Sends USDC on Base via ' +
+            'ERC-3009 transferWithAuthorization (gasless — operator pays gas). ' +
+            'Use this after create_checkout when the agent wallet is configured, ' +
+            'or to pay a paywall directly. Returns the transaction hash and receipt. ' +
+            'REQUIRES AGENT_PRIVATE_KEY and OPERATOR_PRIVATE_KEY to be set.',
+        {
+            to: z.string().describe('Recipient wallet address (merchant payout address)'),
+            amount: z.number().positive().describe('Amount in USD (settles in USDC)'),
+            sessionId: z.string().optional().describe('Optional checkout session ID to confirm after payment'),
+            reason: z.string().optional().describe('Why this payment is being made (for the audit log)'),
+        },
+        async ({ to, amount, sessionId, reason }) => {
+            try {
+                if (!wallet.isWalletConfigured()) {
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: 'Agent wallet not configured. Set AGENT_PRIVATE_KEY and OPERATOR_PRIVATE_KEY to enable autonomous payments.',
+                            },
+                        ],
+                        isError: true,
+                    };
+                }
+
+                const result = await wallet.payViaERC3009(to, amount);
+
+                // If a session ID was provided, confirm the payment with Coal
+                if (sessionId) {
+                    try {
+                        await coal.confirmPayment({
+                            sessionId,
+                            txHash: result.txHash,
+                            payerAddress: result.from,
+                        });
+                    } catch {
+                        // Non-blocking — the payment already went through on-chain
+                    }
+                }
+
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: [
+                                'Payment sent ✓',
+                                '',
+                                `From: ${result.from}`,
+                                `To: ${result.to}`,
+                                `Amount: $${result.amount} USDC`,
+                                `TX Hash: ${result.txHash}`,
+                                `Explorer: https://basescan.org/tx/${result.txHash}`,
+                                `Network: Base`,
+                                `Method: ERC-3009 (gasless, operator-relayed)`,
+                                reason ? `Reason: ${reason}` : '',
+                                sessionId ? `Session: ${sessionId} (confirmation sent to Coal)` : '',
+                                '',
+                                sessionId
+                                    ? `Use verify_receipt with session ID "${sessionId}" to see the 0G proof trail.`
+                                    : 'Payment is on-chain. The merchant will see it in their Coal dashboard.',
+                            ]
+                                .filter(Boolean)
+                                .join('\n'),
+                        },
+                    ],
                 };
             } catch (err) {
                 return errorResult(err);

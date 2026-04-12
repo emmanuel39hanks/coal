@@ -13,6 +13,7 @@
  */
 
 import * as coal from '@/lib/coal-api';
+import * as wallet from '@/lib/wallet';
 
 // ─── Tool definitions ────────────────────────────────────────────────────────
 
@@ -224,6 +225,79 @@ const tools: ToolDef[] = [
                 lines.push(`${name.toUpperCase().padEnd(10)} ${check.ok ? '✓ OK' : '✗ FAIL'}`);
             }
             return lines.join('\n');
+        },
+    },
+    {
+        name: 'agent_wallet_status',
+        description:
+            'Check the MCP agent wallet status: address, USDC balance, spending cap, ' +
+            'and whether autonomous payments are enabled.',
+        inputSchema: { type: 'object', properties: {}, required: [] },
+        handler: async () => {
+            if (!wallet.isWalletConfigured()) {
+                return [
+                    'Agent wallet: NOT CONFIGURED',
+                    '',
+                    'Autonomous payments are disabled.',
+                    'Set AGENT_PRIVATE_KEY + OPERATOR_PRIVATE_KEY to enable pay_merchant.',
+                    'Without a wallet, create_checkout returns a URL for manual payment.',
+                ].join('\n');
+            }
+            const info = await wallet.getAgentBalance();
+            return [
+                'Agent wallet: CONFIGURED ✓',
+                `Address: ${info?.address}`,
+                `Balance: ${info?.balance} USDC`,
+                `Spending cap: $${process.env.AGENT_MAX_SPEND_PER_TX || '5'} per tx`,
+                `Network: Base (chain ID 8453)`,
+                `Method: ERC-3009 transferWithAuthorization (gasless)`,
+            ].join('\n');
+        },
+    },
+    {
+        name: 'pay_merchant',
+        description:
+            'Pay a merchant directly using the agent wallet. Sends USDC on Base via ' +
+            'ERC-3009 (gasless). Use after create_checkout or to pay a paywall. ' +
+            'Returns the tx hash. Requires AGENT_PRIVATE_KEY to be configured.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                to: { type: 'string', description: 'Merchant payout address' },
+                amount: { type: 'number', description: 'Amount in USD (USDC)' },
+                sessionId: { type: 'string', description: 'Optional checkout session ID to confirm' },
+                reason: { type: 'string', description: 'Why this payment is being made' },
+            },
+            required: ['to', 'amount'],
+        },
+        handler: async (args) => {
+            if (!wallet.isWalletConfigured()) {
+                throw new Error('Agent wallet not configured. Set AGENT_PRIVATE_KEY + OPERATOR_PRIVATE_KEY.');
+            }
+            const result = await wallet.payViaERC3009(args.to as string, args.amount as number);
+
+            if (args.sessionId) {
+                try {
+                    await coal.confirmPayment({
+                        sessionId: args.sessionId as string,
+                        txHash: result.txHash,
+                        payerAddress: result.from,
+                    });
+                } catch { /* non-blocking */ }
+            }
+
+            return [
+                'Payment sent ✓',
+                '',
+                `From: ${result.from}`,
+                `To: ${result.to}`,
+                `Amount: $${result.amount} USDC`,
+                `TX: ${result.txHash}`,
+                `Explorer: https://basescan.org/tx/${result.txHash}`,
+                `Method: ERC-3009 (gasless, operator-relayed)`,
+                args.reason ? `Reason: ${args.reason}` : '',
+                args.sessionId ? `Session: ${args.sessionId}` : '',
+            ].filter(Boolean).join('\n');
         },
     },
 ];
