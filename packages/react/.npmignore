@@ -1,0 +1,13 @@
+# Safety net on top of package.json "files". Nothing below should ever
+# land in the published tarball.
+src/
+scripts/
+__tests__/
+*.test.ts
+*.test.tsx
+vitest.config.ts
+tsconfig.json
+coal-react-*.tgz
+node_modules/
+.vercel/
+.next/
