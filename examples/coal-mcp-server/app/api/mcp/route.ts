@@ -15,6 +15,29 @@
 import * as coal from '@/lib/coal-api';
 import * as wallet from '@/lib/wallet';
 
+// ─── Auth ────────────────────────────────────────────────────────────────────
+// Write tools (pay_merchant, create_checkout) require a secret token.
+// Read-only tools (discover, search, verify) are public — anyone can query.
+//
+// The token is set via MCP_WRITE_SECRET env var and must be passed as:
+//   Authorization: Bearer <secret>
+// in the HTTP request headers. Claude Code supports this via:
+//   claude mcp add coal --transport http --header "Authorization: Bearer <secret>" <url>
+
+const MCP_WRITE_SECRET = process.env.MCP_WRITE_SECRET || '';
+const WRITE_TOOLS = new Set(['pay_merchant', 'create_checkout']);
+
+function isWriteTool(name: string): boolean {
+    return WRITE_TOOLS.has(name);
+}
+
+function checkWriteAuth(request: Request): boolean {
+    if (!MCP_WRITE_SECRET) return false; // no secret configured = write tools disabled
+    const auth = request.headers.get('authorization') || '';
+    const token = auth.replace(/^Bearer\s+/i, '').trim();
+    return token === MCP_WRITE_SECRET;
+}
+
 // ─── Tool definitions ────────────────────────────────────────────────────────
 
 interface ToolDef {
@@ -312,7 +335,7 @@ function jsonRpcError(id: unknown, code: number, message: string) {
     return { jsonrpc: '2.0', id, error: { code, message } };
 }
 
-async function handleJsonRpc(msg: { id?: unknown; method?: string; params?: Record<string, unknown> }) {
+async function handleJsonRpc(msg: { id?: unknown; method?: string; params?: Record<string, unknown> }, authPassed: boolean = false) {
     const { id, method, params } = msg;
 
     switch (method) {
@@ -343,6 +366,16 @@ async function handleJsonRpc(msg: { id?: unknown; method?: string; params?: Reco
             if (!tool) {
                 return jsonRpcError(id, -32601, `Unknown tool: ${toolName}`);
             }
+
+            // Write tools require auth — prevents anyone from draining the wallet
+            if (isWriteTool(toolName) && !authPassed) {
+                return jsonRpcError(
+                    id,
+                    -32600,
+                    `Tool "${toolName}" requires authentication. Send Authorization: Bearer <MCP_WRITE_SECRET> in request headers.`,
+                );
+            }
+
             try {
                 const result = await tool.handler(toolArgs);
                 return jsonRpcResponse(id, {
@@ -412,6 +445,7 @@ function formatBatchResponse(results: unknown[], accept: string): Response {
 
 export async function POST(request: Request): Promise<Response> {
     const accept = request.headers.get('accept') || 'application/json';
+    const authPassed = checkWriteAuth(request);
 
     let body: unknown;
     try {
@@ -424,16 +458,18 @@ export async function POST(request: Request): Promise<Response> {
     if (Array.isArray(body)) {
         const responses: unknown[] = [];
         for (const msg of body) {
-            const res = await handleJsonRpc(msg);
+            const res = await handleJsonRpc(msg, authPassed);
             if (res) responses.push(res);
         }
         return formatBatchResponse(responses, accept);
     }
 
     // Single message
-    const result = await handleJsonRpc(body as { id?: unknown; method?: string; params?: Record<string, unknown> });
+    const result = await handleJsonRpc(
+        body as { id?: unknown; method?: string; params?: Record<string, unknown> },
+        authPassed,
+    );
     if (!result) {
-        // Notifications don't get a response
         return new Response(null, { status: 202 });
     }
     return formatResponse(result, accept);
