@@ -372,7 +372,7 @@ async function handleJsonRpc(msg: { id?: unknown; method?: string; params?: Reco
                 return jsonRpcError(
                     id,
                     -32600,
-                    `Tool "${toolName}" requires authentication. Send Authorization: Bearer <MCP_WRITE_SECRET> in request headers.`,
+                    `Tool "${toolName}" requires authentication. Include a valid Authorization: Bearer token in your request headers.`,
                 );
             }
 
