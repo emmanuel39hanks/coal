@@ -55,7 +55,10 @@ export async function GET(
         if (session.status === 'verifying' && session.pendingTxHash) {
             const cronSecret = process.env.CRON_SECRET;
             if (cronSecret) {
-                const verifyUrl = `${new URL(request.url).origin}/api/cron/verify-payments`;
+                // Use VERCEL_URL or API_BASE_URL to ensure we hit the backend, not the frontend
+                const apiBase = process.env.API_BASE_URL
+                    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : new URL(request.url).origin);
+                const verifyUrl = `${apiBase}/api/cron/verify-payments`;
                 fetch(verifyUrl, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${cronSecret}` },
