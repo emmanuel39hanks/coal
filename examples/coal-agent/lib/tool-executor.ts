@@ -159,6 +159,16 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
       return { _tool: 'get_agent_wallet', ...wallet, network: 'base' };
     }
 
+    case 'fetch_paywall_content': {
+      const url = new URL(args.url as string);
+      url.searchParams.set('address', args.address as string);
+      const res = await fetch(url.toString(), {
+        headers: { 'Accept': 'application/json' },
+      });
+      const data = await res.json().catch(() => ({ error: 'Failed to parse response' }));
+      return { _tool: 'fetch_paywall_content', status: res.status, ...data };
+    }
+
     default:
       return { _tool: name, error: `Unknown tool: ${name}` };
   }

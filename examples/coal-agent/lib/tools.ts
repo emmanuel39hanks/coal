@@ -222,4 +222,20 @@ export const tools: ChatCompletionTool[] = [
       parameters: { type: 'object', properties: {} },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'fetch_paywall_content',
+      description:
+        'Fetch content from a paywall-protected URL after payment. Use this after paying a paywall to retrieve the actual data (e.g., price data from the oracle). Pass the content URL and the wallet address that paid.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'The content URL to fetch (e.g., https://oracle.usecoal.xyz/api/price/ETH)' },
+          address: { type: 'string', description: 'The wallet address that paid for access' },
+        },
+        required: ['url', 'address'],
+      },
+    },
+  },
 ];

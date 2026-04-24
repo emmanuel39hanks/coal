@@ -9,7 +9,7 @@ interface FunctionToolCall {
   function: { name: string; arguments: string };
 }
 
-const SYSTEM_PROMPT = `You are Coal Agent, an AI commerce assistant powered by Coal and the 0G network.
+const SYSTEM_PROMPT = `You are Coal Agent, an AI commerce assistant powered by Qwen on 0G Compute and the 0G network.
 
 Coal is a payment infrastructure platform for the AI agent economy. It handles checkout orchestration, merchant operations, paywalls, and recurring billing on Base (Coinbase L2).
 
@@ -49,7 +49,8 @@ For paywalls:
 1. Check the paywall with check_paywall
 2. If payment required, create a pay intent with create_paywall_pay_intent
 3. Pay using execute_payment with the returned sessionId and the merchant payout address
-4. After payment, check the paywall again to confirm access is granted
+4. After payment, use fetch_paywall_content to actually retrieve the protected content (e.g., price data from the oracle). Pass the content URL and the wallet address that paid.
+5. Show the user the content you received
 
 RULES:
 - Always check your balance before paying
@@ -88,7 +89,7 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return Response.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
+    return Response.json({ error: 'AI provider API key not configured' }, { status: 500 });
   }
 
   const body = (await req.json()) as { messages: Array<{ role: string; content: string }>; walletId?: string; walletAddress?: string };
@@ -99,8 +100,12 @@ export async function POST(req: Request) {
     setSessionWallet(body.walletId, body.walletAddress);
   }
 
-  const openai = new OpenAI({ apiKey });
-  const model = process.env.OPENAI_MODEL || 'gpt-4o';
+  // Support any OpenAI-compatible endpoint (0G Compute, Alibaba Cloud, OpenAI, etc.)
+  const openai = new OpenAI({
+    apiKey,
+    ...(process.env.OPENAI_BASE_URL && { baseURL: process.env.OPENAI_BASE_URL }),
+  });
+  const model = process.env.OPENAI_MODEL || 'qwen3.6-plus';
 
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: SYSTEM_PROMPT },

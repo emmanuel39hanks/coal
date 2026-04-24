@@ -255,7 +255,7 @@ export default function AgentChat() {
           </button>
         </div>
         <p className="text-[10px] text-[var(--muted)]/60 mt-1.5 text-center">
-          Coal Agent uses GPT-4o for reasoning + Coal APIs + 0G network for decentralized commerce
+          Coal Agent uses Qwen on 0G Compute for reasoning + Coal APIs + 0G network for decentralized commerce
         </p>
       </div>
     </div>
