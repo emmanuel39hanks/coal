@@ -9,7 +9,7 @@
  * wrapper), so every response here is the object we care about.
  */
 
-const COAL_API_URL = process.env.NEXT_PUBLIC_COAL_API_URL || 'http://localhost:3001';
+const COAL_API_URL = process.env.NEXT_PUBLIC_COAL_API_URL || '/coal-proxy';
 
 // ngrok free plan intercepts Mozilla-User-Agent requests with a warning page.
 // Sending any value for this header bypasses it. Harmless elsewhere.

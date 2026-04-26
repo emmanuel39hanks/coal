@@ -36,7 +36,7 @@ lib/
 ### 1. Install
 
 ```bash
-cd examples/coal-mini-app
+cd coal-mini-app
 npm install --legacy-peer-deps
 ```
 
@@ -45,10 +45,11 @@ npm install --legacy-peer-deps
 `.env.local` was created for you with a randomized `SIWE_SESSION_SECRET`. Fill in the rest:
 
 ```bash
-# examples/coal-mini-app/.env.local
+# coal-mini-app/.env.local
 NEXT_PUBLIC_WORLD_APP_ID=app_staging_…      # from developer.worldcoin.org
 NEXT_PUBLIC_WORLD_ACTION=verify_coal_user    # incognito action name from the portal
-NEXT_PUBLIC_COAL_API_URL=http://localhost:3001
+NEXT_PUBLIC_COAL_API_URL=/coal-proxy
+COAL_BACKEND_ORIGIN=http://localhost:3001
 NEXT_PUBLIC_DEMO_LINK_SLUGS=slug-1,slug-2    # curated product slugs from your Coal console
 ```
 
@@ -76,7 +77,7 @@ npm run dev   # :3001
 ### 5. Start the Mini App
 
 ```bash
-cd examples/coal-mini-app
+cd coal-mini-app
 npm run dev   # :3005
 ```
 
@@ -139,7 +140,7 @@ The backend pieces (`settlementChain` column, World Chain anchor contract, chain
 vercel --prod
 ```
 
-Suggested custom domain: `world.usecoal.xyz`. Update `NEXT_PUBLIC_COAL_API_URL` to `https://api.usecoal.xyz` and the Developer Portal's **App URL** to your production domain.
+Suggested custom domain: `world.usecoal.xyz`. Keep `NEXT_PUBLIC_COAL_API_URL=/coal-proxy`, set `COAL_BACKEND_ORIGIN=https://api.usecoal.xyz`, and update the Developer Portal's **App URL** to your production domain.
 
 ---
 
