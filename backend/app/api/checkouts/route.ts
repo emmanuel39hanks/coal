@@ -7,6 +7,7 @@ import { rateLimiters, checkRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { toPrismaJson, toPrismaNullableJson } from '@/lib/prisma-json';
 import { getSettlementToken } from '@/lib/chain';
+import { getDefaultChainKey, resolveChainKey } from '@/lib/chains';
 import { validateWebhookUrl } from '@/lib/ssrf';
 
 export async function POST(request: Request) {
@@ -28,8 +29,9 @@ export async function POST(request: Request) {
         const {
             amount, currency,
             productId, productName, productDescription, productImage,
-            description, redirectUrl, callbackUrl, splitConfigId, metadata, payerInfo,
+            description, redirectUrl, callbackUrl, splitConfigId, metadata, payerInfo, chain,
         } = validated.data;
+        const settlementChain = chain ? resolveChainKey(chain) : getDefaultChainKey();
 
         // Validate callbackUrl against SSRF blocklist (it's fetched server-side)
         if (callbackUrl) {
@@ -88,6 +90,7 @@ export async function POST(request: Request) {
                 billingReason: linkedProduct?.billingType === 'subscription' ? 'subscription_initial' : 'one_time',
                 redirectUrl:  redirectUrl  || null,
                 callbackUrl:  callbackUrl  || null,
+                settlementChain,
                 expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
             }
         });
@@ -105,6 +108,7 @@ export async function POST(request: Request) {
             productName:   productName ?? null,
             expiresAt:     session.expiresAt,
             splitConfigId: splitConfigId ?? null,
+            chain:         session.settlementChain,
         }, 201);
 
     } catch (error) {

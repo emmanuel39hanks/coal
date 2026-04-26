@@ -10,6 +10,8 @@ import {
 import { publishJson } from '@/lib/0g/storage';
 import { buildReceiptPayload, buildReceiptSubjectHash, hashReceiptPayload, normalizeArtifactRoot } from '@/lib/receipts/payload';
 import type { ZeroGChainAnchorResult, ZeroGPublishedArtifact } from '@/lib/0g/types';
+import { anchorReceiptOnWorldChain, isWorldChainAnchorConfigured } from '@/lib/world/chain';
+import { resolveChainKey } from '@/lib/chains';
 
 function toPublishedArtifact(record: {
     kind: string;
@@ -72,6 +74,8 @@ export async function publishVerifiedReceiptProof(input: {
         description?: string | null;
         metadata?: unknown;
         createdAt: Date;
+        /** World-3: which chain the payment settled on. */
+        settlementChain?: string | null;
     };
     merchant: {
         id: string;
@@ -201,6 +205,7 @@ export async function publishVerifiedReceiptProof(input: {
                             artifactRoot,
                             subjectHash,
                             txHash: input.transaction.txHash,
+                            anchorSource: '0g',
                         },
                     },
                 });
@@ -218,6 +223,71 @@ export async function publishVerifiedReceiptProof(input: {
         };
         // Fire and forget — don't await
         anchorAsync().catch(() => null);
+    }
+
+    // World-3: additional settlement-chain anchor.
+    // Only fires when the session settled on World Chain, and only as a
+    // supplementary anchor — the 0G anchor above remains canonical.
+    // The cron retry path (cron/anchor-receipts) will catch failures.
+    const settlementChainKey = resolveChainKey(input.session.settlementChain);
+    if (settlementChainKey === 'worldchain' && artifactRoot && isWorldChainAnchorConfigured()) {
+        const anchorWorldAsync = async () => {
+            try {
+                // Skip if a World Chain anchor already exists for this session (idempotent retry).
+                const existing = await prisma.chainAnchor.findFirst({
+                    where: {
+                        kind: 'receipt',
+                        localEntityType: 'checkout_session',
+                        localEntityId: input.session.id,
+                        anchorChainId: { in: [480, 4801] },
+                    },
+                    select: { id: true },
+                });
+                if (existing) return;
+
+                const result = await anchorReceiptOnWorldChain(
+                    effectivePayloadHash,
+                    artifactRoot,
+                    subjectHash,
+                );
+
+                await prisma.chainAnchor.create({
+                    data: {
+                        merchantId: input.session.merchantId,
+                        kind: 'receipt',
+                        localEntityType: 'checkout_session',
+                        localEntityId: input.session.id,
+                        payloadHash: effectivePayloadHash,
+                        anchorContract: result.anchorContract,
+                        anchorTxHash: result.anchorTxHash,
+                        anchorChainId: result.anchorChainId,
+                        status: 'confirmed',
+                        metadata: {
+                            storageRoot: publishedArtifact.storageRoot,
+                            artifactRoot,
+                            subjectHash,
+                            txHash: input.transaction.txHash,
+                            anchorSource: 'worldchain',
+                        },
+                    },
+                });
+
+                zeroGLogger.info(
+                    {
+                        checkoutSessionId: input.session.id,
+                        anchorTxHash: result.anchorTxHash,
+                        anchorChainId: result.anchorChainId,
+                    },
+                    'World Chain anchor completed (async)',
+                );
+            } catch (error) {
+                zeroGLogger.warn(
+                    { err: error, checkoutSessionId: input.session.id, txHash: input.transaction.txHash },
+                    'World Chain receipt anchor write failed (async) — will retry on next cron run',
+                );
+            }
+        };
+        anchorWorldAsync().catch(() => null);
     }
 
     return { skipped: false as const, payloadHash: effectivePayloadHash, artifact: publishedArtifact, anchor };

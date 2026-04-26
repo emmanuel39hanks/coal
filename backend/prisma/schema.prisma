@@ -207,6 +207,11 @@ model CheckoutSession {
   subscriptionId      String?
   payerInfo           Json?
   payerInfoConfig     Json?
+  // World-3: chain the payment settles on. "base" (default) or "worldchain".
+  // Drives which publicClient, USDC address, and explorer URL the verification
+  // cron uses, and which CoalReceiptAnchor contract receives the optional
+  // settlement-chain anchor.
+  settlementChain     String               @default("base")
   fundingIntents      FundingIntent[]
   merchant            User                 @relation(fields: [merchantId], references: [id])
   product             Product?             @relation(fields: [productId], references: [id])
@@ -287,6 +292,9 @@ model Transaction {
   token       String           @default("MNEE")
   status      String
   blockNumber Int?
+  // World-3: which EVM chain the transaction was mined on (8453, 84532, 480, 4801).
+  // Null for legacy rows written before multi-chain support was added.
+  chainId     Int?
   createdAt   DateTime         @default(now())
   checkout    CheckoutSession? @relation(fields: [checkoutId], references: [id])
 

@@ -3,13 +3,16 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockFindUnique = vi.fn();
 const mockFindFirstArtifact = vi.fn();
 const mockFindFirstAnchor = vi.fn();
+const mockFindManyAnchors = vi.fn();
 const mockCheckRateLimit = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     checkoutSession: { findUnique: mockFindUnique },
     storedArtifact: { findFirst: mockFindFirstArtifact },
-    chainAnchor: { findFirst: mockFindFirstAnchor },
+    // World-3: route uses findMany to return all anchors (0G + optional World Chain).
+    // `findFirst` is kept for tests/fixtures that still reference it.
+    chainAnchor: { findFirst: mockFindFirstAnchor, findMany: mockFindManyAnchors },
   },
 }));
 
@@ -71,6 +74,8 @@ const confirmedSession = {
   currency: 'USDC',
   description: 'Test payment',
   txHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  // World-3: sessions now carry the settlement chain key.
+  settlementChain: 'base',
   createdAt: new Date('2026-03-24T10:00:00.000Z'),
   merchant: { id: 'merchant_123', name: 'Schema Labs' },
 };
@@ -97,12 +102,14 @@ describe('GET /api/receipts/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCheckRateLimit.mockResolvedValue({ limited: false, headers: {} });
+    // Default: no anchors. Individual tests override with mockResolvedValueOnce.
+    mockFindManyAnchors.mockResolvedValue([]);
   });
 
   it('returns full proof trail for a confirmed payment with 0G artifacts', async () => {
     mockFindUnique.mockResolvedValue(confirmedSession);
     mockFindFirstArtifact.mockResolvedValue(storedArtifact);
-    mockFindFirstAnchor.mockResolvedValue(chainAnchor);
+    mockFindManyAnchors.mockResolvedValue([chainAnchor]);
 
     const request = new Request('http://localhost/api/receipts/clrzdqjvw0000k6rzconfirm');
     const response = await GET(request, { params: Promise.resolve({ id: 'clrzdqjvw0000k6rzconfirm' }) });
@@ -122,6 +129,9 @@ describe('GET /api/receipts/[id]', () => {
     expect(body.payment.txHash).toBe(confirmedSession.txHash);
     expect(body.payment.explorerUrl).toContain('basescan.org');
     expect(body.payment.paidAt).toBe('2026-03-24T10:00:00.000Z');
+    // World-3: payment now carries chain info.
+    expect(body.payment.chain).toBe('base');
+    expect(body.payment.chainId).toBe(8453);
 
     // 0G Storage proof
     expect(body.proofTrail.storage).not.toBeNull();
@@ -132,19 +142,24 @@ describe('GET /api/receipts/[id]', () => {
     expect(body.proofTrail.storage.explorerUrl).toContain('storagescan.0g.ai');
     expect(body.proofTrail.storage.publishedAt).toBe('2026-03-24T10:01:00.000Z');
 
-    // 0G Chain anchor
+    // 0G Chain anchor (legacy single-anchor field, preserved for backwards compat)
     expect(body.proofTrail.chain).not.toBeNull();
     expect(body.proofTrail.chain.anchorTxHash).toBe('0xanchortx');
     expect(body.proofTrail.chain.anchorContract).toBe('0xanchorcontract');
     expect(body.proofTrail.chain.anchorChainId).toBe(16661);
     expect(body.proofTrail.chain.explorerUrl).toContain('chainscan.0g.ai');
     expect(body.proofTrail.chain.anchoredAt).toBe('2026-03-24T10:02:00.000Z');
+
+    // World-3: chainAnchors array carries the full multi-chain list.
+    expect(body.proofTrail.chainAnchors).toHaveLength(1);
+    expect(body.proofTrail.chainAnchors[0].anchorChainId).toBe(16661);
+    expect(body.proofTrail.chainAnchors[0].anchorSource).toBe('0g');
   });
 
   it('returns confirmed with null storage and anchor when no 0G artifacts exist', async () => {
     mockFindUnique.mockResolvedValue(confirmedSession);
     mockFindFirstArtifact.mockResolvedValue(null);
-    mockFindFirstAnchor.mockResolvedValue(null);
+    mockFindManyAnchors.mockResolvedValue([]);
 
     const request = new Request('http://localhost/api/receipts/clrzdqjvw0000k6rzconfirm');
     const response = await GET(request, { params: Promise.resolve({ id: 'clrzdqjvw0000k6rzconfirm' }) });
@@ -154,6 +169,7 @@ describe('GET /api/receipts/[id]', () => {
     expect(body.verified).toBe(true);
     expect(body.proofTrail.storage).toBeNull();
     expect(body.proofTrail.chain).toBeNull();
+    expect(body.proofTrail.chainAnchors).toEqual([]);
   });
 
   it('returns verified:false for unconfirmed sessions', async () => {
@@ -215,7 +231,7 @@ describe('GET /api/receipts/[id]', () => {
   it('returns confirmed with storage but no chain anchor', async () => {
     mockFindUnique.mockResolvedValue(confirmedSession);
     mockFindFirstArtifact.mockResolvedValue(storedArtifact);
-    mockFindFirstAnchor.mockResolvedValue(null);
+    mockFindManyAnchors.mockResolvedValue([]);
 
     const request = new Request('http://localhost/api/receipts/clrzdqjvw0000k6rzconfirm');
     const response = await GET(request, { params: Promise.resolve({ id: 'clrzdqjvw0000k6rzconfirm' }) });
@@ -230,7 +246,7 @@ describe('GET /api/receipts/[id]', () => {
   it('returns confirmed with chain anchor but no storage artifact', async () => {
     mockFindUnique.mockResolvedValue(confirmedSession);
     mockFindFirstArtifact.mockResolvedValue(null);
-    mockFindFirstAnchor.mockResolvedValue(chainAnchor);
+    mockFindManyAnchors.mockResolvedValue([chainAnchor]);
 
     const request = new Request('http://localhost/api/receipts/clrzdqjvw0000k6rzconfirm');
     const response = await GET(request, { params: Promise.resolve({ id: 'clrzdqjvw0000k6rzconfirm' }) });
@@ -245,7 +261,7 @@ describe('GET /api/receipts/[id]', () => {
   it('queries prisma with correct filters for artifact and anchor', async () => {
     mockFindUnique.mockResolvedValue(confirmedSession);
     mockFindFirstArtifact.mockResolvedValue(null);
-    mockFindFirstAnchor.mockResolvedValue(null);
+    mockFindManyAnchors.mockResolvedValue([]);
 
     const request = new Request('http://localhost/api/receipts/clrzdqjvw0000k6rzconfirm');
     await GET(request, { params: Promise.resolve({ id: 'clrzdqjvw0000k6rzconfirm' }) });
@@ -263,8 +279,8 @@ describe('GET /api/receipts/[id]', () => {
       }),
     );
 
-    // Verify anchor query shape
-    expect(mockFindFirstAnchor).toHaveBeenCalledWith(
+    // Verify anchor query shape (World-3: route now uses findMany)
+    expect(mockFindManyAnchors).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           kind: 'receipt',
@@ -287,7 +303,7 @@ describe('GET /api/receipts/[id]', () => {
     await GET(request, { params: Promise.resolve({ id: 'clrzdqjvw0000k6rzpendingx' }) });
 
     expect(mockFindFirstArtifact).not.toHaveBeenCalled();
-    expect(mockFindFirstAnchor).not.toHaveBeenCalled();
+    expect(mockFindManyAnchors).not.toHaveBeenCalled();
   });
 
   it('returns storage explorerUrl as null when storageRoot is missing', async () => {
@@ -297,7 +313,7 @@ describe('GET /api/receipts/[id]', () => {
     };
     mockFindUnique.mockResolvedValue(confirmedSession);
     mockFindFirstArtifact.mockResolvedValue(artifactNoRoot);
-    mockFindFirstAnchor.mockResolvedValue(null);
+    mockFindManyAnchors.mockResolvedValue([]);
 
     const request = new Request('http://localhost/api/receipts/clrzdqjvw0000k6rzconfirm');
     const response = await GET(request, { params: Promise.resolve({ id: 'clrzdqjvw0000k6rzconfirm' }) });

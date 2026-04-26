@@ -116,8 +116,32 @@ if (!readEnv('COMMERCE_PAYMENTS_OPERATOR_KEY')) {
 }
 
 const CHAIN_ENV = readEnv('CHAIN_ENV') || '';
-if (CHAIN_ENV && CHAIN_ENV !== 'testnet') {
-    pushError(`CHAIN_ENV must be empty or "testnet", received "${CHAIN_ENV}"`);
+if (CHAIN_ENV && CHAIN_ENV !== 'testnet' && CHAIN_ENV !== 'mainnet') {
+    pushError(`CHAIN_ENV must be empty, "testnet", or "mainnet", received "${CHAIN_ENV}"`);
+}
+
+// World-3: World Chain settlement + anchor
+const WORLD_CHAIN_ENABLED = readEnv('WORLD_CHAIN_ENABLED') === 'true';
+if (WORLD_CHAIN_ENABLED) {
+    const isTestnet = CHAIN_ENV === 'testnet';
+    const anchorKey = isTestnet
+        ? 'WORLD_CHAIN_SEPOLIA_RECEIPT_ANCHOR_ADDRESS'
+        : 'WORLD_CHAIN_RECEIPT_ANCHOR_ADDRESS';
+    if (!readEnv(anchorKey)) {
+        pushWarning(
+            `WORLD_CHAIN_ENABLED=true but ${anchorKey} is missing. World Chain anchoring will be skipped until the address is set.`,
+        );
+    }
+    if (!readEnv('ZERO_G_CHAIN_PRIVATE_KEY')) {
+        pushWarning(
+            'WORLD_CHAIN_ENABLED=true but ZERO_G_CHAIN_PRIVATE_KEY (the shared operator key) is missing. World Chain anchor writes will fail.',
+        );
+    }
+}
+
+const DEFAULT_SETTLEMENT_CHAIN = readEnv('DEFAULT_SETTLEMENT_CHAIN');
+if (DEFAULT_SETTLEMENT_CHAIN && DEFAULT_SETTLEMENT_CHAIN !== 'base' && DEFAULT_SETTLEMENT_CHAIN !== 'worldchain') {
+    pushError(`DEFAULT_SETTLEMENT_CHAIN must be "base" or "worldchain", received "${DEFAULT_SETTLEMENT_CHAIN}"`);
 }
 
 if (!readEnv('NEXT_PUBLIC_FRONTEND_URL')) {

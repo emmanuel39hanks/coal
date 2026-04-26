@@ -21,8 +21,6 @@ export async function POST(request: Request) {
             subscriptionConsentAccepted,
             payerInfo,
         } = validated.data;
-        const normalizedHash = rawHash.toLowerCase();
-
         // Rate limit per session
         const { limited } = await checkRateLimit(rateLimiters.confirm, sessionId);
         if (limited) return errors.rateLimited();
@@ -32,6 +30,28 @@ export async function POST(request: Request) {
             include: { product: true },
         });
         if (!session) return errors.notFound('Session');
+
+        // World-3: MiniKit pay returns a World App `transaction_id`, not the
+        // real on-chain hash. Resolve it server-side via the Worldcoin API so
+        // the verify-payments cron can find the tx on World Chain.
+        let resolvedHash = rawHash;
+        if (session.settlementChain === 'worldchain') {
+            const appId = process.env.NEXT_PUBLIC_WORLD_APP_ID;
+            if (appId) {
+                try {
+                    const wcRes = await fetch(
+                        `https://developer.worldcoin.org/api/v2/minikit/transaction/${rawHash}?app_id=${appId}`,
+                    ).then(r => r.json()) as { transactionHash?: string; transactionStatus?: string };
+                    if (wcRes.transactionHash) {
+                        resolvedHash = wcRes.transactionHash;
+                        paymentLogger.info({ sessionId, originalId: rawHash, resolvedHash }, 'Resolved World App tx ID to on-chain hash');
+                    }
+                } catch (err) {
+                    paymentLogger.warn({ err, sessionId }, 'Failed to resolve World App tx ID; using raw value');
+                }
+            }
+        }
+        const normalizedHash = resolvedHash.toLowerCase();
 
         const metadata =
             session.metadata && typeof session.metadata === 'object'

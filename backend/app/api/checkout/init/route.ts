@@ -6,11 +6,13 @@ import { rateLimiters, checkRateLimit, getIP } from '@/lib/rate-limit';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { getSettlementToken } from '@/lib/chain';
+import { getDefaultChainKey, resolveChainKey } from '@/lib/chains';
 import { toPrismaNullableJson } from '@/lib/prisma-json';
 
 const schema = z.object({
     slug: z.string().min(1),
     amount: z.number().positive().optional(),
+    chain: z.enum(['base', 'worldchain']).optional(),
 });
 
 export async function POST(request: Request) {
@@ -27,8 +29,9 @@ export async function POST(request: Request) {
             );
         }
 
-        const { slug, amount } = parsed.data;
+        const { slug, amount, chain } = parsed.data;
         const settlementToken = getSettlementToken();
+        const settlementChain = chain ? resolveChainKey(chain) : getDefaultChainKey();
 
         const link = await prisma.paymentLink.findUnique({
             where: { slug },
@@ -77,6 +80,7 @@ export async function POST(request: Request) {
                     ...(link.merchant?.payoutAddress ? { snapshotPayoutAddress: link.merchant.payoutAddress.toLowerCase() } : {}),
                 },
                 status:      'pending',
+                settlementChain,
                 expiresAt:   new Date(Date.now() + 24 * 60 * 60 * 1000),
             },
         });
@@ -85,6 +89,7 @@ export async function POST(request: Request) {
             sessionId:   session.id,
             amount:      sessionAmount,
             currency:    settlementToken.symbol,
+            chain:       session.settlementChain,
             description: session.description,
             merchant:    { name: link.merchant?.name || null },
             expiresAt:   session.expiresAt,

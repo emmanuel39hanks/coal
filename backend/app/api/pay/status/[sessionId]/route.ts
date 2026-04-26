@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { logger } from '@/lib/logger';
 import { getIP, checkRateLimit, rateLimiters } from '@/lib/rate-limit';
+import { verifyPendingSession } from '@/lib/verify-pending-session';
 
 const VALID_SESSION_ID = /^[a-z0-9]{20,36}$/;
 
@@ -51,19 +52,18 @@ export async function GET(
             return NextResponse.json({ status: "expired" });
         }
 
-        // If still verifying and has a pending tx, trigger verification inline
+        // If still verifying, run on-chain verification directly (no HTTP self-call).
         if (session.status === 'verifying' && session.pendingTxHash) {
-            const cronSecret = process.env.CRON_SECRET;
-            if (cronSecret) {
-                // Use VERCEL_URL or API_BASE_URL to ensure we hit the backend, not the frontend
-                const apiBase = process.env.API_BASE_URL
-                    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : new URL(request.url).origin);
-                const verifyUrl = `${apiBase}/api/cron/verify-payments`;
-                fetch(verifyUrl, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${cronSecret}` },
-                }).catch(() => null);
-            }
+            const newStatus = await verifyPendingSession(sessionId);
+            const refreshed = await prisma.checkoutSession.findUnique({
+                where: { id: sessionId },
+                select: { status: true, txHash: true, redirectUrl: true },
+            });
+            return NextResponse.json({
+                status: newStatus,
+                txHash: refreshed?.txHash ?? session.pendingTxHash ?? null,
+                redirectUrl: newStatus === 'confirmed' ? refreshed?.redirectUrl ?? null : null,
+            });
         }
 
         return NextResponse.json({

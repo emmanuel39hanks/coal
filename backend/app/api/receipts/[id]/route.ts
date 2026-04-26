@@ -3,6 +3,22 @@ import { errors, apiSuccess } from '@/lib/errors';
 import { getIP, checkRateLimit, rateLimiters } from '@/lib/rate-limit';
 import { zeroGEnv } from '@/lib/0g/env';
 import { EXPLORER_URL } from '@/lib/chain';
+import { getChainByChainId, getChainByKey, resolveChainKey } from '@/lib/chains';
+
+/**
+ * Return the correct tx explorer URL for the given chain ID.
+ * Falls back to a "#" placeholder on unknown chains so the UI doesn't crash.
+ */
+function explorerTxUrl(chainId: number | null | undefined, txHash: string): string {
+    if (!chainId) return '#';
+    // 0G mainnet / historical testnet
+    if (chainId === 16661 || chainId === 16600) {
+        return `${zeroGEnv.chainScanBaseUrl}/tx/${txHash}`;
+    }
+    const cfg = getChainByChainId(chainId);
+    if (cfg) return `${cfg.explorerUrl}/tx/${txHash}`;
+    return '#';
+}
 
 // H1: Validate checkout ID format before DB query
 const VALID_ID_PATTERN = /^[a-z0-9]{20,36}$/;
@@ -40,6 +56,7 @@ export async function GET(
                 currency: true,
                 description: true,
                 txHash: true,
+                settlementChain: true,
                 createdAt: true,
                 merchant: {
                     select: {
@@ -80,22 +97,39 @@ export async function GET(
             },
         });
 
-        // Fetch 0G Chain anchor
-        const anchor = await prisma.chainAnchor.findFirst({
+        // Fetch ALL chain anchors for this session (may include 0G and World Chain).
+        // World-3: a single session can have multiple anchors — one on 0G (canonical)
+        // and optionally one on the settlement chain (World Chain). The frontend
+        // renders them as separate rows in the proof trail.
+        const anchorRows = await prisma.chainAnchor.findMany({
             where: {
                 kind: 'receipt',
                 localEntityType: 'checkout_session',
                 localEntityId: id,
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy: { createdAt: 'asc' },
             select: {
                 anchorTxHash: true,
                 anchorContract: true,
                 anchorChainId: true,
                 payloadHash: true,
                 createdAt: true,
+                metadata: true,
             },
         });
+
+        // Chain-aware explorer URL for the settlement transaction.
+        const chainKey = resolveChainKey(session.settlementChain);
+        const settlementCfg = getChainByKey(chainKey);
+        const paymentExplorerUrl = chainKey === 'base'
+            ? `${EXPLORER_URL}/tx/${session.txHash}`
+            : `${settlementCfg.explorerUrl}/tx/${session.txHash}`;
+
+        // Preserve the legacy `chain` shape (first 0G anchor if present, else first row)
+        // so any existing client keeps working. The new `chainAnchors` array carries
+        // the full multi-chain list for UIs that want to render both.
+        const zeroGAnchor = anchorRows.find(a => a.anchorChainId === 16661 || a.anchorChainId === 16600) || null;
+        const legacyAnchor = zeroGAnchor || anchorRows[0] || null;
 
         return apiSuccess({
             checkoutId: id,
@@ -109,7 +143,10 @@ export async function GET(
                 currency: session.currency,
                 description: session.description,
                 txHash: session.txHash,
-                explorerUrl: `${EXPLORER_URL}/tx/${session.txHash}`,
+                chain: chainKey,
+                chainId: settlementCfg.chainId,
+                chainName: settlementCfg.displayName,
+                explorerUrl: paymentExplorerUrl,
                 paidAt: session.createdAt.toISOString(),
             },
             proofTrail: {
@@ -125,16 +162,33 @@ export async function GET(
                         publishedAt: artifact.createdAt.toISOString(),
                     }
                     : null,
-                chain: anchor
+                // Legacy single-anchor field (0G-preferred) for backwards compatibility.
+                chain: legacyAnchor
                     ? {
-                        anchorTxHash: anchor.anchorTxHash,
-                        anchorContract: anchor.anchorContract,
-                        anchorChainId: anchor.anchorChainId,
-                        payloadHash: anchor.payloadHash,
-                        explorerUrl: `${zeroGEnv.chainScanBaseUrl}/tx/${anchor.anchorTxHash}`,
-                        anchoredAt: anchor.createdAt.toISOString(),
+                        anchorTxHash: legacyAnchor.anchorTxHash,
+                        anchorContract: legacyAnchor.anchorContract,
+                        anchorChainId: legacyAnchor.anchorChainId,
+                        payloadHash: legacyAnchor.payloadHash,
+                        explorerUrl: explorerTxUrl(legacyAnchor.anchorChainId, legacyAnchor.anchorTxHash),
+                        anchoredAt: legacyAnchor.createdAt.toISOString(),
                     }
                     : null,
+                // New: full array of anchors, in chronological order.
+                chainAnchors: anchorRows.map((a) => {
+                    const meta = a.metadata as Record<string, unknown> | null;
+                    const anchorSource = typeof meta?.anchorSource === 'string'
+                        ? meta.anchorSource
+                        : (a.anchorChainId === 16661 || a.anchorChainId === 16600 ? '0g' : 'worldchain');
+                    return {
+                        anchorTxHash: a.anchorTxHash,
+                        anchorContract: a.anchorContract,
+                        anchorChainId: a.anchorChainId,
+                        anchorSource,
+                        payloadHash: a.payloadHash,
+                        explorerUrl: explorerTxUrl(a.anchorChainId, a.anchorTxHash),
+                        anchoredAt: a.createdAt.toISOString(),
+                    };
+                }),
             },
         });
     } catch {

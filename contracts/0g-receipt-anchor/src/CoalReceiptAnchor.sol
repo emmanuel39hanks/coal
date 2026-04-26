@@ -44,13 +44,22 @@ contract CoalReceiptAnchor {
     /**
      * @notice Query the current DA epoch from the DASigners precompile.
      * @dev Falls back to 0 if the precompile call fails (e.g. on non-0G chains).
+     *      Uses a low-level staticcall instead of the high-level try/catch
+     *      pattern because Solidity's extcodesize check on a high-level
+     *      interface call to an address with no code reverts in a way that
+     *      try/catch does not reliably intercept on some chains (the anchor
+     *      needs to be portable to World Chain and Base in addition to 0G).
+     *      staticcall to an EOA returns success=true with empty data, so we
+     *      also guard on data.length >= 32 before decoding.
      */
     function _currentDAEpoch() internal view returns (uint256) {
-        try IDASigners(ZeroGPrecompiles.DA_SIGNERS).epochNumber() returns (uint256 epoch) {
-            return epoch;
-        } catch {
-            return 0;
+        (bool ok, bytes memory data) = ZeroGPrecompiles.DA_SIGNERS.staticcall(
+            abi.encodeWithSelector(IDASigners.epochNumber.selector)
+        );
+        if (ok && data.length >= 32) {
+            return abi.decode(data, (uint256));
         }
+        return 0;
     }
 
     function anchorReceipt(bytes32 receiptHash, bytes32 artifactRoot, bytes32 subjectHash) external {

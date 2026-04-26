@@ -5,6 +5,7 @@ import { rateLimiters, checkRateLimit, getIP } from '@/lib/rate-limit';
 import { validateAmount } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { getSettlementToken } from '@/lib/chain';
+import { getDefaultChainKey, resolveChainKey } from '@/lib/chains';
 import { normalizePayerInfoConfig, validatePayerInfo } from '@/lib/payer-info';
 import { toPrismaNullableJson } from '@/lib/prisma-json';
 
@@ -17,8 +18,9 @@ export async function POST(request: Request) {
         const validated = validateBody(createSessionSchema, body);
         if (!validated.success) return validated.error;
 
-        const { linkId, amount, customerEmail, subscriptionConsentAccepted, payerInfo } = validated.data;
+        const { linkId, amount, customerEmail, subscriptionConsentAccepted, payerInfo, chain } = validated.data;
         const settlementToken = getSettlementToken();
+        const settlementChain = chain ? resolveChainKey(chain) : getDefaultChainKey();
 
         const link = await prisma.paymentLink.findUnique({
             where: { id: linkId },
@@ -97,6 +99,7 @@ export async function POST(request: Request) {
                         ...(link.merchant?.payoutAddress ? { snapshotPayoutAddress: link.merchant.payoutAddress.toLowerCase() } : {}),
                     },
                 status:      'pending',
+                settlementChain,
                 expiresAt:   new Date(Date.now() + 24 * 60 * 60 * 1000),
             }
         });

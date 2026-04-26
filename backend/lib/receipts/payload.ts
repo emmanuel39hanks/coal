@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CHAIN, CHAIN_ID, EXPLORER_URL, getSettlementToken } from '@/lib/chain';
+import { getChainByKey, type SupportedChainKey } from '@/lib/chains';
 import type { ReceiptPayload } from '@/lib/0g/types';
 
 function stableValue(value: unknown): unknown {
@@ -36,6 +37,8 @@ export interface ReceiptPayloadInput {
         description?: string | null;
         metadata?: unknown;
         createdAt: Date;
+        /** World-3: which chain this session settled on. Defaults to 'base' for legacy rows. */
+        settlementChain?: SupportedChainKey | string | null;
     };
     merchant: {
         id: string;
@@ -54,8 +57,40 @@ export interface ReceiptPayloadInput {
     };
 }
 
-export function buildReceiptPayload(input: ReceiptPayloadInput): ReceiptPayload {
+function resolveChainForReceipt(raw: ReceiptPayloadInput['session']['settlementChain']) {
+    if (raw === 'worldchain') {
+        const cfg = getChainByKey('worldchain');
+        return {
+            id: cfg.chainId,
+            name: cfg.displayName,
+            explorerBase: cfg.explorerUrl,
+            settlementToken: {
+                address: cfg.usdc.address as string,
+                symbol: cfg.usdc.symbol as string,
+                name: cfg.usdc.name,
+                decimals: cfg.usdc.decimals,
+            },
+        };
+    }
+
+    // Default: Base via the legacy chain module (preserves the
+    // configured custom settlement token path if set).
     const settlementToken = getSettlementToken();
+    return {
+        id: CHAIN_ID,
+        name: CHAIN.name,
+        explorerBase: EXPLORER_URL,
+        settlementToken: {
+            address: settlementToken.address as string,
+            symbol: settlementToken.symbol,
+            name: settlementToken.name,
+            decimals: settlementToken.decimals,
+        },
+    };
+}
+
+export function buildReceiptPayload(input: ReceiptPayloadInput): ReceiptPayload {
+    const chain = resolveChainForReceipt(input.session.settlementChain);
 
     return {
         version: 'coal.receipt.v1',
@@ -69,16 +104,11 @@ export function buildReceiptPayload(input: ReceiptPayloadInput): ReceiptPayload 
         amount: input.session.amount.toString(),
         currency: input.session.currency,
         description: input.session.description || null,
-        settlementToken: {
-            address: settlementToken.address,
-            symbol: settlementToken.symbol,
-            name: settlementToken.name,
-            decimals: settlementToken.decimals,
-        },
+        settlementToken: chain.settlementToken,
         chain: {
-            id: CHAIN_ID,
-            name: CHAIN.name,
-            explorerUrl: `${EXPLORER_URL}/tx/${input.transaction.txHash}`,
+            id: chain.id,
+            name: chain.name,
+            explorerUrl: `${chain.explorerBase}/tx/${input.transaction.txHash}`,
         },
         transaction: {
             hash: input.transaction.txHash,

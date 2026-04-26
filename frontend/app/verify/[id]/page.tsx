@@ -5,6 +5,16 @@ import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { getApiBaseUrl } from '@/lib/api-base';
 
+interface ChainAnchor {
+    anchorTxHash: string;
+    anchorContract: string;
+    anchorChainId: number;
+    anchorSource: string;   // "0g" | "worldchain"
+    payloadHash: string;
+    explorerUrl: string;
+    anchoredAt: string;
+}
+
 interface ProofTrail {
     storage: {
         storageUri: string;
@@ -14,14 +24,10 @@ interface ProofTrail {
         explorerUrl: string | null;
         publishedAt: string;
     } | null;
-    chain: {
-        anchorTxHash: string;
-        anchorContract: string;
-        anchorChainId: number;
-        payloadHash: string;
-        explorerUrl: string;
-        anchoredAt: string;
-    } | null;
+    // Legacy single-anchor field (0G-preferred) preserved for older clients.
+    chain: ChainAnchor | null;
+    // World-3: full list of anchors (0G + optional World Chain).
+    chainAnchors?: ChainAnchor[];
 }
 
 interface ReceiptData {
@@ -34,10 +40,30 @@ interface ReceiptData {
         currency: string;
         description: string | null;
         txHash: string;
+        /** World-3: settlement chain key ("base" | "worldchain"). Legacy responses omit it. */
+        chain?: string;
+        chainId?: number;
+        chainName?: string;
         explorerUrl: string;
         paidAt: string;
     };
     proofTrail: ProofTrail | null;
+}
+
+function explorerLabelForChainId(chainId: number | null | undefined): string {
+    if (!chainId) return 'Explorer';
+    if (chainId === 8453 || chainId === 84532) return 'BaseScan';
+    if (chainId === 480 || chainId === 4801) return 'Worldscan';
+    if (chainId === 16661 || chainId === 16600) return 'ChainScan';
+    return 'Explorer';
+}
+
+function isZeroGAnchor(a: ChainAnchor): boolean {
+    return a.anchorSource === '0g' || a.anchorChainId === 16661 || a.anchorChainId === 16600;
+}
+
+function isWorldChainAnchor(a: ChainAnchor): boolean {
+    return a.anchorSource === 'worldchain' || a.anchorChainId === 480 || a.anchorChainId === 4801;
 }
 
 type StepStatus = 'confirmed' | 'pending' | 'missing';
@@ -114,11 +140,30 @@ export default function ReceiptVerifyPage() {
     );
 
     const trail = receipt.proofTrail;
+
+    // World-3: prefer the full array; fall back to the legacy single-anchor field.
+    const allAnchors: ChainAnchor[] = trail?.chainAnchors && trail.chainAnchors.length > 0
+        ? trail.chainAnchors
+        : (trail?.chain ? [trail.chain] : []);
+    const zeroGAnchor = allAnchors.find(isZeroGAnchor) || null;
+    const worldAnchor = allAnchors.find(isWorldChainAnchor) || null;
+
+    // Settlement chain labeling.
+    const settlementChain = receipt.payment.chain || 'base';
+    const settlementChainName = receipt.payment.chainName
+        || (settlementChain === 'worldchain' ? 'World Chain' : 'Base');
+    const settlementExplorerLabel = explorerLabelForChainId(receipt.payment.chainId);
+
     const steps: { n: number; title: string; sub: string; status: StepStatus; hash?: string | null; time?: string | null; url?: string | null; urlLabel?: string }[] = [
         {
-            n: 1, title: 'Payment on Base', sub: 'USDC transfer confirmed on-chain',
-            status: 'confirmed', hash: receipt.payment.txHash, time: receipt.payment.paidAt,
-            url: receipt.payment.explorerUrl, urlLabel: 'BaseScan',
+            n: 1,
+            title: `Payment on ${settlementChainName}`,
+            sub: `USDC transfer confirmed on-chain${settlementChain === 'worldchain' ? ' — gas subsidized for World ID verified humans' : ''}`,
+            status: 'confirmed',
+            hash: receipt.payment.txHash,
+            time: receipt.payment.paidAt,
+            url: receipt.payment.explorerUrl,
+            urlLabel: settlementExplorerLabel,
         },
         {
             n: 2, title: 'Receipt on 0G Storage', sub: 'Immutable receipt published to 0G decentralized storage',
@@ -128,19 +173,36 @@ export default function ReceiptVerifyPage() {
         },
         {
             n: 3, title: 'Anchor on 0G Chain', sub: 'Receipt hash anchored on 0G Chain for tamper-proof verification',
-            status: trail?.chain ? 'confirmed' : 'pending',
-            hash: trail?.chain?.anchorTxHash, time: trail?.chain?.anchoredAt,
-            url: trail?.chain?.explorerUrl, urlLabel: 'ChainScan',
+            status: zeroGAnchor ? 'confirmed' : 'pending',
+            hash: zeroGAnchor?.anchorTxHash, time: zeroGAnchor?.anchoredAt,
+            url: zeroGAnchor?.explorerUrl, urlLabel: 'ChainScan',
         },
     ];
+
+    // Optional step 4: settlement-chain anchor (currently only World Chain).
+    if (worldAnchor) {
+        steps.push({
+            n: 4,
+            title: 'Anchor on World Chain',
+            sub: 'Also anchored on the settlement chain — verifiable without leaving Worldscan',
+            status: 'confirmed',
+            hash: worldAnchor.anchorTxHash,
+            time: worldAnchor.anchoredAt,
+            url: worldAnchor.explorerUrl,
+            urlLabel: 'Worldscan',
+        });
+    }
+
     const stepsOk = steps.filter(s => s.status === 'confirmed').length;
 
     const details: { label: string; value: string }[] = [
         { label: 'Checkout ID', value: receipt.checkoutId },
         ...(trail?.storage?.storageUri ? [{ label: 'Storage URI', value: trail.storage.storageUri }] : []),
         ...(trail?.storage?.storageRoot ? [{ label: 'Storage Root', value: trail.storage.storageRoot }] : []),
-        ...(trail?.chain?.anchorContract ? [{ label: 'Anchor Contract', value: trail.chain.anchorContract }] : []),
-        ...(trail?.chain?.anchorChainId ? [{ label: '0G Chain ID', value: String(trail.chain.anchorChainId) }] : []),
+        ...(zeroGAnchor?.anchorContract ? [{ label: '0G Anchor Contract', value: zeroGAnchor.anchorContract }] : []),
+        ...(zeroGAnchor?.anchorChainId ? [{ label: '0G Chain ID', value: String(zeroGAnchor.anchorChainId) }] : []),
+        ...(worldAnchor?.anchorContract ? [{ label: 'World Chain Anchor', value: worldAnchor.anchorContract }] : []),
+        ...(worldAnchor?.anchorChainId ? [{ label: 'World Chain ID', value: String(worldAnchor.anchorChainId) }] : []),
     ];
 
     return (
@@ -166,7 +228,7 @@ export default function ReceiptVerifyPage() {
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="text-[11px] font-bold text-gray-400">{stepsOk}/3 verified</span>
+                        <span className="text-[11px] font-bold text-gray-400">{stepsOk}/{steps.length} verified</span>
                         <button
                             onClick={() => navigator.clipboard.writeText(window.location.href)}
                             className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-brand-navy)] px-4 py-2 text-[11px] font-bold text-white hover:opacity-90 transition-opacity"
@@ -255,7 +317,7 @@ export default function ReceiptVerifyPage() {
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-white/40 font-medium">Network</span>
-                                    <span className="font-bold">Base</span>
+                                    <span className="font-bold">{settlementChainName}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-white/40 font-medium">Merchant</span>

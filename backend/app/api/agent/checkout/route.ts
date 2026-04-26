@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { validateApiKey } from '@/lib/api-auth';
 import { toPrismaJson, toPrismaNullableJson } from '@/lib/prisma-json';
 import { getSettlementToken } from '@/lib/chain';
+import { getDefaultChainKey, resolveChainKey } from '@/lib/chains';
 import { validateWebhookUrl } from '@/lib/ssrf';
 
 const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
@@ -22,7 +23,8 @@ export async function POST(request: Request) {
     const validated = validateBody(createCheckoutSchema, body);
     if (!validated.success) return validated.error;
 
-    const { amount, currency, description, metadata, redirectUrl, callbackUrl, payerInfo } = validated.data;
+    const { amount, currency, description, metadata, redirectUrl, callbackUrl, payerInfo, chain } = validated.data;
+    const settlementChain = chain ? resolveChainKey(chain) : getDefaultChainKey();
 
     if (callbackUrl) {
       const urlCheck = await validateWebhookUrl(callbackUrl);
@@ -49,6 +51,7 @@ export async function POST(request: Request) {
         }),
         redirectUrl,
         callbackUrl,
+        settlementChain,
         expiresAt,
       },
     });
@@ -59,6 +62,7 @@ export async function POST(request: Request) {
       status: session.status,
       amount: session.amount,
       currency: session.currency,
+      chain: session.settlementChain,
       expiresAt: session.expiresAt,
     }, 201);
   } catch (err) {

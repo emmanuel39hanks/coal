@@ -10,6 +10,7 @@ import {
     parseAbi
 } from 'viem';
 import { publicClient, getSettlementToken, EXPLORER_URL } from '@/lib/chain';
+import { getChainByKey, getPublicClient, resolveChainKey, type SupportedChainKey } from '@/lib/chains';
 import { sendPaymentConfirmed } from '@/lib/emails/paymentConfirmed';
 import { publishVerifiedReceiptProof } from '@/lib/receipts/proof';
 import { postDAEvent } from '@/lib/0g/da';
@@ -112,27 +113,40 @@ export async function POST(request: Request) {
             continue;
         }
 
+        // World-3: pick the right publicClient / USDC / explorer for this session's chain.
+        // Legacy rows without settlementChain fall through to 'base' via resolveChainKey.
+        const chainKey: SupportedChainKey = resolveChainKey(session.settlementChain);
+        const chainCfg = getChainByKey(chainKey);
+        const chainClient = chainKey === 'base' ? publicClient : getPublicClient(chainKey);
+        // On Base we preserve the legacy path that honors a custom settlement
+        // token (getSettlementToken), which may be USDC or a MNEE/custom override.
+        // On World Chain we always use the chain's USDC address.
+        const settlementToken = chainKey === 'base'
+            ? getSettlementToken()
+            : chainCfg.usdc;
+        const explorerBaseUrl = chainKey === 'base' ? EXPLORER_URL : chainCfg.explorerUrl;
+
         try {
             // Try to fetch the receipt — if not mined yet, skip this run
-            const receipt = await publicClient.getTransactionReceipt({
+            const receipt = await chainClient.getTransactionReceipt({
                 hash: txHash as `0x${string}`
             }).catch(() => null);
 
             if (!receipt) {
                 // Not mined yet — will retry next cron run
                 results.pending++;
-                paymentLogger.info({ sessionId: session.id, txHash }, 'Tx not yet mined, skipping');
+                paymentLogger.info({ sessionId: session.id, txHash, chain: chainKey }, 'Tx not yet mined, skipping');
                 continue;
             }
 
             // Require minimum block confirmations to protect against chain reorgs.
-            // Base (OP Stack L2) is safe after ~2 blocks for most amounts.
+            // Both Base and World Chain are OP Stack L2s — safe after ~2 blocks.
             const MIN_CONFIRMATIONS = 2;
-            const currentBlock = await publicClient.getBlockNumber().catch(() => null);
+            const currentBlock = await chainClient.getBlockNumber().catch(() => null);
             if (currentBlock && receipt.blockNumber + BigInt(MIN_CONFIRMATIONS) > currentBlock) {
                 results.pending++;
                 paymentLogger.info(
-                    { sessionId: session.id, txHash, txBlock: Number(receipt.blockNumber), currentBlock: Number(currentBlock) },
+                    { sessionId: session.id, txHash, chain: chainKey, txBlock: Number(receipt.blockNumber), currentBlock: Number(currentBlock) },
                     'Tx needs more confirmations, skipping',
                 );
                 continue;
@@ -153,8 +167,8 @@ export async function POST(request: Request) {
                 continue;
             }
 
-            // Find the token Transfer event in logs
-            const settlementToken = getSettlementToken();
+            // Find the token Transfer event in logs.
+            // Uses the chain-aware settlementToken resolved above.
             const contractAddress = settlementToken.address.toLowerCase();
             const transferLog = receipt.logs.find(log => {
                 if (log.address.toLowerCase() !== contractAddress) return false;
@@ -276,6 +290,7 @@ export async function POST(request: Request) {
                         token: settlementToken.symbol,
                         status: "confirmed",
                         blockNumber: Number(receipt.blockNumber),
+                        chainId: chainCfg.chainId,
                     },
                     create: {
                         checkoutId: session.id,
@@ -286,6 +301,7 @@ export async function POST(request: Request) {
                         token: settlementToken.symbol,
                         status: "confirmed",
                         blockNumber: Number(receipt.blockNumber),
+                        chainId: chainCfg.chainId,
                     },
                 });
 
@@ -430,7 +446,9 @@ export async function POST(request: Request) {
                         txHash,
                         customerEmail: session.customerEmail,
                         payerInfo: session.payerInfo,
-                        explorerUrl: `${EXPLORER_URL}/tx/${txHash}`,
+                        chain: chainKey,
+                        chainId: chainCfg.chainId,
+                        explorerUrl: `${explorerBaseUrl}/tx/${txHash}`,
                         zeroG:
                             zeroGReceiptProof && !zeroGReceiptProof.skipped
                                 ? {
@@ -454,7 +472,7 @@ export async function POST(request: Request) {
                     amount: formattedAmount,
                     currency: settlementToken.symbol,
                     txHash,
-                    explorerUrl: `${EXPLORER_URL}/tx/${txHash}`,
+                    explorerUrl: `${explorerBaseUrl}/tx/${txHash}`,
                 }).catch((e) => paymentLogger.warn({ e }, 'Failed to send payment confirmed email'));
             }
 

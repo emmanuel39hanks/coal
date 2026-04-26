@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-orange: #ff5c16;
+  --color-brand-navy: #180d43;
+  --color-brand-bg: #f5f2ed;
+}
+
+/* Mini Apps are always full-bleed mobile. Lock body to the viewport and
+   hide horizontal overflow so swipe gestures never leak sideways. */
+html, body {
+  overscroll-behavior-y: none;
+  background: var(--color-brand-bg);
+  color: var(--color-brand-navy);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  min-height: 100dvh;
+}
+
+/* Safe-area padding for iPhone notch + bottom home bar */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }

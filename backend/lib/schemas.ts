@@ -20,6 +20,10 @@ const optionalUrl = z.string().url('Must be a valid URL').optional().or(z.litera
 const optionalEmail = z.string().email('Must be a valid email').optional().or(z.literal(''));
 const billingTypeField = z.enum(['one_time', 'subscription']).default('one_time');
 const billingIntervalField = z.enum(['day', 'week', 'month', 'year']).optional();
+
+// World-3: optional settlement chain. Persisted on CheckoutSession.settlementChain.
+// Omitted => server resolves to the instance default (base unless DEFAULT_SETTLEMENT_CHAIN flips it).
+export const settlementChainField = z.enum(['base', 'worldchain']).optional();
 const SUPPORTED_CHECKOUT_CURRENCIES = Array.from(
     new Set([getSettlementToken().symbol.toUpperCase(), 'USDC', 'ETH']),
 );
@@ -53,6 +57,7 @@ export const createCheckoutSchema = z.object({
     ),
     splitConfigId: z.string().optional(),
     payerInfo: payerInfoConfigSchema.optional(),
+    chain: settlementChainField,
 });
 
 // ─── Payment Confirm ──────────────────────────────────────────────────────────
@@ -74,6 +79,7 @@ export const createSessionSchema = z.object({
     customerEmail: optionalEmail,
     subscriptionConsentAccepted: z.boolean().optional(),
     payerInfo: payerInfoValuesSchema.optional(),
+    chain: settlementChainField,
 });
 
 // ─── Console Products ─────────────────────────────────────────────────────────
