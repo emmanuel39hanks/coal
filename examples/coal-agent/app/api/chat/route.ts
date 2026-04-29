@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { tools } from '@/lib/tools';
 import { executeTool, setSessionWallet } from '@/lib/tool-executor';
+import { getZeroGComputeApiKey, clearZeroGTokenCache } from '@/lib/0g-token';
 
 interface FunctionToolCall {
   id: string;
@@ -87,7 +88,22 @@ const MAX_TOOL_ROUNDS = 8;
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const baseUrl = process.env.OPENAI_BASE_URL;
+  const isZeroGCompute = !!baseUrl && (baseUrl.includes('integratenetwork.work') || baseUrl.includes('/v1/proxy') || !!process.env.ZERO_G_COMPUTE_PROVIDER);
+
+  // 0G Compute API keys expire every ~24h. Refresh via broker on each cold start /
+  // when the cache is stale. For OpenAI / non-0G endpoints we just use OPENAI_API_KEY.
+  let apiKey: string;
+  try {
+    apiKey = isZeroGCompute
+      ? await getZeroGComputeApiKey()
+      : (process.env.OPENAI_API_KEY || '');
+  } catch (err) {
+    return Response.json(
+      { error: `Failed to get AI provider key: ${err instanceof Error ? err.message : 'unknown'}` },
+      { status: 500 }
+    );
+  }
   if (!apiKey) {
     return Response.json({ error: 'AI provider API key not configured' }, { status: 500 });
   }
@@ -103,7 +119,7 @@ export async function POST(req: Request) {
   // Support any OpenAI-compatible endpoint (0G Compute, Alibaba Cloud, OpenAI, etc.)
   const openai = new OpenAI({
     apiKey,
-    ...(process.env.OPENAI_BASE_URL && { baseURL: process.env.OPENAI_BASE_URL }),
+    ...(baseUrl && { baseURL: baseUrl }),
   });
   const model = process.env.OPENAI_MODEL || 'qwen3.6-plus';
 
@@ -119,15 +135,32 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       }
 
+      let openaiClient = openai;
+      const createCompletion = async () => openaiClient.chat.completions.create({
+        model,
+        messages,
+        tools,
+        tool_choice: 'auto',
+        stream: true,
+      });
+
       try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-          const completion = await openai.chat.completions.create({
-            model,
-            messages,
-            tools,
-            tool_choice: 'auto',
-            stream: true,
-          });
+          let completion;
+          try {
+            completion = await createCompletion();
+          } catch (err) {
+            // Detect 0G expired-token error and retry once with a fresh token
+            const msg = err instanceof Error ? err.message : String(err);
+            if (isZeroGCompute && /session token expired|token expired|400/i.test(msg)) {
+              clearZeroGTokenCache();
+              const freshKey = await getZeroGComputeApiKey();
+              openaiClient = new OpenAI({ apiKey: freshKey, ...(baseUrl && { baseURL: baseUrl }) });
+              completion = await createCompletion();
+            } else {
+              throw err;
+            }
+          }
 
           let assistantContent = '';
           const toolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map();

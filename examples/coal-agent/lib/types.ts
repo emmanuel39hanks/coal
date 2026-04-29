@@ -60,7 +60,7 @@ export function isSafeImageUrl(url: unknown): url is string {
   if (!isSafeUrl(url)) return false;
   try {
     const parsed = new URL(url);
-    const allowed = ['utfs.io', 'uploadthing.com', 'lh3.googleusercontent.com'];
+    const allowed = ['utfs.io', 'uploadthing.com', 'lh3.googleusercontent.com', 'images.unsplash.com', 'unsplash.com', 'i.imgur.com', 'imgur.com', 'cdn.shopify.com', 'res.cloudinary.com'];
     return allowed.some(h => parsed.hostname === h || parsed.hostname.endsWith(`.${h}`));
   } catch {
     return false;
