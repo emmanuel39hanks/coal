@@ -10,7 +10,6 @@ import { parseUnits, encodeFunctionData } from 'viem';
 import FiatOnramp from './FiatOnramp';
 import Spinner from './Spinner';
 import { useToast } from './Toast';
-import { ChainSelector, type ChainKey } from './ChainSelector';
 import { getSettlementToken, EXPLORER_URL } from '@/lib/chain';
 import TokenSelector from './TokenSelector';
 import {
@@ -112,14 +111,6 @@ export default function PaymentView({
     const [autoResumingCardSettlement, setAutoResumingCardSettlement] = useState(false);
     const [autoResumeFundingIntentId, setAutoResumeFundingIntentId] = useState<string | null>(null);
     const [recurringConsentAccepted, setRecurringConsentAccepted] = useState(false);
-    // World-3: settlement chain selector. Defaults to 'base' so the existing
-    // Base-only flow is preserved unless the payer picks World Chain.
-    // Once the session is created (checkoutSessionId is set), this is locked.
-    const [settlementChain, setSettlementChain] = useState<ChainKey>(() => {
-        // For 'session' type, the session may already carry a chain — prefer it.
-        const preset = (data as unknown as { chain?: string }).chain;
-        return preset === 'worldchain' ? 'worldchain' : 'base';
-    });
     const payerInfoConfig = normalizePayerInfoConfig(data.payerInfoConfig);
     const [payerInfo, setPayerInfo] = useState(() => ({
         ...normalizePayerInfoValues(data.payerInfo),
@@ -461,8 +452,6 @@ export default function PaymentView({
                     customerEmail: payerInfoPayload.email || undefined,
                     subscriptionConsentAccepted: isRecurringProduct ? recurringConsentAccepted : undefined,
                     payerInfo: hasPayerInfoFields ? payerInfoPayload : undefined,
-                    // World-3: carry the chain the payer selected.
-                    chain: settlementChain,
                 }),
             });
             if (!res.ok) {
@@ -1266,17 +1255,6 @@ export default function PaymentView({
                                     </p>
                                 </div>
                             </div>
-                        </div>
-                    )}
-
-                    {/* World-3: Settlement chain selector. Locked once the session is created. */}
-                    {status !== 'verifying' && type === 'link' && (
-                        <div className="mb-4">
-                            <ChainSelector
-                                value={settlementChain}
-                                onChange={setSettlementChain}
-                                disabled={Boolean(checkoutSessionId) || status !== 'idle'}
-                            />
                         </div>
                     )}
 

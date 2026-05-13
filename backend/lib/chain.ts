@@ -1,13 +1,37 @@
 import { base, baseSepolia } from 'viem/chains';
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, http, fallback } from 'viem';
 
 export const IS_TESTNET = process.env.CHAIN_ENV === 'testnet';
 export const CHAIN = IS_TESTNET ? baseSepolia : base;
 export const CHAIN_ID = CHAIN.id;
 
-export const RPC_URL = IS_TESTNET
-  ? `https://base-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
-  : `https://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`;
+const ALCHEMY_RPC = process.env.ALCHEMY_API_KEY
+  ? (IS_TESTNET
+      ? `https://base-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
+      : `https://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`)
+  : null;
+
+const SECONDARY_RPC = process.env.BASE_RPC_FALLBACK_URL || null;
+
+const PUBLIC_RPC = IS_TESTNET ? 'https://sepolia.base.org' : 'https://mainnet.base.org';
+
+// Build transport list in priority order. Always include the public Base
+// RPC last so calls succeed even if both Alchemy and the optional
+// secondary provider are unavailable or rate-limited.
+const transports = [
+  ...(ALCHEMY_RPC ? [http(ALCHEMY_RPC)] : []),
+  ...(SECONDARY_RPC ? [http(SECONDARY_RPC)] : []),
+  http(PUBLIC_RPC),
+];
+
+// Legacy export: still used by code that builds bespoke wallet clients
+// with a single URL. New consumers should prefer `walletTransport`.
+export const RPC_URL = ALCHEMY_RPC || SECONDARY_RPC || PUBLIC_RPC;
+
+// Shared transport with automatic fallback + retry. Use this for both
+// read and write clients so a single provider outage doesn't take down
+// the payment path.
+export const walletTransport = fallback(transports, { retryCount: 2 });
 
 export const EXPLORER_URL = IS_TESTNET ? 'https://sepolia.basescan.org' : 'https://basescan.org';
 const DEFAULT_USDC_ADDRESS = (IS_TESTNET
@@ -51,5 +75,5 @@ export function getNativeFundingToken() {
 
 export const publicClient = createPublicClient({
   chain: CHAIN,
-  transport: http(RPC_URL),
+  transport: walletTransport,
 });

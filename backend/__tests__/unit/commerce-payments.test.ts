@@ -24,6 +24,7 @@ vi.mock('viem/accounts', () => ({
 vi.mock('@/lib/chain', () => ({
   CHAIN: { id: 8453, name: 'Base' },
   RPC_URL: 'https://base-mainnet.g.alchemy.com/v2/test',
+  walletTransport: 'mocked-fallback-transport',
 }));
 
 // Must set env BEFORE importing the module

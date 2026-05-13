@@ -15,7 +15,7 @@
  */
 
 import { base, baseSepolia, worldchain, worldchainSepolia } from 'viem/chains';
-import { createPublicClient, http, type Chain, type PublicClient } from 'viem';
+import { createPublicClient, http, fallback, type Chain, type PublicClient, type Transport } from 'viem';
 
 export type SupportedChainKey = 'base' | 'worldchain';
 
@@ -53,9 +53,22 @@ const IS_TESTNET = process.env.CHAIN_ENV === 'testnet';
 const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY || '';
 
 function baseRpc(): string {
+    if (!ALCHEMY_KEY) {
+        return IS_TESTNET ? 'https://sepolia.base.org' : 'https://mainnet.base.org';
+    }
     return IS_TESTNET
         ? `https://base-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
         : `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`;
+}
+
+function baseTransport(): Transport {
+    const primary = baseRpc();
+    const secondary = process.env.BASE_RPC_FALLBACK_URL;
+    const publicRpc = IS_TESTNET ? 'https://sepolia.base.org' : 'https://mainnet.base.org';
+    const transports = [http(primary)];
+    if (secondary && secondary !== primary) transports.push(http(secondary));
+    if (publicRpc !== primary && publicRpc !== secondary) transports.push(http(publicRpc));
+    return fallback(transports, { retryCount: 2 });
 }
 
 function worldRpc(): string {
@@ -128,7 +141,8 @@ export function getPublicClient(key: SupportedChainKey): PublicClient {
     let client = publicClients.get(key);
     if (!client) {
         const cfg = CHAINS[key];
-        client = createPublicClient({ chain: cfg.chain, transport: http(cfg.rpcUrl) });
+        const transport = key === 'base' ? baseTransport() : http(cfg.rpcUrl);
+        client = createPublicClient({ chain: cfg.chain, transport });
         publicClients.set(key, client);
     }
     return client;

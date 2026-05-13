@@ -68,7 +68,10 @@ const NODE_ENV = readEnv('NODE_ENV') || 'development';
 const isProduction = NODE_ENV === 'production';
 
 const DATABASE_URL = requireEnv('DATABASE_URL', 'database connection');
-const ALCHEMY_API_KEY = requireEnv('ALCHEMY_API_KEY', 'Base RPC access');
+// Alchemy is preferred but no longer required — the publicClient and
+// walletTransport in lib/chain.ts now fall back to BASE_RPC_FALLBACK_URL
+// and the public Base RPC if Alchemy is missing or rate-limited.
+const ALCHEMY_API_KEY = readEnv('ALCHEMY_API_KEY') || '';
 
 validateAllOrNone('Privy auth', ['PRIVY_APP_ID', 'PRIVY_APP_SECRET'], {
     absent: isProduction ? 'error' : 'warn',
@@ -195,7 +198,7 @@ if (errors.length) {
 
 export const env = {
     DATABASE_URL: DATABASE_URL!,
-    ALCHEMY_API_KEY: ALCHEMY_API_KEY!,
+    ALCHEMY_API_KEY,
     CRON_SECRET: readEnv('CRON_SECRET') || '',
     FRONTEND_URL: readEnv('NEXT_PUBLIC_FRONTEND_URL') || 'http://localhost:3000',
     APP_URL: readEnv('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000',

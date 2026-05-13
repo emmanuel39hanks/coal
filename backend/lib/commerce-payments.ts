@@ -1,6 +1,6 @@
-import { createWalletClient, http, parseAbi } from 'viem';
+import { createWalletClient, parseAbi } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { CHAIN, RPC_URL } from '@/lib/chain';
+import { CHAIN, walletTransport } from '@/lib/chain';
 
 // AuthCaptureEscrow on Base mainnet — confirmed address
 export const COMMERCE_PAYMENTS_ADDRESS = '0xBdEA0D1bcC5966192B070Fdf62aB4EF5b4420cff' as const;
@@ -35,7 +35,7 @@ function getOperatorClient() {
   return createWalletClient({
     account,
     chain: CHAIN,
-    transport: http(RPC_URL),
+    transport: walletTransport,
   });
 }
 
