@@ -31,6 +31,8 @@ dist/
 /0g/
 /team/
 /demo/
+/0G-SETUP.md
+/DEPLOYMENT.md
 /package.json
 /package-lock.json
 /scripts/carbon-snippet.mjs

@@ -2,29 +2,45 @@
 
 > **0G APAC Hackathon 2026 — Track 3: Agentic Economy**
 >
-> Payment infrastructure for the AI agent economy, built on 0G.
-> Live at [usecoal.xyz](https://usecoal.xyz) | API at [api.usecoal.xyz](https://api.usecoal.xyz)
+> Payments for humans **and** AI agents — one checkout, real USDC on Base, verifiable receipts on 0G.
+
+| Surface | URL |
+|---|---|
+| Marketing site | [usecoal.xyz](https://usecoal.xyz) |
+| Public API | [api.usecoal.xyz](https://api.usecoal.xyz) |
+| Hosted checkout | [usecoal.xyz/pay/...](https://usecoal.xyz) |
+| Live AI-agent demo (Claude buying ebooks) | [agent.usecoal.xyz](https://agent.usecoal.xyz) |
+| Demo merchant store (with download flow) | [store.usecoal.xyz](https://store.usecoal.xyz) |
+| MCP server (multi-tenant) | [mcp.usecoal.xyz/api/mcp](https://mcp.usecoal.xyz/api/mcp) |
+| x402 oracle paywall demo | [oracle.usecoal.xyz/api/price/ETH](https://oracle.usecoal.xyz/api/price/ETH) |
+| Live 0G health (all 5 components) | [api.usecoal.xyz/api/0g/health](https://api.usecoal.xyz/api/0g/health) |
+| Docs site | [usecoal.xyz/docs](https://usecoal.xyz/docs) |
+| React SDK on npm | [`coal-react`](https://www.npmjs.com/package/coal-react) v0.4.1 |
 
 **Coal by Schema Labs is a programmable commerce platform for hosted checkout, merchant APIs, payment links, paywalls, recurring billing, and agentic commerce flows.**
 
 Coal is built around a simple split:
 
-- `Coal` handles checkout orchestration, merchant operations, payer-info capture, recurring billing, and settlement flows on Base.
+- `Coal` handles checkout orchestration, merchant operations, payer-info capture, recurring billing, and dual-protocol agent settlement flows on Base.
 - `0G` adds the sidecar layer for artifact storage, receipt proof anchoring, merchant memory, and AI commerce endpoints.
 
 This repo is an active product branch, not a tiny demo. The current codebase includes:
 
-- hosted checkout and payment links
+- hosted checkout and payment links (humans)
+- **dual-protocol agent payments** — Coinbase x402 (v1) and OKX APP (v2) on the same `/verify` endpoint
+- **MCP server** for Claude Desktop / Cursor / ChatGPT agents (multi-tenant, per-request credentials)
 - merchant dashboard and onboarding
 - payer-info collection at checkout
 - recurring billing foundations
-- widget/embed and SDK surfaces
+- widget/embed surfaces + `coal-react` SDK on npm
 - docs site + OpenAPI playground
-- live 0G storage / chain / compute integration
+- demo store with verified-payment download flow
+- live agent demo running on 0G Compute (Qwen)
+- live 0G storage / chain / compute / KV / DA integration
 
 ## 0G Integration — 5 Components on Mainnet
 
-Coal uses **five** 0G network components. **All live on 0G mainnet.** See [`0G-SETUP.md`](./0G-SETUP.md) for the full integration guide.
+Coal uses **five** 0G network components. **All live on 0G mainnet.** Full setup walkthrough lives on the docs site at [usecoal.xyz/docs](https://usecoal.xyz/docs).
 
 ### 1. 0G Storage — Immutable Artifact Layer
 Every payment receipt, merchant profile, and encrypted memory snapshot is published to 0G Storage as an immutable, content-addressed artifact. AI agents and apps can discover merchants and verify payments by reading these artifacts directly from the decentralized storage network.
@@ -94,7 +110,7 @@ flowchart TB
         ZGD["<b>5. 0G DA</b><br/><small>Payment event streaming<br/>gRPC sidecar<br/>6 event types</small>"]
     end
 
-    BASE["<b>Base (Coinbase L2)</b><br/><small>USDC Settlement via Alchemy RPC</small>"]
+    BASE["<b>Base (Coinbase L2)</b><br/><small>USDC settlement<br/>RPC fallback: Alchemy → mainnet.base.org</small>"]
 
     M -->|API| API
     C -->|Checkout| CHK
@@ -116,6 +132,60 @@ flowchart TB
     style BASE fill:#1d4ed8,stroke:#60a5fa,color:#bfdbfe
     style Actors fill:#f8fafc,stroke:#cbd5e1,color:#1e293b
 ```
+
+## Agent Payments — Dual-Protocol (x402 + OKX APP)
+
+Coal's paywall `/verify` endpoint accepts **both** payment envelopes on the same URL — Coinbase's x402 (v1) and OKX's APP (v2). The dispatch picks the right settlement path based on the header version:
+
+- **x402 v1** — Coinbase agent payment standard, EIP-3009 `transferWithAuthorization` on Base USDC. Gasless for the agent.
+- **APP v2** — OKX's agent payment whitepaper format. Same EIP-3009 wire underneath, different envelope.
+
+Implementation:
+
+- [`backend/lib/x402-settle.ts`](./backend/lib/x402-settle.ts) — x402 v1 settlement
+- [`backend/lib/app-settle.ts`](./backend/lib/app-settle.ts) — OKX APP v2 settlement
+- [`backend/app/api/paywalls/[id]/verify/route.ts`](./backend/app/api/paywalls/[id]/verify/route.ts) — version dispatch
+
+Try the live x402 paywall on the oracle demo:
+
+```bash
+curl -i https://oracle.usecoal.xyz/api/price/ETH
+# returns 402 Payment Required with the X-PAYMENT challenge
+```
+
+## MCP Server (Claude Desktop / Cursor / ChatGPT)
+
+Coal ships a multi-tenant MCP server at [`mcp.usecoal.xyz/api/mcp`](https://mcp.usecoal.xyz/api/mcp). 13 tools cover the full agent-commerce loop:
+
+- `discover_merchants`, `search_products`, `get_merchant_profile`
+- `query_merchant_memory` (TEE-backed natural-language Q&A)
+- `check_paywall`, `create_checkout`, `get_checkout_status`
+- `verify_receipt` (3-step proof trail: Base TX → 0G Storage → 0G Chain)
+- `get_0g_health`, `agent_wallet_status`
+- `pay_merchant` (USDC on Base via EIP-3009, gasless)
+- `download_product` (verifies on-chain payment, returns signed download URL)
+- `setup_instructions`
+
+The server holds **no long-lived secrets** — every user passes their own wallet key via `X-Coal-Agent-Key` and their own Coal API key via `X-Coal-Api-Key` on each request.
+
+```json
+// Claude Desktop config
+{
+  "mcpServers": {
+    "coal": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.usecoal.xyz/api/mcp",
+        "--header",
+        "X-Coal-Agent-Key:0xYOUR_WALLET_PRIVATE_KEY"
+      ]
+    }
+  }
+}
+```
+
+Source: [`examples/coal-mcp-server/`](./examples/coal-mcp-server/). Docs: [`frontend/app/docs/sdk/mcp/`](./frontend/app/docs/sdk/mcp/).
 
 ## What Is Live
 
@@ -146,23 +216,30 @@ flowchart TB
 
 | Metric | Value |
 |--------|-------|
-| Test suite | 512 tests across 33 files |
-| 0G components | 5 on mainnet (Storage, Chain, Compute, KV, DA) |
-| 0G contract | [`0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b`](https://chainscan.0g.ai/address/0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b) |
-| Network | Base mainnet (USDC) + 0G mainnet (chain ID 16661) |
-| Live deployment | [usecoal.xyz](https://usecoal.xyz) |
-| API | [api.usecoal.xyz](https://api.usecoal.xyz) |
+| Test suite | 500+ tests across 35 files |
+| 0G components live on mainnet | 5 — Storage, Chain, Compute, KV, DA |
+| 0G receipt anchor (mainnet) | [`0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b`](https://chainscan.0g.ai/address/0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b) |
+| Base USDC (mainnet) | [`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`](https://basescan.org/address/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913) |
+| Networks | Base mainnet (USDC) + 0G mainnet (chain ID 16661) |
+| Agent-payment protocols supported | Coinbase x402 (v1) + OKX APP (v2) |
+| MCP tools | 13 |
+| React SDK | [`coal-react`](https://www.npmjs.com/package/coal-react) v0.4.1 |
+| Live demo (Claude buying ebooks) | [agent.usecoal.xyz](https://agent.usecoal.xyz) |
 | Live 0G health | [api.usecoal.xyz/api/0g/health](https://api.usecoal.xyz/api/0g/health) |
 
 ## Quick Start for Judges
 
-1. **Try the live app:** Visit [usecoal.xyz](https://usecoal.xyz), sign in with Privy, explore the merchant console
-2. **Verify all 5 0G components live:** `curl https://api.usecoal.xyz/api/0g/health` — expect `status: "ok"` with storage, chain, compute, kv, and da all `ok: true`
-3. **See 0G integration in the dashboard:** Go to Console → 0G to see all 5 components with live mainnet status, activity feed, and publish controls
-4. **Verify a receipt:** Visit `/verify/[session-id]` to see the full 3-step 0G proof trail (Base TX → 0G Storage → 0G Chain) for any payment
-5. **Try autonomous agent commerce:** Visit [coal-agent.vercel.app](https://coal-agent.vercel.app), fund a fresh agent wallet, and ask the agent to buy something
-6. **Run an example locally:** Clone the repo, `cd examples/coal-react-checkout`, `cp .env.example .env.local`, fill in your API key, `npm install && npm run dev`
-7. **Read the full 0G setup guide:** See [`0G-SETUP.md`](./0G-SETUP.md) for how to configure all 5 components from scratch
+1. **Watch an agent buy something autonomously:** open [agent.usecoal.xyz](https://agent.usecoal.xyz), fund a fresh agent wallet from the on-screen prompt, and ask Claude to buy any of the listed merchant products. End-to-end Base USDC payment + on-chain receipt + product download, no human in the loop.
+2. **Verify all 5 0G components live on mainnet:**
+   ```bash
+   curl -s https://api.usecoal.xyz/api/0g/health | python3 -m json.tool
+   ```
+   Expect `status: "ok"` with `storage`, `chain`, `compute`, `kv`, and `da` all `ok: true`.
+3. **Verify a receipt's 3-step proof trail:** visit `/verify/[session-id]` on any paid checkout — shows Base TX → 0G Storage root → 0G Chain anchor with explorer links to each.
+4. **Connect the MCP server to your own agent:** paste the config snippet from the [MCP Server](#mcp-server-claude-desktop--cursor--chatgpt) section above into Claude Desktop, restart, and the 13 Coal tools show up.
+5. **Try the dual-protocol paywall:** `curl -i https://oracle.usecoal.xyz/api/price/ETH` returns a 402 with the `X-PAYMENT` challenge, then resubmit with an x402 v1 OR an OKX APP v2 payment header and the same endpoint settles it.
+6. **Run an example locally:** clone the repo, `cd examples/coal-react-checkout`, `cp .env.example .env.local`, fill in your API key, `npm install && npm run dev`. See also `examples/demo-store/` for the merchant-side flow with verified downloads.
+7. **Browse the dashboard:** sign in at [usecoal.xyz](https://usecoal.xyz) with Privy → Console → 0G to see all 5 components with live mainnet status, activity feed, and publish controls.
 
 ## Core Thesis
 
@@ -181,11 +258,16 @@ coal/
 │   └── lib/0g/       # All 5 0G component implementations (Storage, Chain, Compute, KV, DA)
 ├── frontend/         # Next.js UI app, docs site, dashboard, checkout surfaces
 ├── contracts/        # CoalReceiptAnchor V2 Solidity contract + Foundry project
+├── coal-mini-app/    # World App mini-app frontend (separate deploy)
 ├── packages/         # JS + React SDK surfaces
-├── examples/         # Runnable integrations: React checkout, AgentKit action provider, demo-store
-├── scripts/          # Deploy, sync, promotion scripts
-├── 0G-SETUP.md       # Full setup guide for all 5 0G components
-├── DEPLOYMENT.md     # Production deployment checklist
+├── examples/         # Runnable integrations:
+│   ├── coal-react-checkout/   # React checkout demo
+│   ├── coal-agent/            # Live AI-agent demo (Claude → Coal merchants)
+│   ├── coal-mcp-server/       # Multi-tenant MCP server
+│   ├── coal-oracle-agent/     # x402 oracle paywall demo
+│   ├── demo-store/            # Storefront with verified-payment download flow
+│   └── agentkit-action/       # AgentKit action provider
+├── scripts/          # Deploy + sync scripts
 └── README.md         # You are here
 ```
 
@@ -246,10 +328,11 @@ If you want the quickest demo path, start with [coal-react-checkout](/Users/emma
 
 ## Authentication Model
 
-Coal has two auth surfaces:
+Coal has three auth surfaces:
 
-- Merchant API requests use `x-api-key` with `coal_live_*` keys
-- Dashboard and `/api/console/*` routes use Privy Bearer JWTs
+- **Merchant API requests** use `x-api-key` with `coal_live_*` keys
+- **Dashboard and `/api/console/*` routes** use Privy Bearer JWTs
+- **MCP server (per-request)** — each tool call carries the caller's own credentials in headers: `X-Coal-Agent-Key` (wallet private key, used by `pay_merchant` / `agent_wallet_status`) and `X-Coal-Api-Key` (Coal API key, used by `create_checkout` / `query_merchant_memory`). The server holds no long-lived secrets.
 
 Legacy Better Auth has been retired from runtime use.
 
@@ -268,7 +351,7 @@ Coal settles to the configured Base settlement token.
 - Node.js `24+`
 - npm
 - Neon or another Postgres database
-- Alchemy API key for Base
+- (Optional) Alchemy API key for Base — Coal falls back to a public Base RPC if you skip this, so you can run locally without one
 - Privy app credentials
 
 ### 1. Install dependencies
@@ -294,12 +377,15 @@ Then fill in the required values in:
 Important backend values:
 
 - `DATABASE_URL`
-- `ALCHEMY_API_KEY`
+- `ALCHEMY_API_KEY` *(optional — see RPC fallback note below)*
+- `BASE_RPC_FALLBACK_URL` *(optional — second-tier RPC, e.g. Coinbase Developer Platform or QuickNode)*
 - `PRIVY_APP_ID`
 - `PRIVY_APP_SECRET`
 - `NEXT_PUBLIC_FRONTEND_URL`
 - `NEXT_PUBLIC_API_URL`
 - `CRON_SECRET`
+
+**Base RPC fallback chain.** Coal wraps the Base RPC in a viem `fallback()` transport so a single provider outage cannot stop payments. Priority order: `ALCHEMY_API_KEY` (if set) → `BASE_RPC_FALLBACK_URL` (if set) → `https://mainnet.base.org` (always). The local public node is the floor so the app boots even without an Alchemy key. See [`backend/lib/chain.ts`](./backend/lib/chain.ts).
 
 Important frontend values:
 
@@ -366,7 +452,7 @@ npm run 0g:storage:benchmark
 
 0G is opt-in. Coal still works without it.
 
-For complete setup instructions for all 5 components (Storage, Chain, Compute, KV, DA), see **[`0G-SETUP.md`](./0G-SETUP.md)**.
+For complete setup instructions for all 5 components (Storage, Chain, Compute, KV, DA), see the docs site at [usecoal.xyz/docs](https://usecoal.xyz/docs).
 
 Minimum environment variables to enable 0G:
 
@@ -429,25 +515,26 @@ Key files:
 
 ## Deployment
 
-Coal deploys as two Vercel projects from the same repo:
+Coal deploys as **six** Vercel projects from the same monorepo, each with its own `rootDirectory`:
 
-- backend root directory: `backend`
-- frontend root directory: `frontend`
+| Vercel project | Domain | Root |
+|---|---|---|
+| `coal` | [www.usecoal.xyz](https://www.usecoal.xyz) | `frontend/` |
+| `coal-backend` | [api.usecoal.xyz](https://api.usecoal.xyz) | `backend/` |
+| `coal-agent` | [agent.usecoal.xyz](https://agent.usecoal.xyz) | `examples/coal-agent/` |
+| `coal-mcp-server` | [mcp.usecoal.xyz](https://mcp.usecoal.xyz) | `examples/coal-mcp-server/` |
+| `coal-oracle-agent` | [oracle.usecoal.xyz](https://oracle.usecoal.xyz) | `examples/coal-oracle-agent/` |
+| `coal-demo-store` | [store.usecoal.xyz](https://store.usecoal.xyz) | `examples/demo-store/` |
 
-Use [DEPLOYMENT.md](/Users/emmanuel/Documents/schemalabs/coal/DEPLOYMENT.md) for the full production checklist.
+Helper scripts:
+
+- [`scripts/check-all.sh`](./scripts/check-all.sh) — backend + frontend typecheck + tests + build sweep.
+- [`scripts/deploy.sh`](./scripts/deploy.sh) — local prebuild + push to Vercel for any subset of the six projects.
 
 ## Branch Strategy
 
-- `main` is production and points at Base mainnet + 0G mainnet.
-- `dev` is the working branch.
-- Vercel production envs belong to `main`.
-
-Useful scripts:
-
-- [`scripts/check-all.sh`](./scripts/check-all.sh) runs the full backend + frontend verification sweep.
-- [`scripts/deploy.sh`](./scripts/deploy.sh) local prebuild + push to Vercel for `frontend`, `backend`, `checkout`, `agent`.
-- [`scripts/push-dev.sh`](./scripts/push-dev.sh) checks and pushes `dev`.
-- [`scripts/promote-dev-to-main.sh`](./scripts/promote-dev-to-main.sh) fast-forwards `main` from `dev` after checks pass.
+- `main` is the only branch on the public repo. Vercel production targets `main`.
+- All development happens through the public repo's `main` (PRs merge there).
 
 ## License
 
