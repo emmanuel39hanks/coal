@@ -41,11 +41,29 @@ export async function GET(
     const callerAddress = url.searchParams.get('address');
 
     if (!callerAddress) {
-        // No address provided — return 402 with x402 payment headers
+        const verifyUrl = `${COAL_API_URL}/api/paywalls/${PAYWALL_ID}/verify`;
+        const resourceUrl = `${url.origin}/api/price/${symbol}`;
+        // x402 standard 402 response — `accepts` array lets any x402 client pay
         return new Response(
             JSON.stringify({
+                x402Version: 1,
+                accepts: [
+                    {
+                        scheme: 'exact',
+                        network: 'eip155:8453',
+                        maxAmountRequired: '10000', // 0.01 USDC in base units (6 decimals)
+                        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+                        payTo: MERCHANT_PAYOUT,
+                        resource: resourceUrl,
+                        description: `Price data for ${symbol.toUpperCase()}`,
+                        mimeType: 'application/json',
+                        maxTimeoutSeconds: 60,
+                        extra: { name: 'USD Coin', version: '2' },
+                        verifyUrl,
+                    },
+                ],
                 error: 'Payment required',
-                message: `Price data for ${symbol.toUpperCase()} costs $0.01 per call. Send payment via Coal's x402 paywall, then retry with ?address=YOUR_WALLET.`,
+                message: `Price data for ${symbol.toUpperCase()} costs $0.01 per call. POST X-PAYMENT to verifyUrl per x402, then retry with ?address=YOUR_WALLET.`,
                 paywall: {
                     id: PAYWALL_ID,
                     price: '0.01',
@@ -53,25 +71,19 @@ export async function GET(
                     network: 'base',
                     pricingModel: 'per_call',
                     payTo: MERCHANT_PAYOUT,
-                    verifyUrl: `${COAL_API_URL}/api/paywalls/${PAYWALL_ID}/verify`,
+                    verifyUrl,
                 },
-                howToPay: [
-                    `1. Create a checkout: POST ${COAL_API_URL}/api/checkouts { amount: 0.01, metadata: { paywallId: "${PAYWALL_ID}", payerAddress: "YOUR_WALLET" } }`,
-                    `2. Pay the checkout URL with USDC on Base`,
-                    `3. Retry: GET /api/price/${symbol}?address=YOUR_WALLET`,
-                ],
             }),
             {
                 status: 402,
                 headers: {
                     'content-type': 'application/json',
-                    // x402 standard headers
                     'x-payment-required': 'true',
                     'x-payment-amount': '0.01',
                     'x-payment-currency': 'USDC',
                     'x-payment-network': 'base',
                     'x-payment-address': MERCHANT_PAYOUT,
-                    'x-payment-verify': `${COAL_API_URL}/api/paywalls/${PAYWALL_ID}/verify`,
+                    'x-payment-verify': verifyUrl,
                 },
             },
         );

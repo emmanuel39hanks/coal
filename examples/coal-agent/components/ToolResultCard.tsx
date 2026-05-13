@@ -33,6 +33,31 @@ interface ToolResultCardProps {
 }
 
 export function ToolResultCard({ toolName, data }: ToolResultCardProps) {
+  // x402 discovery: a 402 response is a NORMAL step in the protocol, not a failure.
+  // Render it as a "Payment Required" card instead of a red error.
+  const status = (data.status as number | undefined) ?? 0;
+  const paywall = data.paywall as Record<string, unknown> | undefined;
+  const isX402Discovery = status === 402 || (paywall && (paywall.verifyUrl || paywall.payTo));
+  if (isX402Discovery && toolName === 'fetch_paywall_content') {
+    const price = String(paywall?.price ?? data.amount ?? '?');
+    const currency = String(paywall?.currency ?? 'USDC');
+    const payTo = String(paywall?.payTo ?? '');
+    const verifyUrl = String(paywall?.verifyUrl ?? '');
+    return (
+      <div className="border border-[var(--accent)]/20 rounded-2xl bg-[var(--accent)]/5 overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between border-b border-[var(--accent)]/10">
+          <span className="text-sm font-bold text-[var(--accent)]">Payment Required (x402)</span>
+          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[var(--accent)]/15 text-[var(--accent)] font-mono font-semibold">402</span>
+        </div>
+        <div className="px-4 py-3 text-xs space-y-1.5">
+          <div className="flex justify-between"><span className="text-[var(--muted)]">Price</span><span className="font-black text-[var(--brand-navy)]">${price} {currency}</span></div>
+          {payTo && <div className="flex justify-between"><span className="text-[var(--muted)]">Pay to</span><span className="font-mono text-[var(--brand-navy)]">{payTo.slice(0, 6)}...{payTo.slice(-4)}</span></div>}
+          {verifyUrl && <div className="flex justify-between gap-3"><span className="text-[var(--muted)] shrink-0">Verify URL</span><span className="font-mono text-[var(--brand-navy)] truncate text-right">{verifyUrl.replace(/^https?:\/\//, '')}</span></div>}
+        </div>
+      </div>
+    );
+  }
+
   if (data.error) {
     return (
       <div className="border border-red-200 rounded-2xl bg-red-50 overflow-hidden">
@@ -134,6 +159,83 @@ export function ToolResultCard({ toolName, data }: ToolResultCardProps) {
     }
     case 'execute_payment':
       card = <AgentPaymentCard data={data} />; break;
+    case 'pay_x402_paywall': {
+      const txHash = String(data.txHash || '');
+      const explorerUrl = String(data.explorerUrl || (txHash ? `https://basescan.org/tx/${txHash}` : ''));
+      const payTo = String(data.payTo || '');
+      const payer = String(data.payer || '');
+      const network = String(data.network || 'eip155:8453');
+      const cached = Boolean(data.cached);
+      card = (
+        <div className={`border rounded-2xl overflow-hidden shadow-sm ${cached ? 'border-amber-200 bg-amber-50' : 'border-[var(--accent)]/20 bg-white'}`}>
+          <div className={`px-4 py-3 flex items-center justify-between border-b ${cached ? 'border-amber-100' : 'border-black/5'}`}>
+            <span className={`text-sm font-bold ${cached ? 'text-amber-800' : 'text-[var(--brand-navy)]'}`}>
+              {cached ? 'Cached Access — No New Charge' : 'x402 Payment Settled'}
+            </span>
+            <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold ${cached ? 'bg-amber-100 text-amber-700' : 'bg-[var(--accent)]/10 text-[var(--accent)]'}`}>
+              {cached ? 'idempotent · 0 gas' : 'EIP-3009 · gasless'}
+            </span>
+          </div>
+          <div className="px-4 py-3 text-xs space-y-1.5">
+            {cached ? (
+              <div className="text-[11px] text-amber-800 leading-relaxed">
+                This wallet already has access to this paywall (one-time pricing). The server returned 200 without settling a new on-chain payment. Wallet balance unchanged.
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between"><span className="text-[var(--muted)]">Amount</span><span className="font-black text-[var(--brand-navy)]">${String(data.amount || '?')} USDC</span></div>
+                {payer && <div className="flex justify-between"><span className="text-[var(--muted)]">Payer</span><span className="font-mono text-[var(--brand-navy)]">{payer.slice(0, 6)}...{payer.slice(-4)}</span></div>}
+                {payTo && <div className="flex justify-between"><span className="text-[var(--muted)]">Recipient</span><span className="font-mono text-[var(--brand-navy)]">{payTo.slice(0, 6)}...{payTo.slice(-4)}</span></div>}
+                <div className="flex justify-between"><span className="text-[var(--muted)]">Network</span><span className="font-mono text-[var(--brand-navy)]">{network}</span></div>
+                {txHash && (
+                  <div className="flex justify-between gap-3"><span className="text-[var(--muted)] shrink-0">Tx</span>
+                    <a href={explorerUrl} target="_blank" rel="noreferrer" className="font-mono text-[var(--accent)] truncate hover:underline">
+                      {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                    </a>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      );
+      break;
+    }
+    case 'fetch_paywall_content': {
+      const meta: Array<[string, string]> = [];
+      if (data.symbol) meta.push(['Symbol', String(data.symbol)]);
+      if (data.price !== undefined) meta.push(['Price', `$${Number(data.price).toLocaleString()}`]);
+      if (data.priceChangePercent24h !== undefined) {
+        const c = Number(data.priceChangePercent24h);
+        meta.push(['24h', `${c >= 0 ? '+' : ''}${c.toFixed(2)}%`]);
+      }
+      if (data.marketCap !== undefined) meta.push(['Market Cap', `$${(Number(data.marketCap) / 1e9).toFixed(2)}B`]);
+      if (data.volume24h !== undefined) meta.push(['24h Volume', `$${(Number(data.volume24h) / 1e9).toFixed(2)}B`]);
+      if (data.source) meta.push(['Source', String(data.source)]);
+      card = (
+        <div className="border border-black/5 rounded-2xl bg-white overflow-hidden shadow-sm">
+          <div className="px-4 py-3 flex items-center justify-between border-b border-black/5">
+            <span className="text-sm font-bold text-[var(--brand-navy)]">Paywall Content</span>
+            <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-mono font-semibold">200 OK</span>
+          </div>
+          {meta.length > 0 ? (
+            <div className="px-4 py-3 text-xs space-y-1.5">
+              {meta.map(([k, v]) => (
+                <div key={k} className="flex justify-between">
+                  <span className="text-[var(--muted)]">{k}</span>
+                  <span className="font-black text-[var(--brand-navy)]">{v}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <pre className="px-4 py-3 text-[10px] font-mono overflow-x-auto max-h-40 overflow-y-auto text-[var(--muted)]">
+              {JSON.stringify(data, null, 2)}
+            </pre>
+          )}
+        </div>
+      );
+      break;
+    }
     case 'get_agent_wallet':
       card = (
         <div className="border border-black/5 rounded-2xl bg-white overflow-hidden shadow-sm">

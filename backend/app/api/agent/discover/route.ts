@@ -31,6 +31,7 @@ export async function GET(request: Request) {
             id: true,
             name: true,
             image: true,
+            payoutAddress: true,
             products: {
                 where: { active: true },
                 select: { id: true, name: true, price: true, image: true, description: true },
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
             id: m.id,
             name: m.name,
             image: m.image,
+            payoutAddress: m.payoutAddress,
             productCount: m._count.products,
             paywallCount: m._count.paywalls,
             topProducts: m.products.map(p => ({

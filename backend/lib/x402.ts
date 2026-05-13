@@ -99,7 +99,79 @@ export function buildX402Headers(paywall: {
     return {
         'X-Payment-Required': 'true',
         'X-PAYMENT': encoded,
-        'Access-Control-Expose-Headers': 'X-PAYMENT, X-Payment-Required',
+        'X-Payment-Protocols': 'x402-v1, app-v2',
+        'Access-Control-Expose-Headers': 'X-PAYMENT, X-Payment-Required, X-Payment-Protocols',
+    };
+}
+
+/**
+ * Build a dual-protocol PaymentRequired response body that lists both
+ * Coinbase x402 (v1) and OKX APP (v2) options in a single `accepts[]` array.
+ *
+ * Per the OKX APP whitepaper + the okx/payments SDK, APP and x402 share the
+ * same wire format and the same EIP-3009 signature on Base USDC. The only
+ * differences:
+ *   1. v2 wraps the auth in an `accepted{}` block with `amount` in base units
+ *      (not "$X.YY"), while v1 uses `maxAmountRequired` as a dollar string.
+ *   2. v2 supports the `aggr_deferred` scheme for batched / deferred settlement.
+ *
+ * Coal advertises BOTH so any agent — Coinbase x402-native, OKX APP-native, or
+ * a future v2 client — can pay the same paywall. This is the multi-protocol
+ * compatibility play.
+ */
+export function buildDualProtocolBody(paywall: {
+    id: string;
+    price: { toString(): string };
+    currency: string;
+    name: string;
+    description?: string | null;
+    merchant: { payoutAddress: string | null };
+}, base: Record<string, unknown>) {
+    const token = getSettlementToken();
+    const recipient = paywall.merchant.payoutAddress;
+    if (!recipient) return base;
+
+    const priceUsd = paywall.price.toString();
+    const priceBaseUnits = Math.round(Number(priceUsd) * 10 ** token.decimals).toString();
+    const network = getCAIP2ChainId();
+    const verifyUrl = `${API_BASE_URL}/api/paywalls/${paywall.id}/verify`;
+
+    // v2 / APP-flavored accepts entries — emit alongside v1 so any client picks one.
+    const acceptsV2 = [
+        {
+            scheme: 'exact',
+            network,
+            asset: token.address,
+            amount: priceBaseUnits,
+            payTo: recipient,
+            resource: verifyUrl,
+            description: paywall.name,
+            mimeType: 'application/json',
+            maxTimeoutSeconds: 900,
+            extra: {
+                name: token.symbol === 'USDC' ? 'USD Coin' : token.symbol,
+                version: '2',
+            },
+        },
+        {
+            scheme: 'aggr_deferred',
+            network,
+            asset: token.address,
+            amount: priceBaseUnits,
+            payTo: recipient,
+            resource: verifyUrl,
+            description: paywall.name,
+            mimeType: 'application/json',
+            maxTimeoutSeconds: 900,
+        },
+    ];
+
+    return {
+        ...base,
+        // v2 envelope so APP-native agents can parse it natively
+        x402Version: 2,
+        protocols: ['x402-v1', 'app-v2'],
+        accepts: acceptsV2,
     };
 }
 

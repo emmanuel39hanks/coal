@@ -36,15 +36,15 @@ export const demoStoreProducts: DemoStoreProduct[] = [
         tags: ['book', 'digital', 'agentic-commerce'],
     },
     {
-        id: 'ds_0g_starter_kit',
-        name: '0G Integration Starter Kit',
-        price: 0.15,
+        id: 'ds_0g_cheatsheet',
+        name: "The 0G Builder's Cheatsheet",
+        price: 0.10,
         image:
             'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=800&q=80',
         description:
-            'Drop-in scaffolds for all 5 0G components (Storage, Chain, Compute, KV, DA) with tests.',
+            '6-page reference for shipping on 0G mainnet: Storage uploads, Chain anchoring, Compute sessions, network configs, and the patterns Coal uses in production. Real PDF download — instant access after payment.',
         badge: 'New',
-        tags: ['template', 'digital', '0g'],
+        tags: ['book', 'digital', '0g', 'reference'],
     },
     {
         id: 'ds_x402_cheatsheet',

@@ -7,12 +7,12 @@
  */
 
 const DEFAULT_API_URL = process.env.COAL_API_URL || 'https://api.usecoal.xyz';
-const API_KEY = process.env.COAL_API_KEY || '';
 
 interface FetchOptions {
     method?: string;
     body?: unknown;
-    auth?: boolean;
+    /** API key passed by the calling MCP user via tool args. Never falls back to a shared key. */
+    apiKey?: string;
     apiUrl?: string;
 }
 
@@ -23,7 +23,7 @@ async function coalFetch<T = unknown>(
     const {
         method = 'GET',
         body,
-        auth = false,
+        apiKey,
         apiUrl = DEFAULT_API_URL,
     } = options;
 
@@ -33,8 +33,8 @@ async function coalFetch<T = unknown>(
         'x-coal-sdk': 'coal-mcp-server',
     };
 
-    if (auth && API_KEY) {
-        headers['x-api-key'] = API_KEY;
+    if (apiKey) {
+        headers['x-api-key'] = apiKey;
     }
     if (body) {
         headers['content-type'] = 'application/json';
@@ -94,11 +94,13 @@ export async function getMerchantProfile(merchantId: string) {
 export async function queryMerchantMemory(params: {
     merchantId: string;
     question: string;
+    apiKey: string;
 }) {
+    const { apiKey, ...body } = params;
     return coalFetch('/api/agent/memory/query', {
         method: 'POST',
-        body: params,
-        auth: true,
+        body,
+        apiKey,
     });
 }
 
@@ -122,7 +124,9 @@ export async function createCheckout(params: {
     productName?: string;
     description?: string;
     metadata?: Record<string, unknown>;
+    apiKey: string;
 }) {
+    const { apiKey, ...body } = params;
     return coalFetch<{
         id: string;
         url: string;
@@ -132,8 +136,8 @@ export async function createCheckout(params: {
         expiresAt: string;
     }>('/api/checkouts', {
         method: 'POST',
-        body: params,
-        auth: true,
+        body,
+        apiKey,
     });
 }
 
@@ -149,7 +153,6 @@ export async function confirmPayment(params: {
     return coalFetch('/api/pay/confirm', {
         method: 'POST',
         body: params,
-        auth: false,
     });
 }
 

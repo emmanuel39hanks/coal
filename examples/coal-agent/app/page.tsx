@@ -12,7 +12,7 @@ export default function AgentChat() {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingTool, setPendingTool] = useState<string | null>(null);
-  const [agentWallet, setAgentWallet] = useState<{ walletId: string; address: string } | null>(null);
+  const [agentWallet, setAgentWallet] = useState<{ walletId: string; address: string; signature: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -44,6 +44,7 @@ export default function AgentChat() {
             .map((m) => ({ role: m.role, content: m.content })),
           walletId: agentWallet?.walletId,
           walletAddress: agentWallet?.address,
+          walletSignature: agentWallet?.signature,
         }),
       });
 

@@ -11,13 +11,23 @@ const USDC_ABI = parseAbi(['function transfer(address to, uint256 amount) return
 // Simple context for parent to read wallet info
 export function useAgentWalletContext() { return null; }
 
+/** A signed binding the server issues at wallet creation. Stored alongside walletId
+ * so the chat / pay / withdraw routes can verify the client isn't presenting a
+ * walletId they didn't earn. Without this, anyone who learns a walletId could
+ * drain it (the $5/tx cap doesn't stop iterative draining). */
+interface WalletBinding {
+  walletId: string;
+  address: string;
+  signature: string;
+}
+
 interface Props {
-  onWalletReady?: (wallet: { walletId: string; address: string }) => void;
+  onWalletReady?: (wallet: WalletBinding) => void;
 }
 
 export function AgentWallet({ onWalletReady }: Props) {
   const { address: userAddress, isConnected } = useAccount();
-  const [wallet, setWallet] = useState<{ walletId: string; address: string; balance: string } | null>(null);
+  const [wallet, setWallet] = useState<{ walletId: string; address: string; signature: string; balance: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
   const [tab, setTab] = useState<'fund' | 'withdraw' | 'info'>('fund');
@@ -35,30 +45,44 @@ export function AgentWallet({ onWalletReady }: Props) {
 
   const fetchWallet = useCallback(async () => {
     try {
-      // Check localStorage for existing wallet
+      // Check localStorage for existing wallet — must include the server-issued
+      // signature, otherwise it's an old client-side record from before the
+      // wallet-binding migration and we should mint a fresh wallet.
       const stored = localStorage.getItem('coal_agent_wallet');
-      let walletData: { walletId: string; address: string } | null = null;
+      let walletData: WalletBinding | null = null;
 
-      try { walletData = stored ? JSON.parse(stored) : null; } catch {}
+      try {
+        const parsed = stored ? JSON.parse(stored) : null;
+        if (parsed?.walletId && parsed?.address && parsed?.signature) {
+          walletData = parsed;
+        } else if (parsed?.walletId && parsed?.address) {
+          // Old format (pre-2026-05-01 security upgrade). The walletId is real
+          // but lacks the HMAC binding. We move it aside so the user can
+          // recover funds via support, and mint a fresh wallet.
+          localStorage.setItem('coal_agent_wallet_legacy', stored!);
+          localStorage.removeItem('coal_agent_wallet');
+          // eslint-disable-next-line no-console
+          console.warn('[Coal] Migrated legacy wallet entry. Funds in', parsed.address, 'are still in Privy custody — email support@usecoal.xyz to recover.');
+        }
+      } catch {}
 
-      if (walletData?.walletId && walletData?.address) {
-        // Fetch balance for existing wallet
+      if (walletData) {
         const res = await fetch(`/api/agent/wallet?walletId=${walletData.walletId}&address=${walletData.address}`);
         if (res.ok) {
           const data = await res.json();
-          setWallet({ walletId: walletData.walletId, address: walletData.address, balance: data.balance || '0' });
+          setWallet({ ...walletData, balance: data.balance || '0' });
           onWalletReady?.(walletData);
           setLoading(false);
           return;
         }
       }
 
-      // No wallet in localStorage — create new one
+      // No valid binding — create new wallet (server issues fresh signature)
       const res = await fetch('/api/agent/wallet', { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
-        if (data.walletId && data.address) {
-          walletData = { walletId: data.walletId, address: data.address };
+        if (data.walletId && data.address && data.walletSignature) {
+          walletData = { walletId: data.walletId, address: data.address, signature: data.walletSignature };
           localStorage.setItem('coal_agent_wallet', JSON.stringify(walletData));
           setWallet({ ...walletData, balance: data.balance || '0' });
           onWalletReady?.(walletData);
@@ -114,7 +138,12 @@ export function AgentWallet({ onWalletReady }: Props) {
       const res = await fetch('/api/agent/wallet/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toAddress: withdrawAddr, walletId: wallet.walletId }),
+        body: JSON.stringify({
+          toAddress: withdrawAddr,
+          walletId: wallet.walletId,
+          walletAddress: wallet.address,
+          walletSignature: wallet.signature,
+        }),
       });
       const data = await res.json();
       if (data.success) {

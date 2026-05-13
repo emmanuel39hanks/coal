@@ -1,17 +1,25 @@
 import * as coal from './coal-api';
 import { downloadFromZeroG } from './zero-g';
-import { sendUsdc, getUsdcBalance } from './wallet';
+import { sendUsdc, getUsdcBalance, payX402Paywall, payAppPaywall } from './wallet';
 
-// Per-session wallet ID — set by the chat route before tool execution
-let _sessionWalletId: string = '';
-let _sessionWalletAddress: string = '';
-
-export function setSessionWallet(walletId: string, address: string) {
-  _sessionWalletId = walletId;
-  _sessionWalletAddress = address;
+/**
+ * Per-request wallet context. Passed through every tool call so that concurrent
+ * requests cannot leak each other's wallet IDs (previously stored as a module-
+ * level variable, which Vercel's interleaved request handling could corrupt
+ * between async boundaries — leading to one user paying from another's wallet).
+ */
+export interface WalletContext {
+  walletId: string;
+  walletAddress: string;
 }
 
-export async function executeTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+const EMPTY_CTX: WalletContext = { walletId: '', walletAddress: '' };
+
+export async function executeTool(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: WalletContext = EMPTY_CTX,
+): Promise<Record<string, unknown>> {
   switch (name) {
     case 'discover_merchants': {
       const result = await coal.discoverMerchants();
@@ -113,7 +121,7 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     }
 
     case 'execute_payment': {
-      if (!_sessionWalletId) throw new Error('Agent wallet not initialized. Please refresh the page.');
+      if (!ctx.walletId) throw new Error('Agent wallet not initialized. Please refresh the page.');
 
       const sessionId = args.sessionId as string;
 
@@ -134,7 +142,7 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
       }
 
       const { txHash, amount, to, from } = await sendUsdc(
-        _sessionWalletId,
+        ctx.walletId,
         args.recipient as string,
         args.amount as number,
       );
@@ -154,9 +162,59 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     }
 
     case 'get_agent_wallet': {
-      if (!_sessionWalletAddress) throw new Error('Agent wallet not initialized');
-      const wallet = await getUsdcBalance(_sessionWalletAddress);
+      if (!ctx.walletAddress) throw new Error('Agent wallet not initialized');
+      const wallet = await getUsdcBalance(ctx.walletAddress);
       return { _tool: 'get_agent_wallet', ...wallet, network: 'base' };
+    }
+
+    case 'pay_app_paywall': {
+      if (!ctx.walletId) throw new Error('Agent wallet not initialized. Please refresh the page.');
+      const result = await payAppPaywall(ctx.walletId, {
+        verifyUrl: args.verifyUrl as string,
+        priceUsd: args.priceUsd as number,
+        payTo: args.payTo as string,
+        network: args.network as string | undefined,
+        scheme: args.scheme as 'exact' | 'aggr_deferred' | undefined,
+      });
+      return {
+        _tool: 'pay_app_paywall',
+        success: result.response?.success ?? (Boolean(result.txHash) || result.cached),
+        cached: result.cached,
+        protocol: result.protocol,
+        scheme: result.scheme,
+        status: result.status,
+        txHash: result.txHash,
+        amount: result.amount,
+        payer: result.payer,
+        payTo: result.payTo,
+        network: result.network,
+        verifyUrl: result.verifyUrl,
+        explorerUrl: result.explorerUrl,
+        body: result.body,
+      };
+    }
+
+    case 'pay_x402_paywall': {
+      if (!ctx.walletId) throw new Error('Agent wallet not initialized. Please refresh the page.');
+      const result = await payX402Paywall(ctx.walletId, {
+        verifyUrl: args.verifyUrl as string,
+        priceUsd: args.priceUsd as number,
+        payTo: args.payTo as string,
+        network: args.network as string | undefined,
+      });
+      return {
+        _tool: 'pay_x402_paywall',
+        success: result.response?.success ?? (Boolean(result.txHash) || result.cached),
+        cached: result.cached,
+        txHash: result.txHash,
+        amount: result.amount,
+        payer: result.payer,
+        payTo: result.payTo,
+        network: result.network,
+        verifyUrl: result.verifyUrl,
+        explorerUrl: result.explorerUrl,
+        body: result.body,
+      };
     }
 
     case 'fetch_paywall_content': {

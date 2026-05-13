@@ -7,7 +7,7 @@
 
 Paywalls let you gate any API endpoint or piece of content behind a micropayment. A request either carries proof of payment and receives the resource, or it is rejected with an HTTP `402 Payment Required` and instructions on how to pay.
 
-This pattern is defined by the **x402 protocol** — an open standard that assigns real semantics to the long-dormant HTTP 402 status code.
+This pattern is defined by the **x402 protocol** — an open standard that assigns real semantics to the long-dormant HTTP 402 status code. Coal acts as the **facilitator**: the client signs an EIP-3009 `transferWithAuthorization`, Coal validates and submits it on-chain via an operator wallet. The client never needs ETH for gas.
 
 > Paywalls are ideal for pay-per-call APIs, premium content downloads, AI agent tool access, and any flow where charging a subscription is overkill.
 
@@ -16,27 +16,25 @@ This pattern is defined by the **x402 protocol** — an open standard that assig
 ## How x402 Works
 
 <PaymentFlowDiagram rows={[
-  { kind: 'phase', label: 'Access Request' },
+  { kind: 'phase', label: 'Discovery' },
   { kind: 'msg', from: 'app', to: 'coal', label: 'GET /api/paywalls/:id/verify?address=0x...' },
-  { kind: 'msg', from: 'coal', to: 'app', label: '402 Payment Required', sub: '{ amount, currency, merchantAddress, paywallId }' },
+  { kind: 'msg', from: 'coal', to: 'app', label: '402 Payment Required', sub: '{ x402Version, accepts: [{ scheme, network, maxAmountRequired, asset, payTo, ... }] }' },
 
-  { kind: 'phase', label: 'On-Chain Payment' },
-  { kind: 'event', actor: 'user', label: 'Approves on-chain token transfer' },
-  { kind: 'msg', from: 'user', to: 'chain', label: 'ERC-20 transfer(merchantAddress, amount)' },
-  { kind: 'event', actor: 'chain', label: 'Transaction mined on Base (~2 sec)' },
+  { kind: 'phase', label: 'Sign EIP-3009' },
+  { kind: 'event', actor: 'user', label: 'Wallet signs transferWithAuthorization (no gas)' },
 
-  { kind: 'phase', label: 'Proof Submission' },
-  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/paywalls/:id/pay', sub: '{ txHash, address }' },
-  { kind: 'msg', from: 'coal', to: 'chain', label: 'Verify transfer event + recipient + amount' },
-  { kind: 'msg', from: 'chain', to: 'coal', label: 'Transfer confirmed' },
-  { kind: 'msg', from: 'coal', to: 'app', label: '200 OK', sub: '{ accessToken, expiresAt }' },
+  { kind: 'phase', label: 'Settlement' },
+  { kind: 'msg', from: 'app', to: 'coal', label: 'POST /api/paywalls/:id/verify', sub: 'X-PAYMENT: base64({ scheme, network, payload: { signature, authorization } })' },
+  { kind: 'msg', from: 'coal', to: 'chain', label: 'transferWithAuthorization (operator pays gas)' },
+  { kind: 'msg', from: 'chain', to: 'coal', label: 'Tx mined on Base (~2 sec)' },
+  { kind: 'msg', from: 'coal', to: 'app', label: '200 OK', sub: 'X-PAYMENT-RESPONSE: base64({ success, transaction, payer })' },
 ]} />
 
-1. **Client requests access** — `GET /api/paywalls/:id/verify?address=0x...`
-2. **Server replies 402** — includes the price, merchant wallet address, and paywall ID.
-3. **Client pays on-chain** — sends the configured settlement token to the merchant address.
-4. **Client submits proof** — `POST /api/paywalls/:id/pay` with the `txHash`.
-5. **Server verifies and responds 200** — returns the gated content or a short-lived access token.
+1. **Client requests the resource** (or `GET /api/paywalls/:id/verify?address=...`)
+2. **Server replies 402** — body is the standard x402 envelope `{ x402Version: 1, accepts: [...] }` listing scheme, network (`eip155:8453` for Base), exact amount in base units, settlement asset (USDC), and `payTo`
+3. **Client signs an EIP-3009 authorization** — no on-chain transaction yet, just an off-chain signature
+4. **Client POSTs the signature** to the verify URL with `X-PAYMENT: base64(JSON)`
+5. **Coal settles on-chain** — submits `transferWithAuthorization` via the operator wallet, returns 200 + `X-PAYMENT-RESPONSE` containing the tx hash
 
 ---
 
@@ -92,131 +90,98 @@ curl -X POST https://api.usecoal.xyz/api/console/paywalls \
 
 ---
 
-## Verifying Access (Public API)
+## The x402 Wire Format
 
-### Step 1 — Check if access is permitted
-
-**GET** `/api/paywalls/:id/verify?address=0x...`
-
-If the address has not yet paid (or payment expired), returns `402`:
+### Step 1 — `GET /api/paywalls/:id/verify?address=0x...` → 402
 
 ```json
 {
-  "status": 402,
-  "paywallId": "pw_clx9abc123def456",
-  "amount": "1.00",
-  "currency": "USDC",
-  "merchantAddress": "0xMerchantWallet...",
-  "description": "Premium API Access",
-  "pricingModel": "per_call"
+  "x402Version": 1,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:8453",
+      "maxAmountRequired": "1000000",
+      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "payTo": "0xMerchantPayoutAddress...",
+      "resource": "https://api.usecoal.xyz/api/paywalls/pw_clx9.../verify",
+      "description": "Premium API Access",
+      "mimeType": "application/json",
+      "maxTimeoutSeconds": 60,
+      "extra": { "name": "USD Coin", "version": "2" }
+    }
+  ]
 }
 ```
 
-If the address has valid access, returns `200` with the protected resource or an access token:
+`maxAmountRequired` is denominated in **base units** (USDC has 6 decimals, so `1000000` = `$1.00`).
+
+### Step 2 — Sign EIP-3009 with the payer's wallet
+
+```typescript
+const authorization = {
+  from: payerAddress,
+  to: payTo,
+  value: maxAmountRequired,           // base units, as string
+  validAfter: '0',
+  validBefore: String(Math.floor(Date.now() / 1000) + 300), // 5 min
+  nonce: '0x' + crypto.randomBytes(32).toString('hex'),
+};
+
+const signature = await wallet.signTypedData(
+  { name: 'USD Coin', version: '2', chainId: 8453, verifyingContract: USDC_ADDRESS },
+  { TransferWithAuthorization: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'value', type: 'uint256' },
+      { name: 'validAfter', type: 'uint256' },
+      { name: 'validBefore', type: 'uint256' },
+      { name: 'nonce', type: 'bytes32' },
+    ]
+  },
+  authorization,
+);
+```
+
+### Step 3 — `POST /api/paywalls/:id/verify` with `X-PAYMENT`
+
+```typescript
+const paymentPayload = {
+  x402Version: 1,
+  scheme: 'exact',
+  network: 'eip155:8453',
+  payload: { signature, authorization },
+};
+
+const xPayment = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
+
+const res = await fetch(verifyUrl, {
+  method: 'POST',
+  headers: { 'X-PAYMENT': xPayment, 'content-type': 'application/json' },
+  body: '{}',
+});
+```
+
+Server replies `200` with `X-PAYMENT-RESPONSE: base64(JSON)`:
 
 ```json
 {
-  "status": 200,
-  "accessToken": "act_clx9tok...",
-  "expiresAt": "2026-03-22T13:00:00.000Z"
+  "success": true,
+  "transaction": "0xTxHashOnBase...",
+  "network": "eip155:8453",
+  "payer": "0xPayerAddress..."
 }
 ```
 
-### Step 2 — Submit payment proof
+The endpoint is **idempotent**: a second POST with a different valid signature for the same paywall+payer short-circuits to 200 without re-charging.
 
-**POST** `/api/paywalls/:id/pay`
-
-```json
-{
-  "txHash": "0xabc123def456...",
-  "address": "0xClientWallet..."
-}
-```
-
-Response on success:
-
-```json
-{
-  "status": 200,
-  "sessionId": "clx7k2p3q0000abc12345",
-  "accessToken": "act_clx9tok...",
-  "expiresAt": "2026-03-22T13:00:00.000Z"
-}
-```
+On settlement failure (insufficient amount, expired auth, nonce already used, wrong recipient) the server replies `402` again with the same `accepts` array plus an `X-PAYMENT-RESPONSE` containing `errorReason`.
 
 ---
 
-## Agentic / AI Integration
+## Agent Integration
 
-Paywalls are a natural fit for AI agents that need to call paid APIs autonomously. Below is a full LangChain tool that handles the x402 flow end-to-end.
-
-```typescript
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
-import { ethers } from 'ethers';
-
-const SETTLEMENT_TOKEN_ADDRESS = '0xSettlementTokenAddress';
-const COAL_API = 'https://api.usecoal.xyz/api';
-
-// ABI fragment — ERC-20 transfer
-const ERC20_ABI = [
-  'function transfer(address to, uint256 amount) returns (bool)',
-];
-
-export const callPaidApi = tool(
-  async ({ paywallId, walletPrivateKey }) => {
-    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-    const wallet = new ethers.Wallet(walletPrivateKey, provider);
-    const address = wallet.address;
-
-    // 1. Check access
-    const checkRes = await fetch(
-      `${COAL_API}/paywalls/${paywallId}/verify?address=${address}`
-    );
-
-    if (checkRes.status === 200) {
-      const { accessToken } = await checkRes.json();
-      return { accessToken, paid: false };
-    }
-
-    if (checkRes.status !== 402) {
-      throw new Error(`Unexpected status ${checkRes.status}`);
-    }
-
-    // 2. Parse payment instructions
-    const { amount, currency, merchantAddress } = await checkRes.json();
-    // 3. Pay on-chain
-    const token = new ethers.Contract(SETTLEMENT_TOKEN_ADDRESS, ERC20_ABI, wallet);
-    const decimals = 6; // configured settlement token precision
-    const value = ethers.parseUnits(amount, decimals);
-    const tx = await token.transfer(merchantAddress, value);
-    const receipt = await tx.wait();
-
-    // 4. Submit proof
-    const payRes = await fetch(`${COAL_API}/paywalls/${paywallId}/pay`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ txHash: receipt.hash, address }),
-    });
-
-    if (!payRes.ok) {
-      throw new Error('Payment verification failed');
-    }
-
-    const { accessToken } = await payRes.json();
-    return { accessToken, paid: true, txHash: receipt.hash };
-  },
-  {
-    name: 'call_paid_api',
-    description:
-      'Pays a Coal x402 paywall with the configured settlement token and returns an access token for the gated resource.',
-    schema: z.object({
-      paywallId: z.string().describe('The Coal paywall ID (pw_...)'),
-      walletPrivateKey: z.string().describe('Private key of the funding wallet'),
-    }),
-  }
-);
-```
+For AI agents, the [Coal Agent SDK](/docs/agent-payments) bundles all of the above into a single tool call. See the [agent-payments docs](/docs/agent-payments) for the `pay_x402_paywall` example.
 
 ---
 

@@ -1,12 +1,15 @@
 # Autonomous Agent Payments
 
-Coal enables AI agents to pay for products and services autonomously — real USDC on Base, no human interaction needed.
+Coal enables AI agents to pay for products and services autonomously — real USDC on Base, no human interaction needed. Two flows are supported:
+
+- **Direct USDC** — agent sends USDC to a merchant payout address for a Coal checkout session
+- **x402 paywalls** — agent signs an EIP-3009 authorization, Coal settles on-chain as facilitator (gasless for the agent)
 
 ## How It Works
 
 1. **Agent has a wallet** — funded with USDC on Base (via Privy server wallet or raw key)
 2. **Agent discovers** — browses merchants via the [Discovery API](/docs/agent-discovery)
-3. **Agent pays** — sends USDC on-chain, confirms with Coal API
+3. **Agent pays** — direct transfer (for checkouts) or x402 (for paywalls)
 4. **Agent verifies** — receipt published to 0G Storage, anchored on 0G Chain
 
 ## Agent Wallet Setup
@@ -19,13 +22,6 @@ Coal uses [Privy server wallets](https://docs.privy.io/wallets/overview) for age
 // Create a server wallet (one-time)
 const wallet = await privy.wallets.create({ chain_type: 'ethereum' });
 // wallet.address = "0x99301e..."
-
-// Send USDC via the wallet
-const tx = await privy.wallets.rpc(wallet.id, {
-  method: 'eth_sendTransaction',
-  caip2: 'eip155:8453', // Base mainnet
-  params: { transaction: { to: USDC_ADDRESS, data: transferCalldata } }
-});
 ```
 
 ### Fund & Withdraw
@@ -34,7 +30,9 @@ const tx = await privy.wallets.rpc(wallet.id, {
 - **Withdraw:** Agent can send remaining USDC to any address via `POST /api/agent/wallet/withdraw`
 - Users can always withdraw — Privy wallets are self-custodial
 
-## Autonomous Payment Flow
+---
+
+## Flow A — Direct USDC (Checkouts)
 
 ### Step 1: Check Balance
 
@@ -47,17 +45,11 @@ GET /api/agent/wallet
 
 ```bash
 POST /api/agent/checkout
-{
-  "amount": 0.10,
-  "productName": "F1 Figurine",
-  "currency": "USDC"
-}
+{ "amount": 0.10, "productName": "F1 Figurine", "currency": "USDC" }
 # → { "id": "cmn...", "amount": "0.10", "status": "pending" }
 ```
 
 ### Step 3: Send USDC On-Chain
-
-Agent sends a USDC ERC-20 `transfer()` to the merchant's payout address.
 
 ```typescript
 const hash = await walletClient.writeContract({
@@ -68,41 +60,130 @@ const hash = await walletClient.writeContract({
 });
 ```
 
-### Step 4: Confirm Payment
+### Step 4: Confirm & Verify
 
 ```bash
 POST /api/pay/confirm
 { "sessionId": "cmn...", "txHash": "0xabc...", "payerAddress": "0x993..." }
-# → { "status": "verifying" }
-```
 
-### Step 5: Verify Receipt
-
-```bash
 GET /api/receipts/{sessionId}
 # → { "verified": true, "proofTrail": { "storage": {...}, "chain": {...} } }
 ```
 
 The receipt includes a 3-step proof trail: Base TX → 0G Storage → 0G Chain anchor.
 
-## x402 Paywall Flow
+---
 
-For paywalled content, agents use the x402 protocol:
+## Flow B — x402 Paywalls (Gasless)
+
+For paywall-protected resources, the agent uses the x402 protocol. Coal acts as the **facilitator**: the agent signs off-chain, Coal submits the on-chain `transferWithAuthorization` via its operator wallet — so the agent wallet never needs ETH.
+
+### One-shot helper
+
+If you're using the [coal-agent example](https://github.com/emmanuel39hanks/coal/tree/main/examples/coal-agent) as a starting point, the `payX402Paywall()` helper does steps 1–3 below in a single call:
+
+```typescript
+import { payX402Paywall } from './lib/wallet';
+
+const result = await payX402Paywall(walletId, {
+  verifyUrl: 'https://api.usecoal.xyz/api/paywalls/pw_oracle_price_feed/verify',
+  priceUsd: 0.01,
+  payTo: '0xMerchantPayoutAddress...',
+});
+// → { txHash, payer, payTo, network, body, response, explorerUrl }
+```
+
+### Manual flow
+
+#### 1. Trigger 402
 
 ```bash
-# 1. Check access → 402 with payment requirements
-GET /api/paywalls/{id}/verify
-# X-PAYMENT header contains: price, network, asset, payTo
-
-# 2. Create pay intent
-POST /api/agent/paywalls/{id}/pay-intent
-# → { "checkoutId": "cmn...", "amount": 0.10 }
-
-# 3. Pay + confirm (same as above)
-
-# 4. Re-check → 200 with content
-GET /api/paywalls/{id}/verify?address=0x993...
+GET https://oracle.usecoal.xyz/api/price/ETH
 ```
+
+The server replies `402` with the standard x402 envelope:
+
+```json
+{
+  "x402Version": 1,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:8453",
+      "maxAmountRequired": "10000",
+      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "payTo": "0xMerchantPayoutAddress...",
+      "resource": "https://oracle.usecoal.xyz/api/price/ETH",
+      "description": "Price data for ETH",
+      "mimeType": "application/json",
+      "maxTimeoutSeconds": 60,
+      "extra": { "name": "USD Coin", "version": "2" }
+    }
+  ]
+}
+```
+
+#### 2. Sign EIP-3009 with the agent wallet
+
+```typescript
+const authorization = {
+  from: agentAddress,
+  to: payTo,
+  value: '10000',                     // base units (USDC, 6 decimals)
+  validAfter: '0',
+  validBefore: String(Math.floor(Date.now() / 1000) + 300),
+  nonce: '0x' + crypto.randomBytes(32).toString('hex'),
+};
+
+// Sign over USDC's EIP-712 domain — this is off-chain, no gas
+const signature = await privy.wallets().ethereum().signTypedData(walletId, {
+  params: {
+    typed_data: {
+      domain: { name: 'USD Coin', version: '2', chainId: 8453, verifyingContract: USDC_ADDRESS },
+      types: { TransferWithAuthorization: [
+        { name: 'from', type: 'address' },
+        { name: 'to', type: 'address' },
+        { name: 'value', type: 'uint256' },
+        { name: 'validAfter', type: 'uint256' },
+        { name: 'validBefore', type: 'uint256' },
+        { name: 'nonce', type: 'bytes32' },
+      ]},
+      primary_type: 'TransferWithAuthorization',
+      message: authorization,
+    },
+  },
+});
+```
+
+#### 3. POST X-PAYMENT to verify URL
+
+```typescript
+const xPayment = Buffer.from(JSON.stringify({
+  x402Version: 1,
+  scheme: 'exact',
+  network: 'eip155:8453',
+  payload: { signature, authorization },
+})).toString('base64');
+
+const res = await fetch(verifyUrl, {
+  method: 'POST',
+  headers: { 'X-PAYMENT': xPayment, 'content-type': 'application/json' },
+  body: '{}',
+});
+
+// X-PAYMENT-RESPONSE header carries the on-chain tx hash
+const xpr = JSON.parse(Buffer.from(res.headers.get('x-payment-response')!, 'base64').toString());
+// { success: true, transaction: '0x...', network: 'eip155:8453', payer: '0x...' }
+```
+
+#### 4. Retry the resource with `?address=`
+
+```bash
+GET https://oracle.usecoal.xyz/api/price/ETH?address=0x993...
+# → 200 with the gated payload
+```
+
+---
 
 ## Security
 
@@ -113,20 +194,24 @@ GET /api/paywalls/{id}/verify?address=0x993...
 | Balance check | Fails fast if insufficient USDC |
 | User confirmation | Agent asks before spending > $0.50 |
 | Privy policies | Allowlisted recipients, daily caps |
+| x402 nonce check | Coal verifies `authorizationState()` on-chain before submitting |
+| x402 amount check | Coal rejects authorizations below the paywall price |
+| x402 window check | Coal rejects authorizations outside `validAfter`/`validBefore` |
 
 ## Coal Agent SDK Tools
 
-The [coal-agent](https://coal-agent.vercel.app) example app provides these OpenAI function-calling tools:
+The [coal-agent](https://coal-agent.vercel.app) example app exposes these OpenAI function-calling tools:
 
 | Tool | Description |
 |------|-------------|
 | `discover_merchants` | Browse marketplace for merchants/products/paywalls |
 | `get_agent_wallet` | Check wallet address and USDC balance |
-| `execute_payment` | Send real USDC autonomously (max $5) |
-| `check_paywall` | Check x402 paywall access status |
-| `create_checkout` | Create a payment session |
+| `create_checkout` | Create a checkout session |
+| `execute_payment` | Pay a checkout via direct USDC transfer (max $5) |
+| `pay_x402_paywall` | Pay an x402 paywall via EIP-3009 (gasless, max $5) |
+| `fetch_paywall_content` | Fetch protected content after payment |
 | `verify_receipt` | Get 0G proof trail for a payment |
 
 ## Live Demo
 
-Try the [Coal Agent Demo](https://coal-agent.vercel.app) — click "Buy me something under $1" to see autonomous payments in action.
+Try the [Coal Agent Demo](https://coal-agent.vercel.app) — click "Buy me something under $1" or "Get me ETH price from the oracle" to see autonomous payments in action.

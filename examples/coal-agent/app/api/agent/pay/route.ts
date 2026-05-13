@@ -1,4 +1,4 @@
-import { sendUsdc, getUsdcBalance } from '@/lib/wallet';
+import { sendUsdc, getUsdcBalance, verifyWalletBinding } from '@/lib/wallet';
 import { confirmPayment } from '@/lib/coal-api';
 
 const rateLimitMap = new Map<string, number[]>();
@@ -40,11 +40,22 @@ export async function POST(req: Request) {
     }
 
     const walletId = body.walletId as string;
-    if (!walletId) {
-      return Response.json({ error: 'walletId required' }, { status: 400 });
+    const walletAddress = body.walletAddress as string;
+    const walletSignature = body.walletSignature as string;
+    if (!walletId || !walletAddress || !walletSignature) {
+      return Response.json(
+        { error: 'walletId, walletAddress, and walletSignature required' },
+        { status: 400 },
+      );
+    }
+    if (!verifyWalletBinding(walletId, walletAddress, walletSignature)) {
+      return Response.json(
+        { error: 'Invalid wallet signature. Refresh the page to mint a fresh binding.' },
+        { status: 401 },
+      );
     }
 
-    // Send USDC on Base
+    // Send USDC on Base — only after the wallet binding is verified
     const result = await sendUsdc(walletId, recipient, amount);
 
     // Confirm with Coal backend

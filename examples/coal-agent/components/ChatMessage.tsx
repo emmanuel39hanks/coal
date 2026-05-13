@@ -1,6 +1,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ToolResultCard } from './ToolResultCard';
 import type { ChatMessage as ChatMessageType } from '@/lib/types';
 
@@ -32,8 +33,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <div className="max-w-[85%]">
-      <div className="prose prose-sm max-w-none text-sm leading-relaxed text-[var(--brand-navy)] [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-0.5 [&_code]:text-[var(--accent)] [&_code]:bg-[var(--accent)]/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_pre]:bg-[var(--brand-navy)] [&_pre]:text-white [&_pre]:rounded-2xl [&_pre]:p-3 [&_strong]:text-[var(--brand-navy)] [&_strong]:font-bold [&_a]:text-[var(--accent)] [&_a]:font-semibold [&_h1]:text-[var(--brand-navy)] [&_h2]:text-[var(--brand-navy)] [&_h3]:text-[var(--brand-navy)]">
-        <ReactMarkdown>{message.content}</ReactMarkdown>
+      <div className="prose prose-sm max-w-none text-sm leading-relaxed text-[var(--brand-navy)] [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-0.5 [&_code]:text-[var(--accent)] [&_code]:bg-[var(--accent)]/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_pre]:bg-[var(--brand-navy)] [&_pre]:text-white [&_pre]:rounded-2xl [&_pre]:p-3 [&_strong]:text-[var(--brand-navy)] [&_strong]:font-bold [&_a]:text-[var(--accent)] [&_a]:font-semibold [&_h1]:text-[var(--brand-navy)] [&_h2]:text-[var(--brand-navy)] [&_h3]:text-[var(--brand-navy)] [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_table]:rounded-xl [&_table]:overflow-hidden [&_table]:border [&_table]:border-black/5 [&_thead]:bg-[var(--background)] [&_th]:text-left [&_th]:font-bold [&_th]:text-[var(--brand-navy)] [&_th]:px-3 [&_th]:py-2 [&_th]:border-b [&_th]:border-black/5 [&_td]:px-3 [&_td]:py-2 [&_td]:border-b [&_td]:border-black/5 [&_tr:last-child_td]:border-b-0 [&_tr:hover]:bg-black/[0.015]">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
       </div>
     </div>
   );

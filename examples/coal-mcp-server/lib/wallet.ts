@@ -1,19 +1,26 @@
 /**
- * Agent wallet for autonomous MCP payments.
+ * Agent wallet for autonomous MCP payments — PER-USER credentials.
  *
- * When AGENT_PRIVATE_KEY is set, the MCP server can sign ERC-3009
- * transferWithAuthorization messages and submit them through Coal's
- * operator relay — gasless payments from Claude/ChatGPT/any MCP client.
+ * Each MCP user passes their OWN agentPrivateKey as a tool argument when
+ * calling pay_merchant. The MCP server holds NO long-lived agent keys.
+ * Coal's operator wallet pays gas (~$0.001) on every transaction; that's
+ * Coal's service contribution.
  *
- * The private key controls a simple EOA wallet with USDC on Base.
- * The operator wallet (Coal's side) pays the ~$0.001 gas per transaction.
- * The agent wallet never needs ETH.
+ * Why per-request keys (not env vars):
+ * - One MCP server serves many Claude/Cursor users
+ * - A shared key would mean every user pays out of the same wallet
+ * - That wallet would be Coal's operator, not the user's own funds
  *
  * Security model:
- * - Private key stays in the server's env vars (never sent over the wire)
+ * - User's private key arrives in the tool call, used once, never persisted
  * - Spending cap: AGENT_MAX_SPEND_PER_TX (default $5)
  * - Every payment gets a verifiable receipt on 0G
  * - Audit trail: every tx is on-chain on Base + anchored on 0G Chain
+ *
+ * UX trade-off: passing a private key in chat is suboptimal. The right answer
+ * long-term is OAuth → Privy server wallet keyed by Coal account. This file's
+ * shape lets us migrate to that without breaking the tool surface — the arg
+ * could become `coalSession` later and the server would lookup the wallet.
  */
 
 import {
@@ -35,8 +42,12 @@ const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const;
 const USDC_DECIMALS = 6;
 const BASE_RPC = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
 const OPERATOR_KEY = process.env.OPERATOR_PRIVATE_KEY || '';
-const AGENT_KEY = process.env.AGENT_PRIVATE_KEY || '';
 const MAX_PER_TX = parseFloat(process.env.AGENT_MAX_SPEND_PER_TX || '5');
+
+function normalizeKey(key: string): Hex {
+    const trimmed = key.trim();
+    return (trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`) as Hex;
+}
 
 const ERC20_ABI = parseAbi([
     'function balanceOf(address owner) view returns (uint256)',
@@ -66,19 +77,18 @@ const TRANSFER_WITH_AUTH_TYPES = {
 
 // ─── Status checks ──────────────────────────────────────────────────────────
 
-export function isWalletConfigured(): boolean {
-    return Boolean(AGENT_KEY && OPERATOR_KEY);
+/** Operator (gas relay) is a server config. Required for every payment to work. */
+export function isOperatorConfigured(): boolean {
+    return Boolean(OPERATOR_KEY);
 }
 
-export function getAgentAddress(): string | null {
-    if (!AGENT_KEY) return null;
-    return privateKeyToAccount(AGENT_KEY as `0x${string}`).address;
+/** Resolve an address from any agent private key (provided per-request). */
+export function getAgentAddressFromKey(agentPrivateKey: string): string {
+    return privateKeyToAccount(normalizeKey(agentPrivateKey)).address;
 }
 
-export async function getAgentBalance(): Promise<{ address: string; balance: string } | null> {
-    const address = getAgentAddress();
-    if (!address) return null;
-
+/** Look up USDC balance for any address — public read. */
+export async function getUsdcBalanceForAddress(address: string): Promise<{ address: string; balance: string }> {
     const client = createPublicClient({ chain: base, transport: http(BASE_RPC) });
     const raw = await client.readContract({
         address: USDC_ADDRESS,
@@ -86,7 +96,6 @@ export async function getAgentBalance(): Promise<{ address: string; balance: str
         functionName: 'balanceOf',
         args: [address as `0x${string}`],
     });
-
     return {
         address,
         balance: formatUnits(raw, USDC_DECIMALS),
@@ -95,17 +104,24 @@ export async function getAgentBalance(): Promise<{ address: string; balance: str
 
 // ─── ERC-3009 Payment ────────────────────────────────────────────────────────
 
-export async function payViaERC3009(
-    to: string,
-    amountUsd: number,
-): Promise<{ txHash: string; from: string; to: string; amount: string }> {
-    if (!AGENT_KEY) throw new Error('AGENT_PRIVATE_KEY not configured');
-    if (!OPERATOR_KEY) throw new Error('OPERATOR_PRIVATE_KEY not configured');
+export async function payViaERC3009(params: {
+    to: string;
+    amountUsd: number;
+    agentPrivateKey: string;
+}): Promise<{ txHash: string; from: string; to: string; amount: string }> {
+    const { to, amountUsd, agentPrivateKey } = params;
+
+    if (!OPERATOR_KEY) {
+        throw new Error('Server-side operator key missing (Coal owes you a gas-relay). Email support@usecoal.xyz.');
+    }
+    if (!agentPrivateKey) {
+        throw new Error('agentPrivateKey is required. Pass your wallet private key as a tool argument.');
+    }
     if (amountUsd <= 0) throw new Error('Amount must be positive');
     if (amountUsd > MAX_PER_TX) throw new Error(`Amount $${amountUsd} exceeds spending cap of $${MAX_PER_TX}`);
 
-    const agentAccount = privateKeyToAccount(AGENT_KEY as `0x${string}`);
-    const operatorAccount = privateKeyToAccount(OPERATOR_KEY as `0x${string}`);
+    const agentAccount = privateKeyToAccount(normalizeKey(agentPrivateKey));
+    const operatorAccount = privateKeyToAccount(normalizeKey(OPERATOR_KEY));
     const publicClient = createPublicClient({ chain: base, transport: http(BASE_RPC) });
     const operatorClient = createWalletClient({
         chain: base,
@@ -116,7 +132,6 @@ export async function payViaERC3009(
     const recipient = to as `0x${string}`;
     const amountRaw = parseUnits(amountUsd.toFixed(USDC_DECIMALS), USDC_DECIMALS);
 
-    // Check balance
     const balance = await publicClient.readContract({
         address: USDC_ADDRESS,
         abi: ERC20_ABI,
@@ -125,16 +140,14 @@ export async function payViaERC3009(
     });
     if (balance < amountRaw) {
         throw new Error(
-            `Insufficient USDC. Agent wallet ${agentAccount.address} has ${formatUnits(balance, USDC_DECIMALS)}, needs ${amountUsd.toFixed(2)}`,
+            `Insufficient USDC. Your wallet ${agentAccount.address} has ${formatUnits(balance, USDC_DECIMALS)} USDC, needs ${amountUsd.toFixed(2)}. Fund it on Base.`,
         );
     }
 
-    // ERC-3009 nonce (random, not the ethereum tx nonce)
     const authNonce = keccak256(toBytes(crypto.randomUUID())) as Hex;
     const validAfter = BigInt(0);
     const validBefore = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
-    // Step 1: Agent wallet signs the transferWithAuthorization
     const signature = await agentAccount.signTypedData({
         domain: USDC_EIP712_DOMAIN,
         types: TRANSFER_WITH_AUTH_TYPES,
@@ -149,12 +162,10 @@ export async function payViaERC3009(
         },
     });
 
-    // Step 2: Split signature
     const r = ('0x' + signature.slice(2, 66)) as Hex;
     const s = ('0x' + signature.slice(66, 130)) as Hex;
     const v = parseInt(signature.slice(130, 132), 16);
 
-    // Step 3: Operator submits (operator pays gas, ~$0.001)
     const txHash = await operatorClient.writeContract({
         address: USDC_ADDRESS,
         abi: TRANSFER_WITH_AUTH_ABI,
@@ -172,7 +183,6 @@ export async function payViaERC3009(
         ],
     });
 
-    // Wait for confirmation
     await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 30_000 });
 
     return {

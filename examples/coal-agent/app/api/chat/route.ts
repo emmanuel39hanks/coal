@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { tools } from '@/lib/tools';
-import { executeTool, setSessionWallet } from '@/lib/tool-executor';
+import { executeTool, type WalletContext } from '@/lib/tool-executor';
+import { verifyWalletBinding } from '@/lib/wallet';
 import { getZeroGComputeApiKey, clearZeroGTokenCache } from '@/lib/0g-token';
 
 interface FunctionToolCall {
@@ -46,12 +47,48 @@ When a user wants to buy something:
 5. Immediately pay using execute_payment with the sessionId, amount, merchant payout address, and purpose
 6. After payment succeeds, verify the receipt using verify_receipt to show the full 0G proof trail (Base TX → 0G Storage → 0G Chain)
 
-For paywalls:
-1. Check the paywall with check_paywall
-2. If payment required, create a pay intent with create_paywall_pay_intent
-3. Pay using execute_payment with the returned sessionId and the merchant payout address
-4. After payment, use fetch_paywall_content to actually retrieve the protected content (e.g., price data from the oracle). Pass the content URL and the wallet address that paid.
-5. Show the user the content you received
+For paywalls (x402 protocol — agent-to-agent, no human in the loop):
+
+KNOWN PAID ENDPOINTS (skip the discovery step — pay first, fetch second):
+- ETH/crypto/stock prices via oracle.usecoal.xyz/api/price/{symbol}
+  → verifyUrl: https://api.usecoal.xyz/api/paywalls/pw_oracle_price_feed/verify
+  → priceUsd: 0.01
+  → payTo: 0x83d412b9dc65fc728455a1AFE00cE8812CdCce13
+
+Flow for these known endpoints (PREFERRED — no wasted call):
+1. pay_x402_paywall(verifyUrl, priceUsd, payTo) — sign EIP-3009 + POST X-PAYMENT
+2. fetch_paywall_content(url, address) — 200 with the protected content
+3. Inspect the pay_x402_paywall result:
+   - If cached=true → DO NOT claim a new payment was made. Tell the user "I already have access to this paywall, no new charge." Don't show a tx hash.
+   - If cached=false and txHash is present → THIS is a fresh on-chain settlement; show the tx hash + explorer URL ONLY in this case.
+4. Show the content from fetch_paywall_content.
+
+Flow for UNKNOWN paywall URLs (discovery — only when you don't already know the price/payTo):
+1. fetch_paywall_content with the URL — server returns HTTP 402 with payment requirements (verifyUrl, price, payTo). This 402 is normal x402 discovery, NOT an error.
+2. pay_x402_paywall with the values from the 402 response
+3. fetch_paywall_content again with ?address= — now 200
+
+Do NOT use create_paywall_pay_intent + execute_payment for x402 paywalls — that's the legacy checkout flow. Use pay_x402_paywall directly.
+
+DUAL-PROTOCOL SUPPORT (Coinbase x402 vs OKX APP):
+Coal accepts payment via two different agent-payment protocols. The 402 response advertises which are available:
+- The response body has protocols=["x402-v1","app-v2"] and accepts[] listing both options.
+- BOTH paths settle on Base USDC via EIP-3009. Functionally identical.
+
+Tool selection:
+- DEFAULT: pay_x402_paywall — Coinbase x402 envelope. Use this unless instructed otherwise.
+- pay_app_paywall — OKX Agent Payments Protocol envelope. Use ONLY if the user says something like "pay using OKX APP" / "use app-v2" / "demonstrate APP support" / when explicitly comparing the two protocols. The on-chain result is the same; only the wire envelope differs.
+
+If the user asks "show both protocols" or wants a side-by-side demo, run pay_x402_paywall on one merchant call, then pay_app_paywall on the next call. Mention which protocol settled which tx in your reply.
+
+OUTPUT FORMATTING:
+- When you show structured data (price, market cap, volume, etc.), use proper Markdown tables with newlines between rows. Example:
+  | Metric | Value |
+  | --- | --- |
+  | 24h Change | -1.86% |
+  | Market Cap | $271.15B |
+- Never collapse a table onto a single line. Each row must be its own line.
+- Or just use a short bullet list — that always renders cleanly. Prefer bullets if the table would have only 2–3 rows.
 
 RULES:
 - Always check your balance before paying
@@ -68,10 +105,9 @@ AGENT-TO-AGENT COMMERCE FLOW:
 When a user asks for the "full autonomous flow" or "agent-to-agent" demo:
 1. First, discover_merchants to browse what's available on Coal
 2. If paywalls exist, pick one and run the x402 flow:
-   - check_paywall → see 402 + payment requirements
-   - create_paywall_pay_intent → get a checkout session
-   - execute_payment → pay autonomously
-   - check_paywall again → confirm 200 access granted
+   - fetch_paywall_content(url) → see 402 + payment requirements (verifyUrl, priceUsd, payTo)
+   - pay_x402_paywall(verifyUrl, priceUsd, payTo) → sign EIP-3009 + POST X-PAYMENT, get tx hash
+   - fetch_paywall_content(url, address) → 200 with the actual protected content
 3. Then find a product to buy:
    - query_merchant_memory for details
    - create_checkout for the product
@@ -108,12 +144,30 @@ export async function POST(req: Request) {
     return Response.json({ error: 'AI provider API key not configured' }, { status: 500 });
   }
 
-  const body = (await req.json()) as { messages: Array<{ role: string; content: string }>; walletId?: string; walletAddress?: string };
+  const body = (await req.json()) as {
+    messages: Array<{ role: string; content: string }>;
+    walletId?: string;
+    walletAddress?: string;
+    walletSignature?: string;
+  };
   const clientMessages = body.messages;
 
-  // Set per-session wallet for tool execution
-  if (body.walletId && body.walletAddress) {
-    setSessionWallet(body.walletId, body.walletAddress);
+  // SECURITY: per-request wallet binding. The client must present a server-issued
+  // signature for the (walletId, walletAddress) pair. This was previously a global
+  // module-level variable which (a) leaked between concurrent requests and (b)
+  // accepted any client-provided walletId without verification — both are drain
+  // vectors. Now: we verify the HMAC and bind to a request-scoped context.
+  const ctx: WalletContext = { walletId: '', walletAddress: '' };
+  if (body.walletId && body.walletAddress && body.walletSignature) {
+    const valid = verifyWalletBinding(body.walletId, body.walletAddress, body.walletSignature);
+    if (!valid) {
+      return Response.json(
+        { error: 'Invalid wallet signature. Refresh the page to mint a fresh wallet binding.' },
+        { status: 401 },
+      );
+    }
+    ctx.walletId = body.walletId;
+    ctx.walletAddress = body.walletAddress;
   }
 
   // Support any OpenAI-compatible endpoint (0G Compute, Alibaba Cloud, OpenAI, etc.)
@@ -221,7 +275,7 @@ export async function POST(req: Request) {
             let result: Record<string, unknown>;
             try {
               const args = JSON.parse(tc.function.arguments || '{}');
-              result = await executeTool(tc.function.name, args);
+              result = await executeTool(tc.function.name, args, ctx);
             } catch (e) {
               result = { _tool: tc.function.name, error: e instanceof Error ? e.message : 'Unknown error' };
             }

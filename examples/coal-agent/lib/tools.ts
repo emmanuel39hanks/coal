@@ -225,6 +225,43 @@ export const tools: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'pay_app_paywall',
+      description:
+        'Pay an x402-protected paywall using OKX Agent Payments Protocol (APP / x402 v2). APP is byte-compatible with x402 at the signature layer — same EIP-3009 transferWithAuthorization on Base USDC — but uses the v2 envelope with an `accepted{}` block. Use this when the 402 response advertises `app-v2` in `protocols[]` or includes a v2 `accepts[]` array. Returns the on-chain tx hash. Maximum $5.00.',
+      parameters: {
+        type: 'object',
+        properties: {
+          verifyUrl: { type: 'string', description: 'Paywall verify URL from the 402 response' },
+          priceUsd: { type: 'number', description: 'Price in USD (e.g. 0.01)' },
+          payTo: { type: 'string', description: 'Merchant payout address (0x...)' },
+          network: { type: 'string', description: 'CAIP-2 network identifier (default: eip155:8453 for Base)' },
+          scheme: { type: 'string', enum: ['exact', 'aggr_deferred'], description: 'APP scheme: `exact` for sync per-call (default), `aggr_deferred` for batched/deferred' },
+        },
+        required: ['verifyUrl', 'priceUsd', 'payTo'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'pay_x402_paywall',
+      description:
+        'Pay an x402-protected paywall directly per the Coinbase x402 standard. The agent signs an EIP-3009 transferWithAuthorization with its Privy wallet and POSTs an X-PAYMENT header to the paywall verify URL. Coal acts as the facilitator and submits on-chain (gasless for agent). Use this when fetch_paywall_content returns 402 with a `verifyUrl` and `payTo`. Returns the on-chain tx hash and explorer URL. Maximum $5.00.',
+      parameters: {
+        type: 'object',
+        properties: {
+          verifyUrl: { type: 'string', description: 'The paywall verify URL from the 402 response (e.g., https://api.usecoal.xyz/api/paywalls/pw_oracle_price_feed/verify)' },
+          priceUsd: { type: 'number', description: 'Price in USD from the 402 response (e.g., 0.01)' },
+          payTo: { type: 'string', description: 'Merchant payout address (0x...) from the 402 response' },
+          network: { type: 'string', description: 'Network identifier (default: eip155:8453 for Base)' },
+        },
+        required: ['verifyUrl', 'priceUsd', 'payTo'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'fetch_paywall_content',
       description:
         'Fetch content from a paywall-protected URL after payment. Use this after paying a paywall to retrieve the actual data (e.g., price data from the oracle). Pass the content URL and the wallet address that paid.',
