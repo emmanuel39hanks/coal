@@ -1,0 +1,153 @@
+
+# MCP Server (Claude · Cursor · ChatGPT)
+
+Coal exposes its agent commerce primitives as a hosted MCP server. Connect once from Claude Desktop, Cursor, or any MCP-compatible client and your AI gets 12 tools for discovering merchants, paying paywalls, creating checkouts, and verifying receipts on-chain.
+
+**Endpoint:** `https://mcp.usecoal.xyz/api/mcp`
+**Version:** 1.1.0
+**Authentication:** per-request (no shared secret). Pass your `coalApiKey` and/or `agentPrivateKey` as tool arguments.
+
+---
+
+## Connect from Claude Desktop
+
+Add this to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "coal": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.usecoal.xyz/api/mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Then ask Claude:
+
+> *Run setup_instructions on the coal MCP.*
+
+---
+
+## Connect from Claude Code
+
+```bash
+claude mcp add coal-commerce --transport http https://mcp.usecoal.xyz/api/mcp
+```
+
+---
+
+## Connect from Cursor
+
+In Cursor → Settings → MCP → Add Server:
+
+- **Name:** `coal`
+- **Type:** `http`
+- **URL:** `https://mcp.usecoal.xyz/api/mcp`
+
+---
+
+## Authentication model
+
+The MCP server is **multi-tenant**. It holds NO long-lived agent keys. Each user passes their own credentials per tool call:
+
+| Tool | Requires |
+|:---|:---|
+| `discover_merchants`, `search_products`, `get_merchant_profile`, `check_paywall`, `get_checkout_status`, `verify_receipt`, `get_0g_health` | Nothing (public read) |
+| `query_merchant_memory`, `create_checkout` | `coalApiKey` (your Coal API key) |
+| `pay_merchant` | `agentPrivateKey` (your wallet's private key) |
+| `agent_wallet_status` | `address` OR `agentPrivateKey` (optional) |
+
+### Get your Coal API key
+
+1. Sign up at [usecoal.xyz](https://usecoal.xyz)
+2. Open [usecoal.xyz/console/keys](https://usecoal.xyz/console/keys)
+3. Click "Create API Key" — copy the key immediately (it's only shown once)
+
+### Get a wallet for payments
+
+Any EOA with USDC on Base works:
+
+- **Easy path:** create a fresh wallet at [agent.usecoal.xyz](https://agent.usecoal.xyz) — the agent sandbox auto-generates one and lets you fund it
+- **DIY:** use any wallet (MetaMask, viem, ethers); export the private key
+- **Fund:** bridge USDC to Base at [bridge.base.org](https://bridge.base.org)
+
+Coal's operator wallet pays the on-chain gas (~$0.001 per tx). Your wallet only spends USDC.
+
+---
+
+## Available tools (12)
+
+### Public — no auth
+
+| Tool | What it does |
+|:---|:---|
+| `discover_merchants` | List all merchants, products, paywalls, and 0G publication status |
+| `search_products` | Filter products across merchants by name / max price / tag |
+| `get_merchant_profile` | Full profile of one merchant |
+| `check_paywall` | Check whether an address has paid for a paywall |
+| `get_checkout_status` | Status of a checkout session |
+| `verify_receipt` | Get the 3-step proof trail (Base TX → 0G Storage → 0G Chain) |
+| `get_0g_health` | Live status of all 5 0G components |
+| `setup_instructions` | Print this guide as a tool result |
+
+### Authenticated — pass your `coalApiKey`
+
+| Tool | What it does |
+|:---|:---|
+| `query_merchant_memory` | Ask a natural-language question about a merchant's catalog (powered by 0G Compute Sealed Inference) |
+| `create_checkout` | Create a Coal checkout session against the merchant that owns the API key |
+
+### Wallet — pass your `agentPrivateKey`
+
+| Tool | What it does |
+|:---|:---|
+| `pay_merchant` | Send USDC on Base via ERC-3009 (gasless for you, $5 max per tx) |
+| `agent_wallet_status` | Check USDC balance for a wallet (provide `address` or `agentPrivateKey`) |
+
+---
+
+## Example: Claude pays a paywall
+
+```
+You: Buy me the F1 Max Verstappen figurine from Saint on Coal.
+
+Claude calls:
+  1. discover_merchants → finds the figurine, $0.10
+  2. agent_wallet_status with agentPrivateKey → confirms balance
+  3. pay_merchant with agentPrivateKey + Saint's payout address → tx hash
+  4. verify_receipt with session ID → 0G proof trail
+```
+
+---
+
+## Security notes
+
+- The MCP server holds **NO long-lived keys**. Each payment is signed once per request.
+- Your private key is sent to the server in the tool call, used to sign the ERC-3009 authorization, and discarded immediately.
+- **Spending cap:** $5 per transaction (server-enforced).
+- Private keys passed via AI clients (Claude, Cursor) are visible to those clients and may be logged. For high-value flows, use [Coal's web checkout](https://usecoal.xyz) instead.
+- The on-chain settlement is gasless: Coal's operator wallet pays the ~$0.001 gas. Your wallet only spends USDC.
+
+---
+
+## Troubleshooting
+
+**"MISSING_API_KEY"** → Pass `coalApiKey` as a tool arg. Get one at [usecoal.xyz/console](https://usecoal.xyz/console).
+
+**"MISSING_AGENT_PRIVATE_KEY"** → Pass `agentPrivateKey` as a tool arg. Use any EOA on Base.
+
+**"INVALID_PRIVATE_KEY"** → The key isn't a 64-char hex string. Check it's formatted correctly (with or without `0x` prefix).
+
+**"PAYMENT_FAILED" + "Insufficient USDC"** → Fund your wallet with USDC on Base. Check status with `agent_wallet_status`.
+
+**Claude doesn't list the tools** → Run `setup_instructions` first; if Claude can't reach the MCP, check `claude_desktop_config.json` syntax and restart Claude Desktop.
+
+---
+
+## Reference
+
+- **Source:** [github.com/emmanuel39hanks/coal](https://github.com/emmanuel39hanks/coal/tree/main/examples/coal-mcp-server)
+- **Live demo (uses MCP under the hood):** [agent.usecoal.xyz](https://agent.usecoal.xyz)
+- **0G health:** [api.usecoal.xyz/api/0g/health](https://api.usecoal.xyz/api/0g/health)
