@@ -67,13 +67,16 @@ export default function Hero() {
                 <BlurReveal delay={0.7} className="relative mt-16 md:mt-28">
                     <div className="relative rounded-[20px] bg-white border-4 border-white/50 shadow-[0px_10px_30px_-10px_rgba(0,0,0,0.1)] p-2 backdrop-blur-sm mx-auto max-w-5xl group hover:scale-[1.01] transition-transform duration-700">
                         <div className="absolute inset-0 bg-gradient-to-tr from-[var(--color-brand-orange)]/5 to-[var(--color-brand-blue)]/5 rounded-[20px] pointer-events-none" />
-                        <img
-                            src="/dashboard-preview.png"
-                            alt="Coal Dashboard Preview"
-                            width={1200}
-                            height={675}
-                            className="rounded-[12px] w-full h-auto shadow-inner border border-black/5"
-                        />
+                        <div className="relative rounded-[12px] overflow-hidden shadow-inner border border-black/5 aspect-video bg-black">
+                            <iframe
+                                src="https://www.youtube-nocookie.com/embed/fnlcOIcK-yk?rel=0&modestbranding=1"
+                                title="Coal launch video"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                                loading="lazy"
+                                className="absolute inset-0 w-full h-full"
+                            />
+                        </div>
                         <div className="absolute inset-0 rounded-[20px] bg-gradient-to-tr from-white/0 via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
                     </div>
                 </BlurReveal>

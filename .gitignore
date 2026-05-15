@@ -18,9 +18,11 @@ dist/
 .DS_Store
 *.pem
 /.claude/
+/.agents/
 /.playwright-cli/
 /output/
 /agents/
+/skills-lock.json
 /bugs/
 /bugs-2/
 /context/
