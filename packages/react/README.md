@@ -267,9 +267,9 @@ createX402ManifestRoute()           →     GET /merchant-profiles   →    x402
 
 ## Examples
 
-- **[demo-store](https://coal-demo-store.vercel.app)** — Full storefront with catalog indexing + agent manifests ([source](https://github.com/emmanuel39hanks/coal/tree/main/examples/demo-store))
+- **[demo-store](https://store.usecoal.xyz)** — Full storefront with catalog indexing + agent manifests ([source](https://github.com/emmanuel39hanks/coal/tree/main/examples/demo-store))
 - **[coal-react-checkout](https://coal-react-checkout.vercel.app)** — Every Coal feature demoed ([source](https://github.com/emmanuel39hanks/coal/tree/main/examples/coal-react-checkout))
-- **[coal-agent](https://coal-agent.vercel.app)** — AI agent sandbox with autonomous purchases
+- **[coal-agent](https://agent.usecoal.xyz)** — AI agent sandbox with autonomous purchases
 
 ## Requirements
 

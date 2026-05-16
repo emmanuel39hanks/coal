@@ -184,7 +184,7 @@ export default function DemoPage() {
                 <ExportSquare size={16} className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-brand-orange)] transition-colors shrink-0" />
               </a>
 
-              <a href="https://coal-agent.vercel.app" target="_blank" rel="noopener noreferrer"
+              <a href="https://agent.usecoal.xyz" target="_blank" rel="noopener noreferrer"
                 className="group w-full sm:w-auto flex items-center gap-3 px-5 py-3 rounded-2xl bg-white border-2 border-black/5 hover:border-[var(--color-brand-blue)] shadow-sm hover:shadow-[3px_3px_0px_0px_var(--color-brand-blue)] transition-all">
                 <div className="w-8 h-8 rounded-lg bg-[var(--color-brand-blue)] flex items-center justify-center shrink-0">
                   <Flash size={16} variant="Bold" className="text-white" />

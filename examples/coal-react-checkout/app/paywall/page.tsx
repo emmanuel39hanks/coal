@@ -90,7 +90,7 @@ export default function PaywallPage() {
         </span>
         <h1 className="page-title" style={{ fontSize: '2.25rem', fontWeight: 900, color: '#180D43', margin: '0 0 10px', letterSpacing: '-0.04em' }}>Agent-Payable Content Gates</h1>
         <p style={{ color: '#6B7280', fontSize: '15px', margin: 0, lineHeight: 1.6 }}>
-          Gate any resource with <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 6px', borderRadius: '6px', fontFamily: 'monospace' }}>HTTP 402</code>. AI agents discover it on 0G Storage, read pricing from x402 headers, and pay autonomously with USDC on Base. <a href="https://coal-agent.vercel.app" target="_blank" rel="noopener noreferrer" style={{ color: '#FF5C16', fontWeight: 700, textDecoration: 'none' }}>See live agent demo →</a>
+          Gate any resource with <code style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 6px', borderRadius: '6px', fontFamily: 'monospace' }}>HTTP 402</code>. AI agents discover it on 0G Storage, read pricing from x402 headers, and pay autonomously with USDC on Base. <a href="https://agent.usecoal.xyz" target="_blank" rel="noopener noreferrer" style={{ color: '#FF5C16', fontWeight: 700, textDecoration: 'none' }}>See live agent demo →</a>
         </p>
       </div>
 

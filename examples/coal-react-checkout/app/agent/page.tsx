@@ -32,7 +32,7 @@ export default function AgentPage() {
           Watch an AI agent discover merchants on 0G, evaluate products, pay with USDC on Base, and verify receipts — all without human interaction.
         </p>
         <a
-          href="https://coal-agent.vercel.app"
+          href="https://agent.usecoal.xyz"
           target="_blank"
           rel="noopener noreferrer"
           style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#000', color: 'white', borderRadius: '999px', padding: '15px 40px', fontSize: '15px', fontWeight: 700, textDecoration: 'none', boxShadow: '6px 6px 0 0 #FF5C16', transition: 'all 0.15s' }}

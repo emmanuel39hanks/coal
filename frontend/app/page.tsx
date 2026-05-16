@@ -434,7 +434,7 @@ export default function Home() {
             </BlurReveal>
 
             <BlurReveal delay={0.1}>
-              <a href="https://coal-agent.vercel.app" target="_blank" rel="noopener noreferrer" className="group block h-full">
+              <a href="https://agent.usecoal.xyz" target="_blank" rel="noopener noreferrer" className="group block h-full">
                 <div className="p-6 md:p-8 bg-[var(--color-bg-base)] rounded-[24px] md:rounded-[32px] border-2 border-black/5 hover:border-[var(--color-brand-blue)] hover:-translate-y-1 transition-all duration-300 h-full shadow-sm hover:shadow-[4px_4px_0px_0px_var(--color-brand-blue)]">
                   <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[var(--color-brand-blue)] flex items-center justify-center mb-4 md:mb-5 shadow-[3px_3px_0px_0px_#180D43]">
                     <Flash size={20} variant="Bold" className="text-white" />
