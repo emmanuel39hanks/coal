@@ -574,7 +574,7 @@ Three co-founders, friends for years. Shipping consumer products, payments, and 
 
 | Role | Name | LinkedIn |
 |---|---|---|
-| Co-founder | **Emmanuel Haankwenda** | [linkedin.com/in/emmanuelhaankwenda](https://www.linkedin.com/in/emmanuelhaankwenda/) |
+| Co-founder · Engineering | **Emmanuel Haankwenda** | [linkedin.com/in/emmanuelhaankwenda](https://www.linkedin.com/in/emmanuelhaankwenda/) |
 | Co-founder · Engineering | **Bernard Namangala** | [linkedin.com/in/bernard-namangala](https://www.linkedin.com/in/bernard-namangala-665a231a5/) |
 | Co-founder · Product & Design | **Andre Haankwenda** | [linkedin.com/in/andrehaankwenda](https://www.linkedin.com/in/andrehaankwenda/) |
 
