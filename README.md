@@ -223,7 +223,7 @@ Source: [`examples/coal-mcp-server/`](./examples/coal-mcp-server/). Docs: [`fron
 ## 📈 Traction
 
 **Distribution:**
-- MCP server listed on [Smithery](https://smithery.ai/server/coal-commerce) and the [official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=coal)
+- MCP server listed on [Smithery]([https://smithery.ai/server/coal-commerce](https://smithery.ai/servers/coal/coal-payments)) and the [official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=coal) as well as [PulseMCP](https://www.pulsemcp.com/servers/coal)
 - React SDK [`coal-react`](https://www.npmjs.com/package/coal-react) v0.4.1 shipped on npm
 - Documentation live at [usecoal.xyz/docs](https://usecoal.xyz/docs) with SDK, MCP, paywalls, agent-payments guides
 
