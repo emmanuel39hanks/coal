@@ -17,7 +17,15 @@
 | Docs site | [usecoal.xyz/docs](https://usecoal.xyz/docs) |
 | React SDK on npm | [`coal-react`](https://www.npmjs.com/package/coal-react) v0.4.1 |
 
-**Coal by Schema Labs is a programmable commerce platform for hosted checkout, merchant APIs, payment links, paywalls, recurring billing, and agentic commerce flows.**
+## 🎥 Watch
+
+| Video | Length | Link |
+|---|---|---|
+| **Pitch video** (for judges) | ~5 min | **https://youtu.be/FOieBgJ3j4A** |
+| **Launch / demo video** (for users) | ~2 min | **https://youtu.be/fnlcOIcK-yk** |
+| **Pitch deck** (PDF) | 12 slides | **https://www.usecoal.xyz/coal-pitch-deck.pdf** |
+
+**Coal is a programmable commerce platform for hosted checkout, merchant APIs, payment links, paywalls, recurring billing, and agentic commerce flows.**
 
 Coal is built around a simple split:
 
@@ -211,6 +219,30 @@ Source: [`examples/coal-mcp-server/`](./examples/coal-mcp-server/). Docs: [`fron
 - Agent-facing paywall manifests and verification routes
 - AI commerce APIs backed by 0G Compute
 - Console operator page at `/console/0g`
+
+## 📈 Traction
+
+**Distribution:**
+- MCP server listed on [Smithery](https://smithery.ai/server/coal-commerce) and the [official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=coal)
+- React SDK [`coal-react`](https://www.npmjs.com/package/coal-react) v0.4.1 shipped on npm
+- Documentation live at [usecoal.xyz/docs](https://usecoal.xyz/docs) with SDK, MCP, paywalls, agent-payments guides
+
+**Engagement beyond code:**
+- Walkthrough articles for builders + merchants
+- Small bounty program — developers building on top of Coal
+- Test users running live flows on the agent sandbox
+- Daily replies + DMs across X, LinkedIn, Farcaster, Reddit, Discord, Telegram
+
+**Inbound signal:**
+> *"x402 + APP wire compat actually working is a real one… happy to point the mapper crawler at agent.usecoal.xyz for endpoint stability data in our public catalog."*
+> — CDP-verified Coinbase Developer Platform builder
+
+**Live proof anyone can check right now:**
+- API health: [api.usecoal.xyz/api/0g/health](https://api.usecoal.xyz/api/0g/health) → all 5 0G components green
+- Receipt anchor on 0G Chain: [`0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b`](https://chainscan.0g.ai/address/0x24a80A3Bb16d26D4063Ecd4B2fD64C6856E25E8b)
+- Live agent demo: [agent.usecoal.xyz](https://agent.usecoal.xyz) → Claude buys products end-to-end on mainnet in under 10 seconds
+
+---
 
 ## Project Stats
 
@@ -536,6 +568,18 @@ Helper scripts:
 - `main` is the only branch on the public repo. Vercel production targets `main`.
 - All development happens through the public repo's `main` (PRs merge there).
 
+## 👥 Team
+
+Three co-founders, friends for years. Shipping consumer products, payments, and AI tools together.
+
+| Role | Name | LinkedIn |
+|---|---|---|
+| Co-founder | **Emmanuel Haankwenda** | [linkedin.com/in/emmanuelhaankwenda](https://www.linkedin.com/in/emmanuelhaankwenda/) |
+| Co-founder · Engineering | **Bernard Namangala** | [linkedin.com/in/bernard-namangala](https://www.linkedin.com/in/bernard-namangala-665a231a5/) |
+| Co-founder · Product & Design | **Andre Haankwenda** | [linkedin.com/in/andrehaankwenda](https://www.linkedin.com/in/andrehaankwenda/) |
+
+Coal went from zero to mainnet in six weeks. None of that happens without this team.
+
 ## License
 
-[MIT](./LICENSE) — Copyright (c) 2026 Schema Labs / Emmanuel Haankwenda.
+[MIT](./LICENSE) — Copyright (c) 2026 Coal.
